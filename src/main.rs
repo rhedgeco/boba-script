@@ -22,6 +22,6 @@ enum Commands {
 fn main() {
     let cli = BobaCli::parse();
     match cli.command {
-        Commands::Build { workdir } => builder::build(workdir),
+        Commands::Build { workdir } => builder::build_project(workdir),
     }
 }

@@ -1,25 +1,11 @@
-// this is the main function
-fn main() -> i32 {
-    let hello = "World";
-    let x = -5;
-    let y = 8;
-    return add(x, y);
-}
+fn main(): # inline comment
+    pass
 
-// this is the add function
-fn add(a: i32, b: i32) -> i32 {#
-    /*
-        this is a
+# this function adds
+fn add(x: i32, y: i32) -> i32:
+	pass
 
-        multiline comment 
-    */
-    return another::add(a, b);
-}
-
-// this creates a module
-mod another {
-    // this is an add function in another scope
-    fn add(a: i32, b: i32) -> i32 {
-        return b + a;
-    }
-}
+# creates another module
+mod another?:
+    fn add(x: i32, y: i32) -> i32:
+        pass

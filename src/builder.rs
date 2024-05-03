@@ -1,28 +1,32 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use ariadne::{Label, Report, ReportKind, Span};
-use logos::Logos;
 
-use crate::{utils, Token};
+use crate::{token::TokenLine, utils};
 
-pub fn build(workdir: Option<PathBuf>) {
-    let input = workdir.unwrap_or_default().join("src").join("main.boba");
+pub fn build_project(workdir: Option<impl AsRef<Path>>) {
+    let input = match workdir.as_ref() {
+        Some(path) => path.as_ref(),
+        None => Path::new(""),
+    }
+    .join("src")
+    .join("main.boba");
+
     let filename = input.as_os_str().to_string_lossy().to_string();
     let source = utils::read_to_source(input);
     println!("SOURCE:\n{}", source.text());
 
-    let tokens = Token::lexer(source.text())
-        .spanned()
-        .filter_map(|(token, span)| match token {
-            Ok(token) => Some((token, span)),
-            Err(()) => {
-                let token = &source.text()[span.clone()];
-                Report::build(ReportKind::Error, &filename, span.start())
+    println!("\nERRORS:");
+    let lines = TokenLine::parse_lines(source.text())
+        .filter_map(|line| match line {
+            Ok(line) => Some(line),
+            Err(error) => {
+                Report::build(ReportKind::Error, &filename, error.span.start())
                     .with_code(1)
-                    .with_message("Invalid token found while parsing")
+                    .with_message(error.message)
                     .with_label(
-                        Label::new((&filename, span.clone()))
-                            .with_message(format!("Invalid token '{token}'"))
+                        Label::new((&filename, error.span))
+                            .with_message(error.label)
                             .with_color(ariadne::Color::Red),
                     )
                     .finish()
@@ -33,5 +37,8 @@ pub fn build(workdir: Option<PathBuf>) {
         })
         .collect::<Box<[_]>>();
 
-    println!("\nTOKENS:\n{tokens:?}")
+    println!("\nTOKENS:");
+    for line in lines.iter() {
+        println!("Indent: {} - {:?}", line.indent(), line.tokens());
+    }
 }
