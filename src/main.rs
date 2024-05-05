@@ -1,6 +1,4 @@
-use std::path::PathBuf;
-
-use bobarista::builder;
+use boba::shell;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -13,15 +11,12 @@ struct BobaCli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Build {
-        #[arg(short, long)]
-        workdir: Option<PathBuf>,
-    },
+    Shell,
 }
 
 fn main() {
     let cli = BobaCli::parse();
     match cli.command {
-        Commands::Build { workdir } => builder::build_project(workdir),
+        Commands::Shell => shell::start_session(),
     }
 }
