@@ -68,13 +68,10 @@ pub fn start_session() {
                         vars.push((assign.ident, value));
                     }
                 },
-                ShellCommand::Expr(expr) => {
-                    println!("{expr:?}");
-                    match expr.eval(&vars) {
-                        None => eprintln!("Invalid expression"),
-                        Some(value) => println!("{value}"),
-                    }
-                }
+                ShellCommand::Expr(expr) => match expr.eval(&vars) {
+                    None => eprintln!("Invalid expression"),
+                    Some(value) => println!("{value}"),
+                },
             },
             Err(error) => {
                 let mut report = Report::build(ReportKind::Error, "shell", 0)
