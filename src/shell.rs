@@ -1,29 +1,36 @@
 use std::{
     io::{stdin, stdout, Write},
     iter::Peekable,
+    ops::Deref,
 };
 
 use ariadne::{Color, Label, Report, ReportKind, Source, Span};
 use logos::Logos;
 
 use crate::{
-    ast::{Assign, Expr, ParserError, TokenIter, TokenParser},
+    ast::{Assign, Expr, Node, ParserError, TokenIter, TokenParser},
     Token,
 };
 
 #[derive(Debug)]
 enum ShellCommand {
-    Assign(Assign),
-    Expr(Expr),
+    Assign(Node<Assign>),
+    Expr(Node<Expr>),
 }
 
 impl TokenParser for ShellCommand {
     type Output = Self;
 
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Self::Output, ParserError> {
+    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, ParserError> {
         match tokens.peek() {
-            Some((Token::Let, _)) => Ok(Self::Assign(Assign::parse(tokens)?)),
-            _ => Ok(Self::Expr(Expr::parse(tokens)?)),
+            Some((Token::Let, _)) => {
+                let assign = Assign::parse(tokens)?;
+                Ok(Node::new(assign.span().clone(), Self::Assign(assign)))
+            }
+            _ => {
+                let expr = Expr::parse(tokens)?;
+                Ok(Node::new(expr.span().clone(), Self::Expr(expr)))
+            }
         }
     }
 }
@@ -60,12 +67,12 @@ pub fn start_session() {
             .collect::<Vec<_>>();
 
         match ShellCommand::parse(&mut tokens.into_iter().peekable()) {
-            Ok(command) => match command {
+            Ok(command) => match command.deref() {
                 ShellCommand::Assign(assign) => match assign.expr.eval(&vars) {
                     None => eprintln!("Invalid expression for assignment"),
                     Some(value) => {
                         println!("{} <- {value}", assign.ident.as_str());
-                        vars.push((assign.ident, value));
+                        vars.push((assign.ident.clone(), value));
                     }
                 },
                 ShellCommand::Expr(expr) => match expr.eval(&vars) {

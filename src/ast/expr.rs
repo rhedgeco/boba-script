@@ -6,32 +6,34 @@ use crate::{
     Token,
 };
 
-use super::{ParserError, TokenIter, TokenParser, Value};
+use super::{Node, ParserError, TokenIter, TokenParser, Value};
 
 #[derive(Debug)]
 pub enum Expr {
     Var(Ident),
     Int(i64),
     Float(f64),
-    Neg(Box<Expr>),
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-    Pow(Box<Expr>, Box<Expr>),
+    Neg(Box<Node<Expr>>),
+    Add(Box<Node<Expr>>, Box<Node<Expr>>),
+    Sub(Box<Node<Expr>>, Box<Node<Expr>>),
+    Mul(Box<Node<Expr>>, Box<Node<Expr>>),
+    Div(Box<Node<Expr>>, Box<Node<Expr>>),
+    Pow(Box<Node<Expr>>, Box<Node<Expr>>),
 }
 
 impl TokenParser for Expr {
     type Output = Self;
 
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Self::Output, ParserError> {
-        fn parse_atom(tokens: &mut Peekable<impl TokenIter>) -> Result<Expr, ParserError> {
+    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, ParserError> {
+        fn parse_atom(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Expr>, ParserError> {
             match tokens.next() {
-                Some((Token::Ident(ident), _)) => Ok(Expr::Var(ident.clone())),
-                Some((Token::Int(int), _)) => Ok(Expr::Int(int)),
-                Some((Token::Float(float), _)) => Ok(Expr::Float(float)),
+                Some((Token::Ident(ident), span)) => Ok(Node::new(span, Expr::Var(ident.clone()))),
+                Some((Token::Int(int), span)) => Ok(Node::new(span, Expr::Int(int))),
+                Some((Token::Float(float), span)) => Ok(Node::new(span, Expr::Float(float))),
                 Some((Token::Add, _)) => Ok(parse_atom(tokens)?),
-                Some((Token::Sub, _)) => Ok(Expr::Neg(Box::new(parse_atom(tokens)?))),
+                Some((Token::Sub, span)) => {
+                    Ok(Node::new(span, Expr::Neg(Box::new(parse_atom(tokens)?))))
+                }
                 Some((Token::OpenParen, _)) => {
                     let tokens = tokens
                         .take_while(|(t, _)| t != &Token::CloseParen)
@@ -55,9 +57,9 @@ impl TokenParser for Expr {
         }
 
         fn parse_pow(
-            lhs: Expr,
+            lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Expr, ParserError> {
+        ) -> Result<Node<Expr>, ParserError> {
             let op = match tokens.peek() {
                 Some((Token::Pow, _)) => Expr::Pow as fn(_, _) -> _,
                 _ => return Ok(lhs),
@@ -65,14 +67,15 @@ impl TokenParser for Expr {
 
             tokens.next(); // consume operator
             let rhs = parse_atom(tokens)?;
-            let new_lhs = op(Box::new(lhs), Box::new(rhs));
+            let span = lhs.span().start..rhs.span().end;
+            let new_lhs = Node::new(span, op(Box::new(lhs), Box::new(rhs)));
             parse_pow(new_lhs, tokens)
         }
 
         fn parse_mul_div(
-            lhs: Expr,
+            lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Expr, ParserError> {
+        ) -> Result<Node<Expr>, ParserError> {
             let op = match tokens.peek() {
                 Some((Token::Mul, _)) => Expr::Mul as fn(_, _) -> _,
                 Some((Token::Div, _)) => Expr::Div as fn(_, _) -> _,
@@ -82,14 +85,15 @@ impl TokenParser for Expr {
             tokens.next(); // consume operator
             let mut rhs = parse_atom(tokens)?;
             rhs = parse_pow(rhs, tokens)?; // ensure pow comes first in op order
-            let new_lhs = op(Box::new(lhs), Box::new(rhs));
+            let span = lhs.span().start..rhs.span().end;
+            let new_lhs = Node::new(span, op(Box::new(lhs), Box::new(rhs)));
             parse_mul_div(new_lhs, tokens)
         }
 
         fn parse_add_sub(
-            lhs: Expr,
+            lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Expr, ParserError> {
+        ) -> Result<Node<Expr>, ParserError> {
             let op = match tokens.peek() {
                 Some((Token::Add, _)) => Expr::Add as fn(_, _) -> _,
                 Some((Token::Sub, _)) => Expr::Sub as fn(_, _) -> _,
@@ -99,7 +103,8 @@ impl TokenParser for Expr {
             tokens.next(); // consume operator
             let mut rhs = parse_atom(tokens)?;
             rhs = parse_mul_div(rhs, tokens)?; // ensure mul/div comes first in op order
-            let new_lhs = op(Box::new(lhs), Box::new(rhs));
+            let span = lhs.span().start..rhs.span().end;
+            let new_lhs = Node::new(span, op(Box::new(lhs), Box::new(rhs)));
             parse_add_sub(new_lhs, tokens)
         }
 
