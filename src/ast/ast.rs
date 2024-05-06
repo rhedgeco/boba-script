@@ -3,7 +3,6 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use ariadne::{Label, Report, ReportKind, Source};
 use logos::Span;
 
 use crate::token::Token;
@@ -14,28 +13,9 @@ pub type Color = ariadne::Color;
 pub trait TokenIter: Iterator<Item = (Token, Span)> {}
 impl<T: Iterator<Item = (Token, Span)>> TokenIter for T {}
 
-pub struct BobaError {
+pub struct ParserError {
     pub message: String,
     pub labels: Vec<ErrorLabel>,
-}
-
-impl BobaError {
-    pub fn report(self, id: impl AsRef<str>, source: Source<impl AsRef<str> + Clone>) {
-        let id = id.as_ref();
-        let mut report = Report::build(ReportKind::Error, "shell", 0)
-            .with_code(1)
-            .with_message(self.message);
-
-        for label in self.labels {
-            report.add_label(
-                Label::new((id, label.span))
-                    .with_color(label.color)
-                    .with_message(label.message),
-            )
-        }
-
-        report.finish().eprint((id, source.clone())).unwrap();
-    }
 }
 
 pub struct ErrorLabel {
@@ -46,7 +26,7 @@ pub struct ErrorLabel {
 
 pub trait TokenParser {
     type Output;
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, BobaError>;
+    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, ParserError>;
 }
 
 #[derive(Debug)]

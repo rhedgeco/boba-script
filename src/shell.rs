@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     io::{stdin, stdout, Write},
     iter::Peekable,
     ops::Deref,
@@ -9,7 +8,7 @@ use ariadne::{Color, Label, Report, ReportKind, Source, Span};
 use logos::Logos;
 
 use crate::{
-    ast::{Assign, BobaError, Expr, Node, TokenIter, TokenParser},
+    ast::{Assign, Expr, Node, ParserError, TokenIter, TokenParser},
     Token,
 };
 
@@ -22,7 +21,7 @@ enum ShellCommand {
 impl TokenParser for ShellCommand {
     type Output = Self;
 
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, BobaError> {
+    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, ParserError> {
         match tokens.peek() {
             Some((Token::Let, _)) => {
                 let assign = Assign::parse(tokens)?;
@@ -37,7 +36,7 @@ impl TokenParser for ShellCommand {
 }
 
 pub fn start_session() {
-    let mut vars = HashMap::new();
+    let mut vars = Vec::new();
     loop {
         print!("boba > ");
         stdout().flush().unwrap();
@@ -70,18 +69,35 @@ pub fn start_session() {
         match ShellCommand::parse(&mut tokens.into_iter().peekable()) {
             Ok(command) => match command.deref() {
                 ShellCommand::Assign(assign) => match assign.expr.eval(&vars) {
-                    Ok(value) => {
+                    None => eprintln!("Invalid expression for assignment"),
+                    Some(value) => {
                         println!("{} <- {value}", assign.ident.as_str());
-                        vars.insert(assign.ident.clone(), value);
+                        vars.push((assign.ident.clone(), value));
                     }
-                    Err(e) => e.report("shell", line_source.clone()),
                 },
                 ShellCommand::Expr(expr) => match expr.eval(&vars) {
-                    Ok(value) => println!("{value}"),
-                    Err(e) => e.report("shell", line_source.clone()),
+                    None => eprintln!("Invalid expression"),
+                    Some(value) => println!("{value}"),
                 },
             },
-            Err(e) => e.report("shell", line_source.clone()),
+            Err(error) => {
+                let mut report = Report::build(ReportKind::Error, "shell", 0)
+                    .with_code(1)
+                    .with_message(error.message);
+
+                for label in error.labels {
+                    report.add_label(
+                        Label::new(("shell", label.span))
+                            .with_color(label.color)
+                            .with_message(label.message),
+                    )
+                }
+
+                report
+                    .finish()
+                    .eprint(("shell", line_source.clone()))
+                    .unwrap();
+            }
         }
     }
 }

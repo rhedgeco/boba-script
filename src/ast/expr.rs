@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable, ops::Deref};
+use std::iter::Peekable;
 
 use crate::{
     ast::{Color, ErrorLabel},
@@ -6,14 +6,13 @@ use crate::{
     Token,
 };
 
-use super::{BobaError, Node, TokenIter, TokenParser, Value};
+use super::{Node, ParserError, TokenIter, TokenParser, Value};
 
 #[derive(Debug)]
 pub enum Expr {
     Var(Ident),
     Int(i64),
     Float(f64),
-    String(String),
     Neg(Box<Node<Expr>>),
     Add(Box<Node<Expr>>, Box<Node<Expr>>),
     Sub(Box<Node<Expr>>, Box<Node<Expr>>),
@@ -25,13 +24,12 @@ pub enum Expr {
 impl TokenParser for Expr {
     type Output = Self;
 
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, BobaError> {
-        fn parse_atom(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Expr>, BobaError> {
+    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, ParserError> {
+        fn parse_atom(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Expr>, ParserError> {
             match tokens.next() {
                 Some((Token::Ident(ident), span)) => Ok(Node::new(span, Expr::Var(ident.clone()))),
                 Some((Token::Int(int), span)) => Ok(Node::new(span, Expr::Int(int))),
                 Some((Token::Float(float), span)) => Ok(Node::new(span, Expr::Float(float))),
-                Some((Token::String(string), span)) => Ok(Node::new(span, Expr::String(string))),
                 Some((Token::Add, _)) => Ok(parse_atom(tokens)?),
                 Some((Token::Sub, span)) => {
                     Ok(Node::new(span, Expr::Neg(Box::new(parse_atom(tokens)?))))
@@ -43,7 +41,7 @@ impl TokenParser for Expr {
 
                     Expr::parse(&mut tokens.into_iter().peekable())
                 }
-                Some((token, span)) => Err(BobaError {
+                Some((token, span)) => Err(ParserError {
                     message: format!("Unexpected token found while parsing expression"),
                     labels: vec![ErrorLabel {
                         message: format!("found token '{token:?}'"),
@@ -51,7 +49,7 @@ impl TokenParser for Expr {
                         span: span.clone(),
                     }],
                 }),
-                None => Err(BobaError {
+                None => Err(ParserError {
                     message: format!("Reached end of input while parsing expression"),
                     labels: vec![],
                 }),
@@ -61,7 +59,7 @@ impl TokenParser for Expr {
         fn parse_pow(
             lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Node<Expr>, BobaError> {
+        ) -> Result<Node<Expr>, ParserError> {
             let op = match tokens.peek() {
                 Some((Token::Pow, _)) => Expr::Pow as fn(_, _) -> _,
                 _ => return Ok(lhs),
@@ -77,7 +75,7 @@ impl TokenParser for Expr {
         fn parse_mul_div(
             lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Node<Expr>, BobaError> {
+        ) -> Result<Node<Expr>, ParserError> {
             let op = match tokens.peek() {
                 Some((Token::Mul, _)) => Expr::Mul as fn(_, _) -> _,
                 Some((Token::Div, _)) => Expr::Div as fn(_, _) -> _,
@@ -95,7 +93,7 @@ impl TokenParser for Expr {
         fn parse_add_sub(
             lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Node<Expr>, BobaError> {
+        ) -> Result<Node<Expr>, ParserError> {
             let op = match tokens.peek() {
                 Some((Token::Add, _)) => Expr::Add as fn(_, _) -> _,
                 Some((Token::Sub, _)) => Expr::Sub as fn(_, _) -> _,
@@ -118,10 +116,10 @@ impl TokenParser for Expr {
                 Some((Token::Mul, _)) | Some((Token::Div, _)) => parse_mul_div(expr, tokens)?,
                 Some((Token::Add, _)) | Some((Token::Sub, _)) => parse_add_sub(expr, tokens)?,
                 Some((token, span)) => {
-                    return Err(BobaError {
+                    return Err(ParserError {
                         message: format!("Unexpected token found while parsing expression"),
                         labels: vec![ErrorLabel {
-                            message: format!("found token '{token:?}'"),
+                            message: format!("2 found token '{token:?}'"),
                             color: Color::Red,
                             span: span.clone(),
                         }],
@@ -132,40 +130,24 @@ impl TokenParser for Expr {
     }
 }
 
-impl Node<Expr> {
-    pub fn eval(&self, vars: &HashMap<Ident, Value>) -> Result<Value, BobaError> {
-        match self.deref() {
-            Expr::Int(v) => Ok(Value::Int(*v)),
-            Expr::Float(v) => Ok(Value::Float(*v)),
-            Expr::String(v) => Ok(Value::String(v.clone())),
-            Expr::Neg(expr) => (-expr.eval(vars)?).map_err(|e| e.into_boba(self.span().clone())),
-            Expr::Var(ident) => match vars.get(ident) {
-                Some(value) => Ok(value.clone()),
-                None => Err(BobaError {
-                    message: format!("Evaluation error"),
-                    labels: vec![ErrorLabel {
-                        message: format!("unknown variable '{}'", ident.as_str()),
-                        color: Color::Red,
-                        span: self.span().clone(),
-                    }],
-                }),
-            },
-            Expr::Add(lhs, rhs) => {
-                (lhs.eval(vars)? + rhs.eval(vars)?).map_err(|e| e.into_boba(self.span().clone()))
-            }
-            Expr::Sub(lhs, rhs) => {
-                (lhs.eval(vars)? - rhs.eval(vars)?).map_err(|e| e.into_boba(self.span().clone()))
-            }
-            Expr::Mul(lhs, rhs) => {
-                (lhs.eval(vars)? * rhs.eval(vars)?).map_err(|e| e.into_boba(self.span().clone()))
-            }
-            Expr::Div(lhs, rhs) => {
-                (lhs.eval(vars)? / rhs.eval(vars)?).map_err(|e| e.into_boba(self.span().clone()))
-            }
-            Expr::Pow(lhs, rhs) => lhs
-                .eval(vars)?
-                .pow(rhs.eval(vars)?)
-                .map_err(|e| e.into_boba(self.span().clone())),
+impl Expr {
+    pub fn eval(&self, vars: &[(Ident, Value)]) -> Option<Value> {
+        match self {
+            Self::Int(v) => Some(Value::Int(*v)),
+            Self::Float(v) => Some(Value::Float(*v)),
+            Self::Neg(expr) => Some(-expr.eval(vars)?),
+            Self::Var(ident) => vars.iter().rev().find_map(|(id, val)| {
+                if id.as_str() == ident.as_str() {
+                    Some(*val)
+                } else {
+                    None
+                }
+            }),
+            Self::Add(lhs, rhs) => Some(lhs.eval(vars)? + rhs.eval(vars)?),
+            Self::Sub(lhs, rhs) => Some(lhs.eval(vars)? - rhs.eval(vars)?),
+            Self::Mul(lhs, rhs) => Some(lhs.eval(vars)? * rhs.eval(vars)?),
+            Self::Div(lhs, rhs) => Some(lhs.eval(vars)? / rhs.eval(vars)?),
+            Self::Pow(lhs, rhs) => Some(lhs.eval(vars)?.pow(rhs.eval(vars)?)),
         }
     }
 }

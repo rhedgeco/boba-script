@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use crate::token::{Ident, Token};
 
-use super::{expr::Expr, Node, BobaError, TokenIter, TokenParser};
+use super::{expr::Expr, Node, ParserError, TokenIter, TokenParser};
 
 #[derive(Debug)]
 pub struct Assign {
@@ -13,12 +13,12 @@ pub struct Assign {
 impl TokenParser for Assign {
     type Output = Self;
 
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, BobaError> {
+    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, ParserError> {
         // match let
         let span_start = match tokens.next() {
             Some((Token::Let, span)) => span.start,
             _ => {
-                return Err(BobaError {
+                return Err(ParserError {
                     message: format!("Reached end of input while parsing assignment"),
                     labels: vec![],
                 })
@@ -29,7 +29,7 @@ impl TokenParser for Assign {
         let ident = match tokens.next() {
             Some((Token::Ident(ident), _)) => ident.clone(),
             _ => {
-                return Err(BobaError {
+                return Err(ParserError {
                     message: format!("Reached end of input while parsing assignment"),
                     labels: vec![],
                 })
@@ -40,7 +40,7 @@ impl TokenParser for Assign {
         match tokens.next() {
             Some((Token::Equal, _)) => (),
             _ => {
-                return Err(BobaError {
+                return Err(ParserError {
                     message: format!("Reached end of input while parsing assignment"),
                     labels: vec![],
                 })
