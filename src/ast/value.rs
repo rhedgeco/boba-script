@@ -73,3 +73,15 @@ impl Div<Value> for Value {
         }
     }
 }
+
+impl Value {
+    pub fn pow(self, rhs: Value) -> Value {
+        use Value as V;
+        match (self, rhs) {
+            (V::Int(v1), V::Float(v2)) => V::Float((v1 as f64).powf(v2)),
+            (V::Float(v1), V::Int(v2)) => V::Float((v1).powf(v2 as f64)),
+            (V::Float(v1), V::Float(v2)) => V::Float(v1.powf(v2)),
+            (V::Int(v1), V::Int(v2)) => V::Float((v1 as f64).powf(v2 as f64)),
+        }
+    }
+}

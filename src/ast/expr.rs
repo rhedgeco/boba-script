@@ -18,6 +18,7 @@ pub enum Expr {
     Sub(Box<Expr>, Box<Expr>),
     Mul(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
+    Pow(Box<Expr>, Box<Expr>),
 }
 
 impl TokenParser for Expr {
@@ -53,6 +54,21 @@ impl TokenParser for Expr {
             }
         }
 
+        fn parse_pow(
+            lhs: Expr,
+            tokens: &mut Peekable<impl TokenIter>,
+        ) -> Result<Expr, ParserError> {
+            let op = match tokens.peek() {
+                Some((Token::Pow, _)) => Expr::Pow as fn(_, _) -> _,
+                _ => return Ok(lhs),
+            };
+
+            tokens.next(); // consume operator
+            let rhs = parse_atom(tokens)?;
+            let new_lhs = op(Box::new(lhs), Box::new(rhs));
+            parse_pow(new_lhs, tokens)
+        }
+
         fn parse_mul_div(
             lhs: Expr,
             tokens: &mut Peekable<impl TokenIter>,
@@ -64,7 +80,8 @@ impl TokenParser for Expr {
             };
 
             tokens.next(); // consume operator
-            let rhs = parse_atom(tokens)?;
+            let mut rhs = parse_atom(tokens)?;
+            rhs = parse_pow(rhs, tokens)?; // ensure pow comes first in op order
             let new_lhs = op(Box::new(lhs), Box::new(rhs));
             parse_mul_div(new_lhs, tokens)
         }
@@ -90,6 +107,7 @@ impl TokenParser for Expr {
         loop {
             expr = match tokens.peek() {
                 None => return Ok(expr),
+                Some((Token::Pow, _)) => parse_pow(expr, tokens)?,
                 Some((Token::Mul, _)) | Some((Token::Div, _)) => parse_mul_div(expr, tokens)?,
                 Some((Token::Add, _)) | Some((Token::Sub, _)) => parse_add_sub(expr, tokens)?,
                 Some((token, span)) => {
@@ -124,6 +142,7 @@ impl Expr {
             Self::Sub(lhs, rhs) => Some(lhs.eval(vars)? - rhs.eval(vars)?),
             Self::Mul(lhs, rhs) => Some(lhs.eval(vars)? * rhs.eval(vars)?),
             Self::Div(lhs, rhs) => Some(lhs.eval(vars)? / rhs.eval(vars)?),
+            Self::Pow(lhs, rhs) => Some(lhs.eval(vars)?.pow(rhs.eval(vars)?)),
         }
     }
 }

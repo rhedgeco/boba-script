@@ -87,6 +87,8 @@ pub enum Token {
     Mul,
     #[token("/")]
     Div,
+    #[token("**")]
+    Pow,
 
     // keywords
     #[token("let")]
