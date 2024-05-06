@@ -1,4 +1,4 @@
-use std::num::ParseIntError;
+use std::num::{ParseFloatError, ParseIntError};
 
 use logos::Logos;
 use once_cell::sync::Lazy;
@@ -33,6 +33,19 @@ pub enum TokenError {
     #[default]
     UnexpectedToken,
     ParseIntError(ParseIntError),
+    ParseFloatError,
+}
+
+impl From<ParseIntError> for TokenError {
+    fn from(value: ParseIntError) -> Self {
+        Self::ParseIntError(value)
+    }
+}
+
+impl From<ParseFloatError> for TokenError {
+    fn from(_: ParseFloatError) -> Self {
+        Self::ParseFloatError
+    }
 }
 
 impl TokenError {
@@ -45,17 +58,12 @@ impl TokenError {
                 }
                 _ => format!("Unknown integer error :("),
             },
+            Self::ParseFloatError => format!("Invalid float literal"),
         }
     }
 }
 
-impl From<ParseIntError> for TokenError {
-    fn from(value: ParseIntError) -> Self {
-        Self::ParseIntError(value)
-    }
-}
-
-#[derive(Logos, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Logos, Debug, Clone, PartialEq, PartialOrd)]
 #[logos(skip r"[ \t\n\r\f]")] // skip whitespace
 #[logos(error = TokenError)]
 pub enum Token {
@@ -63,8 +71,10 @@ pub enum Token {
     Ident(Ident),
 
     // numbers
-    #[regex(r"[0-9]*", |lex| lex.slice().parse())]
+    #[regex(r"[0-9]+", |lex| lex.slice().parse())]
     Int(i64),
+    #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice().parse())]
+    Float(f64),
 
     // operators
     #[token("=")]

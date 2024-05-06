@@ -6,12 +6,13 @@ use crate::{
     Token,
 };
 
-use super::{ParserError, TokenIter, TokenParser};
+use super::{ParserError, TokenIter, TokenParser, Value};
 
 #[derive(Debug)]
 pub enum Expr {
     Var(Ident),
     Int(i64),
+    Float(f64),
     Neg(Box<Expr>),
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
@@ -27,6 +28,7 @@ impl TokenParser for Expr {
             match tokens.next() {
                 Some((Token::Ident(ident), _)) => Ok(Expr::Var(ident.clone())),
                 Some((Token::Int(int), _)) => Ok(Expr::Int(int)),
+                Some((Token::Float(float), _)) => Ok(Expr::Float(float)),
                 Some((Token::Add, _)) => Ok(parse_atom(tokens)?),
                 Some((Token::Sub, _)) => Ok(Expr::Neg(Box::new(parse_atom(tokens)?))),
                 Some((Token::OpenParen, _)) => {
@@ -106,9 +108,10 @@ impl TokenParser for Expr {
 }
 
 impl Expr {
-    pub fn eval(&self, vars: &[(Ident, i64)]) -> Option<i64> {
+    pub fn eval(&self, vars: &[(Ident, Value)]) -> Option<Value> {
         match self {
-            Self::Int(int) => Some(*int),
+            Self::Int(v) => Some(Value::Int(*v)),
+            Self::Float(v) => Some(Value::Float(*v)),
             Self::Neg(expr) => Some(-expr.eval(vars)?),
             Self::Var(ident) => vars.iter().rev().find_map(|(id, val)| {
                 if id.as_str() == ident.as_str() {
