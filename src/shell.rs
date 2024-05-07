@@ -1,11 +1,8 @@
-use std::{
-    io::{stdin, stdout, Write},
-    iter::Peekable,
-    ops::Deref,
-};
+use std::{iter::Peekable, ops::Deref};
 
 use ariadne::{Color, Label, Report, ReportKind, Source, Span};
 use logos::Logos;
+use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 use crate::{
     ast::{Assign, Expr, Node, TokenIter, TokenParser},
@@ -37,20 +34,29 @@ impl TokenParser for ShellCommand {
 }
 
 pub fn start_session() {
+    let mut line_editor = Reedline::create();
+    let prompt = DefaultPrompt::new(
+        DefaultPromptSegment::Basic(format!("boba ")),
+        DefaultPromptSegment::Empty,
+    );
+
     let engine = Engine::new();
     let mut scope = Scope::new();
     loop {
-        // print line prefix
-        print!("boba > ");
-        stdout().flush().unwrap();
-
-        // wait for user input
-        let mut line = String::new();
-        stdin().read_line(&mut line).unwrap();
-        let line_source = Source::from(&line);
+        let line = match line_editor.read_line(&prompt) {
+            Ok(Signal::Success(buffer)) => Source::from(buffer),
+            Ok(Signal::CtrlC) | Ok(Signal::CtrlD) => {
+                println!("Aborting...");
+                return;
+            }
+            Err(e) => {
+                eprintln!("Input Error: {e}");
+                continue;
+            }
+        };
 
         // convert characters into tokens
-        let tokens = Token::lexer(&line)
+        let tokens = Token::lexer(line.text())
             .spanned()
             .filter_map(|(result, span)| match result {
                 Ok(token) => Some((token, span)),
@@ -64,7 +70,7 @@ pub fn start_session() {
                                 .with_message(error.get_message()),
                         )
                         .finish()
-                        .eprint(("shell", line_source.clone()))
+                        .eprint(("shell", line.clone()))
                         .unwrap();
                     None
                 }
@@ -87,7 +93,7 @@ pub fn start_session() {
                                 .with_color(label.color),
                         )
                         .finish()
-                        .eprint(("shell", line_source.clone()))
+                        .eprint(("shell", line.clone()))
                         .unwrap(),
                 },
                 ShellCommand::Expr(expr) => match engine.eval(&scope, expr) {
@@ -100,7 +106,7 @@ pub fn start_session() {
                                 .with_color(label.color),
                         )
                         .finish()
-                        .eprint(("shell", line_source.clone()))
+                        .eprint(("shell", line.clone()))
                         .unwrap(),
                 },
             },
@@ -116,10 +122,7 @@ pub fn start_session() {
                     )
                 }
 
-                report
-                    .finish()
-                    .eprint(("shell", line_source.clone()))
-                    .unwrap();
+                report.finish().eprint(("shell", line.clone())).unwrap();
             }
         }
     }
