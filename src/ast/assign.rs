@@ -1,6 +1,7 @@
 use std::iter::Peekable;
 
 use crate::{
+    error::{Color, Label},
     token::{Ident, Token},
     LangError,
 };
@@ -38,13 +39,24 @@ impl TokenParser for Assign {
         };
 
         // match equal
-        match tokens.next() {
-            Some((Token::Equal, _)) => (),
+        let equal_span = match tokens.next() {
+            Some((Token::Equal, span)) => span,
             _ => {
                 return Err(LangError::new(
                     "Reached end of input while parsing let statement",
                 ))
             }
+        };
+
+        // check if there is still tokens
+        if let None = tokens.peek() {
+            return Err(
+                LangError::new("Unexpected end of assignment").label(Label::new(
+                    "nothing found after '=' token",
+                    Color::Red,
+                    equal_span,
+                )),
+            );
         }
 
         // match expression till end
