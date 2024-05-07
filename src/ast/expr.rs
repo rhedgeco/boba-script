@@ -1,12 +1,12 @@
 use std::iter::Peekable;
 
 use crate::{
-    ast::{Color, ErrorLabel},
+    error::{Color, Label},
     token::Ident,
-    Token,
+    LangError, Token,
 };
 
-use super::{Node, ParserError, TokenIter, TokenParser, Value};
+use super::{Node, TokenIter, TokenParser};
 
 #[derive(Debug)]
 pub enum Expr {
@@ -24,8 +24,8 @@ pub enum Expr {
 impl TokenParser for Expr {
     type Output = Self;
 
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, ParserError> {
-        fn parse_atom(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Expr>, ParserError> {
+    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, LangError> {
+        fn parse_atom(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Expr>, LangError> {
             match tokens.next() {
                 Some((Token::Ident(ident), span)) => Ok(Node::new(span, Expr::Var(ident.clone()))),
                 Some((Token::Int(int), span)) => Ok(Node::new(span, Expr::Int(int))),
@@ -41,25 +41,24 @@ impl TokenParser for Expr {
 
                     Expr::parse(&mut tokens.into_iter().peekable())
                 }
-                Some((token, span)) => Err(ParserError {
-                    message: format!("Unexpected token found while parsing expression"),
-                    labels: vec![ErrorLabel {
-                        message: format!("found token '{token:?}'"),
-                        color: Color::Red,
-                        span: span.clone(),
-                    }],
-                }),
-                None => Err(ParserError {
-                    message: format!("Reached end of input while parsing expression"),
-                    labels: vec![],
-                }),
+                Some((token, span)) => Err(LangError::new(
+                    "Unexpected token found while parsing expression",
+                )
+                .label(Label::new(
+                    format!("found token '{token:?}'"),
+                    Color::Red,
+                    span.clone(),
+                ))),
+                None => Err(LangError::new(
+                    "Reached end of input while parsing expression",
+                )),
             }
         }
 
         fn parse_pow(
             lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Node<Expr>, ParserError> {
+        ) -> Result<Node<Expr>, LangError> {
             let op = match tokens.peek() {
                 Some((Token::Pow, _)) => Expr::Pow as fn(_, _) -> _,
                 _ => return Ok(lhs),
@@ -75,7 +74,7 @@ impl TokenParser for Expr {
         fn parse_mul_div(
             lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Node<Expr>, ParserError> {
+        ) -> Result<Node<Expr>, LangError> {
             let op = match tokens.peek() {
                 Some((Token::Mul, _)) => Expr::Mul as fn(_, _) -> _,
                 Some((Token::Div, _)) => Expr::Div as fn(_, _) -> _,
@@ -93,7 +92,7 @@ impl TokenParser for Expr {
         fn parse_add_sub(
             lhs: Node<Expr>,
             tokens: &mut Peekable<impl TokenIter>,
-        ) -> Result<Node<Expr>, ParserError> {
+        ) -> Result<Node<Expr>, LangError> {
             let op = match tokens.peek() {
                 Some((Token::Add, _)) => Expr::Add as fn(_, _) -> _,
                 Some((Token::Sub, _)) => Expr::Sub as fn(_, _) -> _,
@@ -116,38 +115,17 @@ impl TokenParser for Expr {
                 Some((Token::Mul, _)) | Some((Token::Div, _)) => parse_mul_div(expr, tokens)?,
                 Some((Token::Add, _)) | Some((Token::Sub, _)) => parse_add_sub(expr, tokens)?,
                 Some((token, span)) => {
-                    return Err(ParserError {
-                        message: format!("Unexpected token found while parsing expression"),
-                        labels: vec![ErrorLabel {
-                            message: format!("2 found token '{token:?}'"),
-                            color: Color::Red,
-                            span: span.clone(),
-                        }],
-                    })
+                    return Err(
+                        LangError::new("Unexpected token found while parsing expression").label(
+                            Label::new(
+                                format!("found token '{token:?}'"),
+                                Color::Red,
+                                span.clone(),
+                            ),
+                        ),
+                    )
                 }
             };
-        }
-    }
-}
-
-impl Expr {
-    pub fn eval(&self, vars: &[(Ident, Value)]) -> Option<Value> {
-        match self {
-            Self::Int(v) => Some(Value::Int(*v)),
-            Self::Float(v) => Some(Value::Float(*v)),
-            Self::Neg(expr) => Some(-expr.eval(vars)?),
-            Self::Var(ident) => vars.iter().rev().find_map(|(id, val)| {
-                if id.as_str() == ident.as_str() {
-                    Some(*val)
-                } else {
-                    None
-                }
-            }),
-            Self::Add(lhs, rhs) => Some(lhs.eval(vars)? + rhs.eval(vars)?),
-            Self::Sub(lhs, rhs) => Some(lhs.eval(vars)? - rhs.eval(vars)?),
-            Self::Mul(lhs, rhs) => Some(lhs.eval(vars)? * rhs.eval(vars)?),
-            Self::Div(lhs, rhs) => Some(lhs.eval(vars)? / rhs.eval(vars)?),
-            Self::Pow(lhs, rhs) => Some(lhs.eval(vars)?.pow(rhs.eval(vars)?)),
         }
     }
 }

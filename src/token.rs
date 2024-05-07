@@ -1,12 +1,14 @@
 use std::num::{ParseFloatError, ParseIntError};
 
+use derive_more::Display;
 use logos::Logos;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
 pub type Span = logos::Span;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Display, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[display(fmt = "{}", _0)]
 pub struct Ident(String);
 impl AsRef<str> for Ident {
     fn as_ref(&self) -> &str {

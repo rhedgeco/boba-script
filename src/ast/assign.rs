@@ -1,8 +1,11 @@
 use std::iter::Peekable;
 
-use crate::token::{Ident, Token};
+use crate::{
+    token::{Ident, Token},
+    LangError,
+};
 
-use super::{expr::Expr, Node, ParserError, TokenIter, TokenParser};
+use super::{expr::Expr, Node, TokenIter, TokenParser};
 
 #[derive(Debug)]
 pub struct Assign {
@@ -13,15 +16,14 @@ pub struct Assign {
 impl TokenParser for Assign {
     type Output = Self;
 
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, ParserError> {
+    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, LangError> {
         // match let
         let span_start = match tokens.next() {
             Some((Token::Let, span)) => span.start,
             _ => {
-                return Err(ParserError {
-                    message: format!("Reached end of input while parsing assignment"),
-                    labels: vec![],
-                })
+                return Err(LangError::new(
+                    "Reached end of input while parsing let statement",
+                ))
             }
         };
 
@@ -29,10 +31,9 @@ impl TokenParser for Assign {
         let ident = match tokens.next() {
             Some((Token::Ident(ident), _)) => ident.clone(),
             _ => {
-                return Err(ParserError {
-                    message: format!("Reached end of input while parsing assignment"),
-                    labels: vec![],
-                })
+                return Err(LangError::new(
+                    "Reached end of input while parsing let statement",
+                ))
             }
         };
 
@@ -40,10 +41,9 @@ impl TokenParser for Assign {
         match tokens.next() {
             Some((Token::Equal, _)) => (),
             _ => {
-                return Err(ParserError {
-                    message: format!("Reached end of input while parsing assignment"),
-                    labels: vec![],
-                })
+                return Err(LangError::new(
+                    "Reached end of input while parsing let statement",
+                ))
             }
         }
 
