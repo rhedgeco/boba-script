@@ -8,6 +8,8 @@ pub enum ValueType {
     Int,
     #[display(fmt = "float")]
     Float,
+    #[display(fmt = "string")]
+    String,
 }
 
 #[derive(Debug, Display, Clone, PartialEq, PartialOrd)]
@@ -18,24 +20,8 @@ pub enum Value {
     Int(i64),
     #[display(fmt = "{}", _0)]
     Float(f64),
-}
-
-impl From<()> for Value {
-    fn from(_: ()) -> Self {
-        Value::Null
-    }
-}
-
-impl From<i64> for Value {
-    fn from(value: i64) -> Self {
-        Value::Int(value)
-    }
-}
-
-impl From<f64> for Value {
-    fn from(value: f64) -> Self {
-        Value::Float(value)
-    }
+    #[display(fmt = "'{}'", _0)]
+    String(String),
 }
 
 impl Value {
@@ -44,6 +30,7 @@ impl Value {
             Value::Null => ValueType::Null,
             Value::Int(_) => ValueType::Int,
             Value::Float(_) => ValueType::Float,
+            Value::String(_) => ValueType::String,
         }
     }
 }

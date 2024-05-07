@@ -51,6 +51,7 @@ impl Engine {
         match expr.deref() {
             Expr::Int(v) => Ok(Value::Int(*v)),
             Expr::Float(v) => Ok(Value::Float(*v)),
+            Expr::String(v) => Ok(Value::String(v.clone())),
             Expr::Neg(expr) => {
                 self.eval_unary(UnaryOpType::Neg, self.eval(scope, expr)?, expr.span())
             }
@@ -290,6 +291,26 @@ impl Default for Engine {
                     (ValueType::Float, BinaryOpType::Pow, ValueType::Int),
                     (|v1, v2| match (v1, v2) {
                         (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(v1.powf(v2 as f64))),
+                        _ => unreachable!(),
+                    }) as BinaryFn,
+                ),
+                // string + string
+                (
+                    (ValueType::String, BinaryOpType::Add, ValueType::String),
+                    (|v1, v2| match (v1, v2) {
+                        (Value::String(v1), Value::String(v2)) => {
+                            Ok(Value::String(format!("{v1}{v2}")))
+                        }
+                        _ => unreachable!(),
+                    }) as BinaryFn,
+                ),
+                // string * int
+                (
+                    (ValueType::String, BinaryOpType::Mul, ValueType::Int),
+                    (|v1, v2| match (v1, v2) {
+                        (Value::String(v1), Value::Int(v2)) => {
+                            Ok(Value::String(v1.repeat(v2 as usize)))
+                        }
                         _ => unreachable!(),
                     }) as BinaryFn,
                 ),

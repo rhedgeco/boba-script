@@ -65,6 +65,18 @@ impl TokenError {
     }
 }
 
+fn remove_quotes(str: impl AsRef<str>) -> String {
+    let str = str.as_ref();
+    match str.strip_prefix("'") {
+        Some(stripped) => stripped.strip_suffix("'").unwrap_or(str),
+        None => match str.strip_prefix("\"") {
+            Some(stripped) => stripped.strip_suffix("\"").unwrap_or(str),
+            None => str,
+        },
+    }
+    .to_string()
+}
+
 #[derive(Logos, Debug, Clone, PartialEq, PartialOrd)]
 #[logos(skip r"[ \t\n\r\f]")] // skip whitespace
 #[logos(error = TokenError)]
@@ -77,6 +89,8 @@ pub enum Token {
     Int(i64),
     #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice().parse())]
     Float(f64),
+    #[regex("('[^']*')|(\"[^\"]*\")", |lex| remove_quotes(lex.slice()))]
+    String(String),
 
     // operators
     #[token("=")]

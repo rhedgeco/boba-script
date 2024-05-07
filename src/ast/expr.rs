@@ -13,6 +13,7 @@ pub enum Expr {
     Var(Ident),
     Int(i64),
     Float(f64),
+    String(String),
     Neg(Box<Node<Expr>>),
     Add(Box<Node<Expr>>, Box<Node<Expr>>),
     Sub(Box<Node<Expr>>, Box<Node<Expr>>),
@@ -30,6 +31,7 @@ impl TokenParser for Expr {
                 Some((Token::Ident(ident), span)) => Ok(Node::new(span, Expr::Var(ident.clone()))),
                 Some((Token::Int(int), span)) => Ok(Node::new(span, Expr::Int(int))),
                 Some((Token::Float(float), span)) => Ok(Node::new(span, Expr::Float(float))),
+                Some((Token::String(string), span)) => Ok(Node::new(span, Expr::String(string))),
                 Some((Token::Add, _)) => Ok(parse_atom(tokens)?),
                 Some((Token::Sub, span)) => {
                     Ok(Node::new(span, Expr::Neg(Box::new(parse_atom(tokens)?))))
