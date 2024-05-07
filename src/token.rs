@@ -56,7 +56,10 @@ impl TokenError {
             Self::UnexpectedToken => format!("Unexpected token"),
             Self::ParseIntError(e) => match e.kind() {
                 std::num::IntErrorKind::PosOverflow => {
-                    format!("Integer is too large. Must be less than 9,223,372,036,854,775,807")
+                    format!("Integer is too large. Must be less than 9,223,372,036,854,775,808")
+                }
+                std::num::IntErrorKind::NegOverflow => {
+                    format!("Integer is too small. Must be greater than -9,223,372,036,854,775,809")
                 }
                 _ => format!("Unknown integer error :("),
             },
@@ -87,9 +90,9 @@ pub enum Token {
     // values
     #[regex(r"true|false", |lex| lex.slice() == "true")]
     Bool(bool),
-    #[regex(r"[0-9]+", |lex| lex.slice().parse())]
+    #[regex(r"-?[0-9]+", |lex| lex.slice().parse())]
     Int(i64),
-    #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice().parse())]
+    #[regex(r"-?[0-9]*\.[0-9]+", |lex| lex.slice().parse())]
     Float(f64),
     #[regex("('[^']*')|(\"[^\"]*\")", |lex| remove_quotes(lex.slice()))]
     String(String),
@@ -119,4 +122,8 @@ pub enum Token {
     OpenParen,
     #[token(")")]
     CloseParen,
+
+    // fallback for invalid tokens
+    #[regex(".", |lex| lex.slice().to_string(), priority = 0)]
+    Invalid(String),
 }
