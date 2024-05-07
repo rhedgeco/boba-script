@@ -47,11 +47,24 @@ impl TokenParser for Expr {
                     Ok(Node::new(span, Expr::Not(Box::new(atom))))
                 }
                 Some((Token::OpenParen, _)) => {
+                    let mut open_count = 1;
                     let tokens = tokens
-                        .take_while(|(t, _)| t != &Token::CloseParen)
+                        .take_while(|(t, _)| {
+                            match t {
+                                Token::OpenParen => open_count += 1,
+                                Token::CloseParen => open_count -= 1,
+                                _ => (),
+                            }
+                            open_count > 0
+                        })
                         .collect::<Vec<_>>();
 
-                    Expr::parse(&mut tokens.into_iter().peekable())
+                    match open_count {
+                        c if c == 0 => Expr::parse(&mut tokens.into_iter().peekable()),
+                        _ => Err(LangError::new(
+                            "Reached end of input while parsing expression",
+                        )),
+                    }
                 }
                 Some((token, span)) => Err(LangError::new(
                     "Unexpected token found while parsing expression",
