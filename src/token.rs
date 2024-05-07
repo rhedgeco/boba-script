@@ -84,7 +84,9 @@ pub enum Token {
     #[regex(r"[_a-zA-Z][_a-zA-z0-9]*", |lex| Ident::new(lex.slice()))]
     Ident(Ident),
 
-    // numbers
+    // values
+    #[regex(r"true|false", |lex| lex.slice() == "true")]
+    Bool(bool),
     #[regex(r"[0-9]+", |lex| lex.slice().parse())]
     Int(i64),
     #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice().parse())]
@@ -105,6 +107,8 @@ pub enum Token {
     Div,
     #[token("**")]
     Pow,
+    #[token("!")]
+    Not,
 
     // keywords
     #[token("let")]

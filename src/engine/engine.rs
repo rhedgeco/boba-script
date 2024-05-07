@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref};
+use std::ops::Deref;
 
 use derive_more::Display;
 
@@ -8,15 +8,14 @@ use crate::{
     token::Span,
 };
 
-use super::{
-    types::{Value, ValueType},
-    Scope,
-};
+use super::{types::Value, Scope};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum UnaryOpType {
-    #[display(fmt = "-prefix")]
+    #[display(fmt = "-")]
     Neg,
+    #[display(fmt = "!")]
+    Not,
 }
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -33,14 +32,8 @@ enum BinaryOpType {
     Pow,
 }
 
-type OpResult = Result<Value, String>;
-type UnaryFn = fn(Value) -> OpResult;
-type BinaryFn = fn(Value, Value) -> OpResult;
-
-pub struct Engine {
-    unary_ops: HashMap<(UnaryOpType, ValueType), UnaryFn>,
-    binary_ops: HashMap<(ValueType, BinaryOpType, ValueType), BinaryFn>,
-}
+#[derive(Debug, Default)]
+pub struct Engine {}
 
 impl Engine {
     pub fn new() -> Self {
@@ -49,11 +42,15 @@ impl Engine {
 
     pub fn eval(&self, scope: &Scope, expr: &Node<Expr>) -> Result<Value, Label> {
         match expr.deref() {
+            Expr::Bool(v) => Ok(Value::Bool(*v)),
             Expr::Int(v) => Ok(Value::Int(*v)),
             Expr::Float(v) => Ok(Value::Float(*v)),
             Expr::String(v) => Ok(Value::String(v.clone())),
-            Expr::Neg(expr) => {
-                self.eval_unary(UnaryOpType::Neg, self.eval(scope, expr)?, expr.span())
+            Expr::Neg(inner) => {
+                self.eval_unary(UnaryOpType::Neg, self.eval(scope, inner)?, expr.span())
+            }
+            Expr::Not(inner) => {
+                self.eval_unary(UnaryOpType::Not, self.eval(scope, inner)?, expr.span())
             }
             Expr::Add(lhs, rhs) => self.eval_binary(
                 self.eval(scope, lhs)?,
@@ -97,10 +94,12 @@ impl Engine {
     }
 
     fn eval_unary(&self, op: UnaryOpType, val: Value, span: &Span) -> Result<Value, Label> {
-        let val_ty = val.ty();
-        match self.unary_ops.get(&(op, val_ty)) {
-            Some(op) => op(val),
-            None => Err(format!("cannot use unary '{op}' operator with '{val_ty}'")),
+        let val_ty = val.type_name();
+        match (val, op) {
+            (Value::Bool(v), UnaryOpType::Not) => Ok(Value::Bool(!v)),
+            (Value::Int(v), UnaryOpType::Neg) => Ok(Value::Int(-v)),
+            (Value::Float(v), UnaryOpType::Neg) => Ok(Value::Float(-v)),
+            _ => Err(format!("cannot use unary '{op}' prefix with '{val_ty}'",)),
         }
         .map_err(|message| Label::new(message, Color::Red, span.clone()))
     }
@@ -112,209 +111,105 @@ impl Engine {
         val2: Value,
         span: &Span,
     ) -> Result<Value, Label> {
-        let val1_ty = val1.ty();
-        let val2_ty = val2.ty();
-        match self.binary_ops.get(&(val1_ty, op, val2_ty)) {
-            Some(op) => op(val1, val2),
-            None => Err(format!(
-                "cannot use '{op}' operator with '{val1_ty}' and '{val2_ty}'"
+        let val1_ty = val1.type_name();
+        let val2_ty = val2.type_name();
+
+        match (val1, op, val2) {
+            // ---------------
+            // --- INT OPS ---
+            // int add
+            (Value::Int(v1), BinaryOpType::Add, Value::Int(v2)) => Ok(Value::Int(v1 + v2)),
+            (Value::Int(v1), BinaryOpType::Add, Value::Float(v2)) => {
+                Ok(Value::Float(v1 as f64 + v2))
+            }
+            // int sub
+            (Value::Int(v1), BinaryOpType::Sub, Value::Int(v2)) => Ok(Value::Int(v1 - v2)),
+            (Value::Int(v1), BinaryOpType::Sub, Value::Float(v2)) => {
+                Ok(Value::Float(v1 as f64 - v2))
+            }
+            // int mul
+            (Value::Int(v1), BinaryOpType::Mul, Value::Bool(v2)) => Ok(Value::Int(v1 * v2 as i64)),
+            (Value::Int(v1), BinaryOpType::Mul, Value::Int(v2)) => Ok(Value::Int(v1 * v2)),
+            (Value::Int(v1), BinaryOpType::Mul, Value::Float(v2)) => {
+                Ok(Value::Float(v1 as f64 * v2))
+            }
+            // int div
+            (Value::Int(v1), BinaryOpType::Div, Value::Int(v2)) => {
+                Ok(Value::Float(v1 as f64 / v2 as f64))
+            }
+            (Value::Int(v1), BinaryOpType::Div, Value::Float(v2)) => {
+                Ok(Value::Float(v1 as f64 / v2))
+            }
+            // int pow
+            (Value::Int(v1), BinaryOpType::Pow, Value::Int(v2)) => {
+                Ok(Value::Float((v1 as f64).powf(v2 as f64)))
+            }
+            (Value::Int(v1), BinaryOpType::Pow, Value::Float(v2)) => {
+                Ok(Value::Float((v1 as f64).powf(v2)))
+            }
+
+            // -----------------
+            // --- FLOAT OPS ---
+            // float add
+            (Value::Float(v1), BinaryOpType::Add, Value::Int(v2)) => {
+                Ok(Value::Float(v1 + v2 as f64))
+            }
+            (Value::Float(v1), BinaryOpType::Add, Value::Float(v2)) => Ok(Value::Float(v1 + v2)),
+            // float sub
+            (Value::Float(v1), BinaryOpType::Sub, Value::Int(v2)) => {
+                Ok(Value::Float(v1 - v2 as f64))
+            }
+            (Value::Float(v1), BinaryOpType::Sub, Value::Float(v2)) => Ok(Value::Float(v1 - v2)),
+            // float mul
+            (Value::Float(v1), BinaryOpType::Mul, Value::Bool(v2)) => {
+                Ok(Value::Float(v1 * v2 as i64 as f64))
+            }
+            (Value::Float(v1), BinaryOpType::Mul, Value::Int(v2)) => {
+                Ok(Value::Float(v1 * v2 as f64))
+            }
+            (Value::Float(v1), BinaryOpType::Mul, Value::Float(v2)) => Ok(Value::Float(v1 * v2)),
+            // float div
+            (Value::Float(v1), BinaryOpType::Div, Value::Int(v2)) => {
+                Ok(Value::Float(v1 / v2 as f64))
+            }
+            (Value::Float(v1), BinaryOpType::Div, Value::Float(v2)) => Ok(Value::Float(v1 / v2)),
+            // float pow
+            (Value::Float(v1), BinaryOpType::Pow, Value::Int(v2)) => {
+                Ok(Value::Float(v1.powf(v2 as f64)))
+            }
+            (Value::Float(v1), BinaryOpType::Pow, Value::Float(v2)) => {
+                Ok(Value::Float(v1.powf(v2)))
+            }
+
+            // ------------------
+            // --- STRING OPS ---
+            // string add
+            (Value::String(v1), BinaryOpType::Add, Value::Bool(v2)) => {
+                Ok(Value::String(format!("{v1}{v2}")))
+            }
+            (Value::String(v1), BinaryOpType::Add, Value::Int(v2)) => {
+                Ok(Value::String(format!("{v1}{v2}")))
+            }
+            (Value::String(v1), BinaryOpType::Add, Value::Float(v2)) => {
+                Ok(Value::String(format!("{v1}{v2}")))
+            }
+            (Value::String(v1), BinaryOpType::Add, Value::String(v2)) => {
+                Ok(Value::String(format!("{v1}{v2}")))
+            }
+            // string mul
+            (Value::String(v1), BinaryOpType::Mul, Value::Bool(v2)) => {
+                Ok(Value::String(v1.repeat(v2 as usize)))
+            }
+            (Value::String(v1), BinaryOpType::Mul, Value::Int(v2)) => {
+                Ok(Value::String(v1.repeat(v2 as usize)))
+            }
+
+            // --------------------
+            // --- FAILURE CASE ---
+            _ => Err(format!(
+                "cannot use '{op}' operator with '{val1_ty}' and '{val2_ty}'",
             )),
         }
         .map_err(|message| Label::new(message, Color::Red, span.clone()))
-    }
-}
-
-impl Default for Engine {
-    fn default() -> Self {
-        Self {
-            unary_ops: HashMap::from([
-                // op int
-                (
-                    (UnaryOpType::Neg, ValueType::Int),
-                    (|v| match v {
-                        Value::Int(v) => Ok(Value::Int(-v)),
-                        _ => unreachable!(),
-                    }) as UnaryFn,
-                ),
-                // op float
-                (
-                    (UnaryOpType::Neg, ValueType::Float),
-                    (|v| match v {
-                        Value::Float(v) => Ok(Value::Float(-v)),
-                        _ => unreachable!(),
-                    }) as UnaryFn,
-                ),
-            ]),
-            binary_ops: HashMap::from([
-                // int op int
-                (
-                    (ValueType::Int, BinaryOpType::Add, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Int(v2)) => Ok(Value::Int(v1 + v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Int, BinaryOpType::Sub, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Int(v2)) => Ok(Value::Int(v1 - v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Int, BinaryOpType::Mul, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Int(v2)) => Ok(Value::Int(v1 * v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Int, BinaryOpType::Div, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Int(v2)) => Ok(Value::Float(v1 as f64 / v2 as f64)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Int, BinaryOpType::Pow, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Int(v2)) => {
-                            Ok(Value::Float((v1 as f64).powf(v2 as f64)))
-                        }
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                // float op float
-                (
-                    (ValueType::Float, BinaryOpType::Add, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(v1 + v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Float, BinaryOpType::Sub, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(v1 - v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Float, BinaryOpType::Mul, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(v1 * v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Float, BinaryOpType::Div, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(v1 / v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Float, BinaryOpType::Pow, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Float(v2)) => Ok(Value::Float(v1.powf(v2))),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                // int op float
-                (
-                    (ValueType::Int, BinaryOpType::Add, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Float(v2)) => Ok(Value::Float(v1 as f64 + v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Int, BinaryOpType::Sub, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Float(v2)) => Ok(Value::Float(v1 as f64 - v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Int, BinaryOpType::Mul, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Float(v2)) => Ok(Value::Float(v1 as f64 * v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Int, BinaryOpType::Div, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Float(v2)) => Ok(Value::Float(v1 as f64 / v2)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Int, BinaryOpType::Pow, ValueType::Float),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Int(v1), Value::Float(v2)) => {
-                            Ok(Value::Float((v1 as f64).powf(v2)))
-                        }
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                // float op int
-                (
-                    (ValueType::Float, BinaryOpType::Add, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(v1 + v2 as f64)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Float, BinaryOpType::Sub, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(v1 - v2 as f64)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Float, BinaryOpType::Mul, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(v1 * v2 as f64)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Float, BinaryOpType::Div, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(v1 / v2 as f64)),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                (
-                    (ValueType::Float, BinaryOpType::Pow, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::Float(v1), Value::Int(v2)) => Ok(Value::Float(v1.powf(v2 as f64))),
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                // string + string
-                (
-                    (ValueType::String, BinaryOpType::Add, ValueType::String),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::String(v1), Value::String(v2)) => {
-                            Ok(Value::String(format!("{v1}{v2}")))
-                        }
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-                // string * int
-                (
-                    (ValueType::String, BinaryOpType::Mul, ValueType::Int),
-                    (|v1, v2| match (v1, v2) {
-                        (Value::String(v1), Value::Int(v2)) => {
-                            Ok(Value::String(v1.repeat(v2 as usize)))
-                        }
-                        _ => unreachable!(),
-                    }) as BinaryFn,
-                ),
-            ]),
-        }
     }
 }

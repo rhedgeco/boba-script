@@ -11,10 +11,12 @@ use super::{Node, TokenIter, TokenParser};
 #[derive(Debug)]
 pub enum Expr {
     Var(Ident),
+    Bool(bool),
     Int(i64),
     Float(f64),
     String(String),
     Neg(Box<Node<Expr>>),
+    Not(Box<Node<Expr>>),
     Add(Box<Node<Expr>>, Box<Node<Expr>>),
     Sub(Box<Node<Expr>>, Box<Node<Expr>>),
     Mul(Box<Node<Expr>>, Box<Node<Expr>>),
@@ -29,12 +31,20 @@ impl TokenParser for Expr {
         fn parse_atom(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Expr>, LangError> {
             match tokens.next() {
                 Some((Token::Ident(ident), span)) => Ok(Node::new(span, Expr::Var(ident.clone()))),
+                Some((Token::Bool(bool), span)) => Ok(Node::new(span, Expr::Bool(bool))),
                 Some((Token::Int(int), span)) => Ok(Node::new(span, Expr::Int(int))),
                 Some((Token::Float(float), span)) => Ok(Node::new(span, Expr::Float(float))),
                 Some((Token::String(string), span)) => Ok(Node::new(span, Expr::String(string))),
                 Some((Token::Add, _)) => Ok(parse_atom(tokens)?),
                 Some((Token::Sub, span)) => {
-                    Ok(Node::new(span, Expr::Neg(Box::new(parse_atom(tokens)?))))
+                    let atom = parse_atom(tokens)?;
+                    let span = span.start..atom.span().end;
+                    Ok(Node::new(span, Expr::Neg(Box::new(atom))))
+                }
+                Some((Token::Not, span)) => {
+                    let atom = parse_atom(tokens)?;
+                    let span = span.start..atom.span().end;
+                    Ok(Node::new(span, Expr::Not(Box::new(atom))))
                 }
                 Some((Token::OpenParen, _)) => {
                     let tokens = tokens
