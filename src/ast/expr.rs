@@ -47,8 +47,8 @@ impl TokenParser for Expr {
                     Ok(Node::new(span, Expr::Not(Box::new(atom))))
                 }
                 Some((Token::OpenParen, span)) => {
-                    let mut open_count = 1;
-                    let tokens = tokens
+                    let mut open_count = 1; // create counter for open parens
+                    let tokens = tokens // take tokens and count parens untill all are closed
                         .take_while(|(t, _)| {
                             match t {
                                 Token::OpenParen => open_count += 1,
@@ -59,6 +59,7 @@ impl TokenParser for Expr {
                         })
                         .collect::<Vec<_>>();
 
+                    // check if we collected any tokens
                     match tokens.last() {
                         Some((_, last_span)) if open_count > 0 => {
                             Err(LangError::new("Unclosed brace found while parsing")
