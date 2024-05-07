@@ -45,7 +45,11 @@ pub fn start_session() {
     loop {
         let line = match line_editor.read_line(&prompt) {
             Ok(Signal::Success(buffer)) => Source::from(buffer),
-            Ok(Signal::CtrlC) | Ok(Signal::CtrlD) => {
+            Ok(Signal::CtrlD) => {
+                println!("Closing Shell...");
+                return;
+            }
+            Ok(Signal::CtrlC) => {
                 println!("Aborting...");
                 return;
             }
