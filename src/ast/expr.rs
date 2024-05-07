@@ -46,7 +46,7 @@ impl TokenParser for Expr {
                     let span = span.start..atom.span().end;
                     Ok(Node::new(span, Expr::Not(Box::new(atom))))
                 }
-                Some((Token::OpenParen, _)) => {
+                Some((Token::OpenParen, span)) => {
                     let mut open_count = 1;
                     let tokens = tokens
                         .take_while(|(t, _)| {
@@ -59,11 +59,24 @@ impl TokenParser for Expr {
                         })
                         .collect::<Vec<_>>();
 
-                    match open_count {
-                        c if c == 0 => Expr::parse(&mut tokens.into_iter().peekable()),
-                        _ => Err(LangError::new(
-                            "Reached end of input while parsing expression",
+                    match tokens.last() {
+                        Some((_, last_span)) if open_count > 0 => {
+                            Err(LangError::new("Unclosed brace found while parsing")
+                                .label(Label::new("open brace found here", Color::Red, span))
+                                .label(Label::new(
+                                    "expression ended here",
+                                    Color::Red,
+                                    last_span.start + 1..last_span.end + 1,
+                                )))
+                        }
+                        None => Err(LangError::new("Empty braces found while parsing").label(
+                            Label::new(
+                                "expected expression found '()'",
+                                Color::Red,
+                                span.start..span.end + 1,
+                            ),
                         )),
+                        _ => Expr::parse(&mut tokens.into_iter().peekable()),
                     }
                 }
                 Some((token, span)) => Err(LangError::new(
