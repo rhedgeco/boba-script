@@ -32,8 +32,37 @@ impl TokenParser for Expr {
             match tokens.next() {
                 Some((Token::Ident(ident), span)) => Ok(Node::new(span, Expr::Var(ident.clone()))),
                 Some((Token::Bool(bool), span)) => Ok(Node::new(span, Expr::Bool(bool))),
-                Some((Token::Int(int), span)) => Ok(Node::new(span, Expr::Int(int))),
-                Some((Token::Float(float), span)) => Ok(Node::new(span, Expr::Float(float))),
+                Some((Token::Int(int), span)) => match int.parse::<i64>() {
+                    Ok(int) => Ok(Node::new(span, Expr::Int(int))),
+                    Err(e) => match e.kind() {
+                        std::num::IntErrorKind::Empty => Err(format!("Integer empty")),
+                        std::num::IntErrorKind::InvalidDigit => {
+                            Err(format!("Integer has invalid digit"))
+                        }
+                        std::num::IntErrorKind::PosOverflow => Err(format!(
+                            "Integer is too big. Must be at max 9,223,372,036,854,775,807"
+                        )),
+                        std::num::IntErrorKind::NegOverflow => Err(format!(
+                            "Integer is too big. Must be at min -9,223,372,036,854,775,808"
+                        )),
+                        _ => Err(format!("{e}")),
+                    }
+                    .map_err(|message| {
+                        LangError::new("Parse Integer Error").label(Label::new(
+                            message,
+                            Color::Red,
+                            span,
+                        ))
+                    }),
+                },
+                Some((Token::Float(float), span)) => match float.parse::<f64>() {
+                    Ok(float) => Ok(Node::new(span, Expr::Float(float))),
+                    Err(e) => Err(LangError::new("Parse Float Error").label(Label::new(
+                        format!("{e}"),
+                        Color::Red,
+                        span,
+                    ))),
+                },
                 Some((Token::String(string), span)) => Ok(Node::new(span, Expr::String(string))),
                 Some((Token::Add, _)) => Ok(parse_atom(tokens)?),
                 Some((Token::Sub, span)) => {

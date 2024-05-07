@@ -1,5 +1,3 @@
-use std::num::{ParseFloatError, ParseIntError};
-
 use derive_more::Display;
 use logos::Logos;
 use once_cell::sync::Lazy;
@@ -30,44 +28,6 @@ impl Ident {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq)]
-pub enum TokenError {
-    #[default]
-    UnexpectedToken,
-    ParseIntError(ParseIntError),
-    ParseFloatError,
-}
-
-impl From<ParseIntError> for TokenError {
-    fn from(value: ParseIntError) -> Self {
-        Self::ParseIntError(value)
-    }
-}
-
-impl From<ParseFloatError> for TokenError {
-    fn from(_: ParseFloatError) -> Self {
-        Self::ParseFloatError
-    }
-}
-
-impl TokenError {
-    pub fn get_message(&self) -> String {
-        match self {
-            Self::UnexpectedToken => format!("Unexpected token"),
-            Self::ParseIntError(e) => match e.kind() {
-                std::num::IntErrorKind::PosOverflow => {
-                    format!("Integer is too large. Must be less than 9,223,372,036,854,775,808")
-                }
-                std::num::IntErrorKind::NegOverflow => {
-                    format!("Integer is too small. Must be greater than -9,223,372,036,854,775,809")
-                }
-                _ => format!("Unknown integer error :("),
-            },
-            Self::ParseFloatError => format!("Invalid float literal"),
-        }
-    }
-}
-
 fn remove_quotes(str: impl AsRef<str>) -> String {
     let str = str.as_ref();
     match str.strip_prefix("'") {
@@ -82,7 +42,6 @@ fn remove_quotes(str: impl AsRef<str>) -> String {
 
 #[derive(Logos, Debug, Clone, PartialEq, PartialOrd)]
 #[logos(skip r"[ \t\n\r\f]")] // skip whitespace
-#[logos(error = TokenError)]
 pub enum Token {
     #[regex(r"[_a-zA-Z][_a-zA-z0-9]*", |lex| Ident::new(lex.slice()))]
     Ident(Ident),
@@ -90,10 +49,10 @@ pub enum Token {
     // values
     #[regex(r"true|false", |lex| lex.slice() == "true")]
     Bool(bool),
-    #[regex(r"-?[0-9]+", |lex| lex.slice().parse())]
-    Int(i64),
-    #[regex(r"-?[0-9]*\.[0-9]+", |lex| lex.slice().parse())]
-    Float(f64),
+    #[regex(r"[0-9]+", |lex| lex.slice().to_string())]
+    Int(String),
+    #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice().to_string())]
+    Float(String),
     #[regex("('[^']*')|(\"[^\"]*\")", |lex| remove_quotes(lex.slice()))]
     String(String),
 

@@ -1,6 +1,6 @@
 use std::{iter::Peekable, ops::Deref};
 
-use ariadne::{Color, Label, Report, ReportKind, Source, Span};
+use ariadne::{Label, Report, ReportKind, Source};
 use logos::Logos;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
@@ -59,30 +59,24 @@ pub fn start_session() {
             }
         };
 
-        // convert characters into tokens
-        let tokens = Token::lexer(line.text())
+        // get all tokens for the line
+        let mut tokens = Token::lexer(line.text())
             .spanned()
-            .filter_map(|(result, span)| match result {
-                Ok(token) => Some((token, span)),
-                Err(error) => {
-                    Report::build(ReportKind::Error, "shell", span.start())
-                        .with_code(1)
-                        .with_message(format!("Tokenization Error"))
-                        .with_label(
-                            Label::new(("shell", span))
-                                .with_color(Color::Red)
-                                .with_message(error.get_message()),
-                        )
-                        .finish()
-                        .eprint(("shell", line.clone()))
-                        .unwrap();
-                    None
-                }
+            .map(|(result, span)| {
+                (
+                    // panic on unexpected invalid token
+                    // all tokens 'should' be able to be parsed
+                    result.expect(&format!(
+                        "unexpected invalid token '{}'",
+                        &line.text()[span.clone()]
+                    )),
+                    span,
+                )
             })
-            .collect::<Vec<_>>();
+            .peekable();
 
-        // parse and evaluate shell command
-        match ShellCommand::parse(&mut tokens.into_iter().peekable()) {
+        // parse and evaluate tokens as a shell command
+        match ShellCommand::parse(&mut tokens) {
             Ok(command) => match command.deref() {
                 ShellCommand::Assign(assign) => match engine.eval(&scope, &assign.expr) {
                     Ok(value) => {
@@ -114,20 +108,7 @@ pub fn start_session() {
                         .unwrap(),
                 },
             },
-            Err(error) => {
-                let mut report =
-                    Report::build(ReportKind::Error, "shell", 0).with_message(error.message);
-
-                for label in error.labels {
-                    report.add_label(
-                        Label::new(("shell", label.span))
-                            .with_color(label.color)
-                            .with_message(label.message),
-                    )
-                }
-
-                report.finish().eprint(("shell", line.clone())).unwrap();
-            }
+            Err(error) => error.report("shell", line.clone()),
         }
     }
 }
