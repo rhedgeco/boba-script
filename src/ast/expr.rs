@@ -62,13 +62,21 @@ impl TokenParser for Expr {
                     match tokens.last() {
                         Some((_, last_span)) if open_count > 0 => {
                             Err(LangError::new("Unclosed brace found while parsing")
-                                .label(Label::new("open brace found here", Color::Red, span))
+                                .label(Label::new("open brace found here", Color::Cyan, span))
                                 .label(Label::new(
                                     "expression ended here",
                                     Color::Red,
-                                    last_span.start + 1..last_span.end + 1,
+                                    last_span.clone(),
                                 )))
                         }
+                        None if open_count > 0 => Err(LangError::new(
+                            "Unexpected end of expression",
+                        )
+                        .label(Label::new(
+                            "expected expression, found '('",
+                            Color::Red,
+                            span,
+                        ))),
                         None => Err(LangError::new("Empty braces found while parsing").label(
                             Label::new(
                                 "expected expression found '()'",
