@@ -4,6 +4,7 @@ use crate::token::Span;
 
 pub type Color = ariadne::Color;
 
+#[derive(Debug, Clone)]
 pub struct Label {
     pub message: String,
     pub color: Color,
@@ -20,6 +21,7 @@ impl Label {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct LangError {
     pub message: String,
     pub labels: Vec<Label>,

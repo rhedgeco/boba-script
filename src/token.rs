@@ -28,61 +28,83 @@ impl Ident {
     }
 }
 
-fn remove_quotes(str: impl AsRef<str>) -> String {
+fn parse_string(str: impl AsRef<str>) -> String {
     let str = str.as_ref();
-    match str.strip_prefix("'") {
+
+    // remove quotes
+    let str = match str.strip_prefix("'") {
         Some(stripped) => stripped.strip_suffix("'").unwrap_or(str),
         None => match str.strip_prefix("\"") {
             Some(stripped) => stripped.strip_suffix("\"").unwrap_or(str),
             None => str,
         },
     }
-    .to_string()
+    .to_string();
+
+    // TODO: parse escaped characters
+
+    str
 }
 
-#[derive(Logos, Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Logos, Debug, Display, Clone, PartialEq, PartialOrd)]
 #[logos(skip r"[ \t\n\r\f]")] // skip whitespace
 pub enum Token {
     #[regex(r"[_a-zA-Z][_a-zA-z0-9]*", |lex| Ident::new(lex.slice()))]
+    #[display(fmt = "identifier")]
     Ident(Ident),
 
     // values
     #[regex(r"true|false", |lex| lex.slice() == "true")]
+    #[display(fmt = "bool")]
     Bool(bool),
     #[regex(r"[0-9]+", |lex| lex.slice().to_string())]
+    #[display(fmt = "int")]
     Int(String),
     #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice().to_string())]
+    #[display(fmt = "float")]
     Float(String),
-    #[regex("('[^']*')|(\"[^\"]*\")", |lex| remove_quotes(lex.slice()))]
+    #[regex("('[^']*')|(\"[^\"]*\")", |lex| parse_string(lex.slice()))]
+    #[display(fmt = "string")]
     String(String),
 
     // operators
     #[token("=")]
+    #[display(fmt = "=")]
     Equal,
     #[token("+")]
+    #[display(fmt = "+")]
     Add,
     #[token("-")]
+    #[display(fmt = "-")]
     Sub,
     #[token("*")]
+    #[display(fmt = "*")]
     Mul,
     #[token("/")]
+    #[display(fmt = "/")]
     Div,
     #[token("**")]
+    #[display(fmt = "**")]
     Pow,
     #[token("!")]
+    #[display(fmt = "!")]
     Not,
 
     // keywords
     #[token("let")]
+    #[display(fmt = "let")]
     Let,
 
     // control flow
     #[token("(")]
+    #[display(fmt = "(")]
     OpenParen,
     #[token(")")]
+    #[display(fmt = ")")]
     CloseParen,
 
     // fallback for invalid tokens
     #[regex(".", |lex| lex.slice().to_string(), priority = 0)]
+    #[display(fmt = "{}", _0)]
     Invalid(String),
 }

@@ -208,7 +208,7 @@ impl TokenParser for Expr {
                     "Unexpected token found while parsing expression",
                 )
                 .label(Label::new(
-                    format!("found token '{token:?}'"),
+                    format!("unexpected token '{token}'"),
                     Color::Red,
                     span.clone(),
                 ))),
@@ -237,7 +237,7 @@ impl TokenParser for Expr {
                     return Err(
                         LangError::new("Unexpected token found while parsing expression").label(
                             Label::new(
-                                format!("found token '{token:?}'"),
+                                format!("unexpected token '{token}'"),
                                 Color::Red,
                                 span.clone(),
                             ),
