@@ -207,7 +207,7 @@ impl Engine {
             // --------------------
             // --- FAILURE CASE ---
             _ => Err(format!(
-                "cannot use '{op}' operator with '{val1_ty}' and '{val2_ty}'",
+                "'{val1_ty}' does not have a valid '{op}' operator for '{val2_ty}'",
             )),
         }
         .map_err(|message| Label::new(message, Color::Red, span.clone()))
