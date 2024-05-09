@@ -1,6 +1,6 @@
 use ariadne::{Report, ReportKind, Source};
 
-use crate::token::Span;
+use crate::lexer::token::Span;
 
 pub type Color = ariadne::Color;
 

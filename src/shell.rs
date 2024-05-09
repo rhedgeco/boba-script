@@ -7,7 +7,8 @@ use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 use crate::{
     ast::{Assign, Expr, Node, TokenIter, TokenParser},
     engine::Scope,
-    Engine, LangError, Token,
+    lexer::Token,
+    Engine, LangError,
 };
 
 #[derive(Debug)]

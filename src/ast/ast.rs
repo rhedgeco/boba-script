@@ -5,7 +5,7 @@ use std::{
 
 use logos::Span;
 
-use crate::{token::Token, LangError};
+use crate::{lexer::Token, LangError};
 
 // blanket token iterator impl
 pub trait TokenIter: Iterator<Item = (Token, Span)> {}

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::token::Ident;
+use crate::lexer::Ident;
 
 use super::types::Value;
 

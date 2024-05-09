@@ -5,7 +5,7 @@ use derive_more::Display;
 use crate::{
     ast::{Expr, Node},
     error::{Color, Label},
-    token::Span,
+    lexer::token::Span,
 };
 
 use super::{types::Value, Scope};

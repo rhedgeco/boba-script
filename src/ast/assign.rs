@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use crate::{
     error::{Color, Label},
-    token::{Ident, Token},
+    lexer::{Ident, Token},
     LangError,
 };
 

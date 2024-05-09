@@ -2,8 +2,8 @@ use std::iter::Peekable;
 
 use crate::{
     error::{Color, Label},
-    token::{Ident, Span},
-    LangError, Token,
+    lexer::{token::Span, Ident, Token},
+    LangError,
 };
 
 use super::{Node, TokenIter, TokenParser};
