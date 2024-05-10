@@ -3,9 +3,9 @@ use std::ops::Deref;
 use derive_more::Display;
 
 use crate::{
-    ast::{Expr, Node},
     error::{Color, Label},
     lexer::token::Span,
+    parser::{Expr, Node},
 };
 
 use super::{types::Value, Scope};

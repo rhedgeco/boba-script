@@ -22,14 +22,20 @@ impl Label {
 }
 
 #[derive(Debug, Clone)]
-pub struct LangError {
+pub struct BobaError {
+    pub offset: usize,
     pub message: String,
     pub labels: Vec<Label>,
 }
 
-impl LangError {
+impl BobaError {
     pub fn new(message: impl Into<String>) -> Self {
+        Self::new_offset(0, message)
+    }
+
+    pub fn new_offset(offset: usize, message: impl Into<String>) -> Self {
         Self {
+            offset,
             message: message.into(),
             labels: Vec::new(),
         }

@@ -1,12 +1,10 @@
-use std::iter::Peekable;
-
 use crate::{
     error::{Color, Label},
     lexer::{Ident, Token},
-    LangError,
+    BobaError,
 };
 
-use super::{expr::Expr, Node, TokenIter, TokenParser};
+use super::{parser::NodeBuilder, Expr, Node};
 
 #[derive(Debug)]
 pub struct Assign {
@@ -14,38 +12,36 @@ pub struct Assign {
     pub expr: Node<Expr>,
 }
 
-impl TokenParser for Assign {
-    type Output = Self;
-
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, LangError> {
+impl Assign {
+    pub fn parser(builder: &mut NodeBuilder) -> Result<Self, BobaError> {
         const UNEXPECTED: &'static str = "Unexpected token found while parsing assignment";
         const END_OF_INPUT: &'static str = "Unexpected end of input while parsing assignment";
 
         // match let
-        let let_span = match tokens.next() {
+        let let_span = match builder.next() {
             Some((Token::Let, span)) => span,
             Some((token, span)) => {
-                return Err(LangError::new(UNEXPECTED).label(Label::new(
+                return Err(BobaError::new(UNEXPECTED).label(Label::new(
                     format!("expected 'let' found '{token}'"),
                     Color::Red,
                     span,
                 )))
             }
-            _ => return Err(LangError::new(END_OF_INPUT)),
+            _ => return Err(BobaError::new(END_OF_INPUT)),
         };
 
         // match ident
-        let (ident, ident_span) = match tokens.next() {
+        let (ident, ident_span) = match builder.next() {
             Some((Token::Ident(ident), span)) => (ident.clone(), span),
             Some((token, span)) => {
-                return Err(LangError::new(UNEXPECTED).label(Label::new(
+                return Err(BobaError::new(UNEXPECTED).label(Label::new(
                     format!("expected identifier, found '{token}'"),
                     Color::Red,
                     span,
                 )))
             }
             _ => {
-                return Err(LangError::new(END_OF_INPUT).label(Label::new(
+                return Err(BobaError::new(END_OF_INPUT).label(Label::new(
                     "expected identifier after 'let' but found nothing",
                     Color::Red,
                     let_span,
@@ -54,17 +50,17 @@ impl TokenParser for Assign {
         };
 
         // match equal
-        let equal_span = match tokens.next() {
+        let equal_span = match builder.next() {
             Some((Token::Equal, span)) => span,
             Some((token, span)) => {
-                return Err(LangError::new(UNEXPECTED).label(Label::new(
+                return Err(BobaError::new(UNEXPECTED).label(Label::new(
                     format!("expected '=' found '{token}'"),
                     Color::Red,
                     span,
                 )))
             }
             _ => {
-                return Err(LangError::new(END_OF_INPUT).label(Label::new(
+                return Err(BobaError::new(END_OF_INPUT).label(Label::new(
                     "expected '=' after identifier but found nothing",
                     Color::Red,
                     ident_span,
@@ -73,8 +69,8 @@ impl TokenParser for Assign {
         };
 
         // check if there is still tokens
-        if let None = tokens.peek() {
-            return Err(LangError::new(END_OF_INPUT).label(Label::new(
+        if let None = builder.peek() {
+            return Err(BobaError::new(END_OF_INPUT).label(Label::new(
                 "expected expression after '=' but found nothing",
                 Color::Red,
                 equal_span,
@@ -82,10 +78,9 @@ impl TokenParser for Assign {
         }
 
         // match expression till end
-        let expr = Expr::parse(tokens)?;
+        let expr = builder.parse(Expr::parser)?;
 
         // build assign statement
-        let span = let_span.start..expr.span().end;
-        Ok(Node::new(span, Self { ident, expr }))
+        Ok(Self { ident, expr })
     }
 }

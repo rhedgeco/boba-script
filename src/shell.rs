@@ -1,14 +1,14 @@
-use std::{iter::Peekable, ops::Deref};
+use std::ops::Deref;
 
 use ariadne::{Label, Report, ReportKind, Source};
 use logos::Logos;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 use crate::{
-    ast::{Assign, Expr, Node, TokenIter, TokenParser},
     engine::Scope,
     lexer::Token,
-    Engine, LangError,
+    parser::{Assign, Expr, Node, NodeBuilder, ParseSource},
+    BobaError, Engine,
 };
 
 #[derive(Debug)]
@@ -17,18 +17,16 @@ enum ShellCommand {
     Expr(Node<Expr>),
 }
 
-impl TokenParser for ShellCommand {
-    type Output = Self;
-
-    fn parse(tokens: &mut Peekable<impl TokenIter>) -> Result<Node<Self::Output>, LangError> {
-        match tokens.peek() {
+impl ShellCommand {
+    pub fn parser(builder: &mut NodeBuilder) -> Result<Self, BobaError> {
+        match builder.peek() {
             Some((Token::Let, _)) => {
-                let assign = Assign::parse(tokens)?;
-                Ok(Node::new(assign.span().clone(), Self::Assign(assign)))
+                let assign = builder.parse(Assign::parser)?;
+                Ok(ShellCommand::Assign(assign))
             }
             _ => {
-                let expr = Expr::parse(tokens)?;
-                Ok(Node::new(expr.span().clone(), Self::Expr(expr)))
+                let expr = builder.parse(Expr::parser)?;
+                Ok(ShellCommand::Expr(expr))
             }
         }
     }
@@ -61,23 +59,20 @@ pub fn start_session() {
         };
 
         // get all tokens for the line
-        let mut tokens = Token::lexer(line.text())
-            .spanned()
-            .map(|(result, span)| {
-                (
-                    // panic on unexpected invalid token
-                    // all tokens 'should' be able to be parsed
-                    result.expect(&format!(
-                        "unexpected invalid token '{}'",
-                        &line.text()[span.clone()]
-                    )),
-                    span,
-                )
-            })
-            .peekable();
+        let mut tokens = Token::lexer(line.text()).spanned().map(|(result, span)| {
+            (
+                // panic on unexpected invalid token
+                // all tokens 'should' be able to be parsed
+                result.expect(&format!(
+                    "unexpected invalid token '{}' while lexing",
+                    &line.text()[span.clone()]
+                )),
+                span,
+            )
+        });
 
         // parse and evaluate tokens as a shell command
-        match ShellCommand::parse(&mut tokens) {
+        match ParseSource::new(&mut tokens).parse(ShellCommand::parser) {
             Ok(command) => match command.deref() {
                 ShellCommand::Assign(assign) => match engine.eval(&scope, &assign.expr) {
                     Ok(value) => {
@@ -95,7 +90,7 @@ pub fn start_session() {
                         .eprint(("shell", line.clone()))
                         .unwrap(),
                 },
-                ShellCommand::Expr(expr) => match engine.eval(&scope, expr) {
+                ShellCommand::Expr(expr) => match engine.eval(&scope, &expr) {
                     Ok(value) => println!("{value}"),
                     Err(label) => Report::build(ReportKind::Error, "shell", label.span.start)
                         .with_message("Evaluation Error")
