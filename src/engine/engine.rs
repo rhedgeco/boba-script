@@ -118,11 +118,13 @@ impl Engine {
             // ---------------
             // --- INT OPS ---
             // int add
+            (Value::Int(v1), BinaryOpType::Add, Value::Bool(v2)) => Ok(Value::Int(v1 + v2 as i64)),
             (Value::Int(v1), BinaryOpType::Add, Value::Int(v2)) => Ok(Value::Int(v1 + v2)),
             (Value::Int(v1), BinaryOpType::Add, Value::Float(v2)) => {
                 Ok(Value::Float(v1 as f64 + v2))
             }
             // int sub
+            (Value::Int(v1), BinaryOpType::Sub, Value::Bool(v2)) => Ok(Value::Int(v1 - v2 as i64)),
             (Value::Int(v1), BinaryOpType::Sub, Value::Int(v2)) => Ok(Value::Int(v1 - v2)),
             (Value::Int(v1), BinaryOpType::Sub, Value::Float(v2)) => {
                 Ok(Value::Float(v1 as f64 - v2))
@@ -151,11 +153,17 @@ impl Engine {
             // -----------------
             // --- FLOAT OPS ---
             // float add
+            (Value::Float(v1), BinaryOpType::Add, Value::Bool(v2)) => {
+                Ok(Value::Float(v1 + v2 as i64 as f64))
+            }
             (Value::Float(v1), BinaryOpType::Add, Value::Int(v2)) => {
                 Ok(Value::Float(v1 + v2 as f64))
             }
             (Value::Float(v1), BinaryOpType::Add, Value::Float(v2)) => Ok(Value::Float(v1 + v2)),
             // float sub
+            (Value::Float(v1), BinaryOpType::Sub, Value::Bool(v2)) => {
+                Ok(Value::Float(v1 - v2 as i64 as f64))
+            }
             (Value::Float(v1), BinaryOpType::Sub, Value::Int(v2)) => {
                 Ok(Value::Float(v1 - v2 as f64))
             }
