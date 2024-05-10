@@ -194,9 +194,13 @@ impl Expr {
                 Color::Red,
                 span,
             ))),
-            None => Err(BobaError::new(
-                "Found nothing while trying to parse expression",
-            )),
+            None => Err(
+                BobaError::new("Found nothing while trying to parse expression").label(Label::new(
+                    "Expected expression but found nothing",
+                    Color::Red,
+                    builder.span().end..builder.span().end,
+                )),
+            ),
         }
     }
 }
