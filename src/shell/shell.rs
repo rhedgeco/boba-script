@@ -4,33 +4,9 @@ use ariadne::{Label, Report, ReportKind, Source};
 use logos::Logos;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::{
-    engine::Scope,
-    lexer::Token,
-    parser::{Assign, Expr, Node, NodeBuilder, ParseSource},
-    BobaError, Engine,
-};
+use crate::{engine::Scope, lexer::Token, parser::ParseSource, Engine};
 
-#[derive(Debug)]
-enum ShellCommand {
-    Assign(Node<Assign>),
-    Expr(Node<Expr>),
-}
-
-impl ShellCommand {
-    pub fn parser(builder: &mut NodeBuilder) -> Result<Self, BobaError> {
-        match builder.peek() {
-            Some((Token::Let, _)) => {
-                let assign = builder.parse(Assign::parser)?;
-                Ok(ShellCommand::Assign(assign))
-            }
-            _ => {
-                let expr = builder.parse(Expr::parser)?;
-                Ok(ShellCommand::Expr(expr))
-            }
-        }
-    }
-}
+use super::ShellCommand;
 
 pub fn start_session() {
     let mut line_editor = Reedline::create();
