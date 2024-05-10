@@ -23,9 +23,18 @@ fn parse_string(str: impl AsRef<str>) -> String {
     str
 }
 
+fn parse_newline(str: impl AsRef<str>) -> usize {
+    str.as_ref()[1..].len()
+}
+
 #[derive(Logos, Debug, Display, Clone, PartialEq, PartialOrd)]
-#[logos(skip r"[ \t\n\r\f]")] // skip whitespace
+#[logos(skip r" ")] // skip whitespace
 pub enum Token {
+    // newlines
+    #[regex(r"\n[ ]*", |lex| parse_newline(lex.slice()))]
+    Newline(usize),
+
+    // identifiers
     #[regex(r"[_a-zA-Z][_a-zA-z0-9]*", |lex| Ident::new(lex.slice()))]
     #[display(fmt = "identifier")]
     Ident(Ident),
