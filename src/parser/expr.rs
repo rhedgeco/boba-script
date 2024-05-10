@@ -195,7 +195,7 @@ impl Expr {
                 span,
             ))),
             None => Err(
-                BobaError::new("Found nothing while trying to parse expression").label(Label::new(
+                BobaError::new("Unexpected end of expression").label(Label::new(
                     "Expected expression but found nothing",
                     Color::Red,
                     builder.span().end..builder.span().end,
