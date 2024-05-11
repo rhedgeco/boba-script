@@ -46,11 +46,17 @@ impl<T> Node<T> {
 
 pub struct ParseSource<'a> {
     iter: &'a mut dyn TokenIter,
+    peeked: Option<TokenData>,
 }
 
 impl<'a> ParseSource<'a> {
     pub fn new(iter: &'a mut dyn TokenIter) -> Self {
-        Self { iter }
+        let peeked = iter.next();
+        Self { iter, peeked }
+    }
+
+    pub fn peek(&self) -> Option<&TokenData> {
+        self.peeked.as_ref()
     }
 
     pub fn parse<T>(
@@ -58,18 +64,15 @@ impl<'a> ParseSource<'a> {
         parser: impl FnOnce(&mut NodeBuilder) -> Result<T, BobaError>,
     ) -> Result<Node<T>, BobaError> {
         // get first item and span start
-        let (mut peeked, span_start) = match self.iter.next() {
-            Some((token, span)) => {
-                let span_start = span.start;
-                (Some((token, span)), span_start)
-            }
-            None => (None, 0),
+        let span_start = match &self.peeked {
+            Some((_, span)) => span.start,
+            None => 0,
         };
 
         // create token server
         let mut builder = NodeBuilder {
             source: self.iter,
-            peeked: &mut peeked,
+            peeked: &mut self.peeked,
             span: span_start..span_start,
         };
 

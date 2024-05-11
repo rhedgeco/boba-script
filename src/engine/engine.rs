@@ -4,11 +4,15 @@ use derive_more::Display;
 
 use crate::{
     error::{Color, Label},
-    lexer::token::Span,
-    parser::{Expr, Node},
+    lexer::{token::Span, Ident},
+    parser::{Expr, Func, Node, Statement},
 };
 
-use super::{types::Value, Scope};
+use super::{
+    scope::{EngineScope, ScopeGroup},
+    types::Value,
+    Scope,
+};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum UnaryOpType {
@@ -32,57 +36,125 @@ enum BinaryOpType {
     Pow,
 }
 
+pub enum CallError {
+    Runtime(Label),
+    NotFound,
+}
+
 #[derive(Debug, Default)]
-pub struct Engine {}
+pub struct Engine {
+    scope: Scope,
+}
 
 impl Engine {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn eval(&self, scope: &Scope, expr: &Node<Expr>) -> Result<Value, Label> {
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
+
+    pub fn insert_var(&mut self, ident: Ident, value: Value) {
+        self.scope.init_var(ident, value);
+    }
+
+    pub fn insert_func(&mut self, func: Node<Func>) -> Result<(), Label> {
+        let span = func.span().clone();
+        let ident = func.ident.clone();
+        match self.scope.init_func(func) {
+            true => Ok(()),
+            false => Err(Label::new(
+                format!("function '{}' is already defined", ident),
+                Color::Red,
+                span,
+            )),
+        }
+    }
+
+    pub fn call_fn(&mut self, ident: &Ident) -> Result<(), CallError> {
+        let func = self.scope.get_func(ident).ok_or(CallError::NotFound)?;
+
+        let mut scope = Scope::new();
+        for statement in &func.body {
+            match statement.deref() {
+                Statement::Func(_) => todo!(),
+                Statement::Assign(assign) => {
+                    let ident = assign.ident.clone();
+                    let value = match self.eval_with_scope(&assign.expr, &scope) {
+                        Err(label) => return Err(CallError::Runtime(label)),
+                        Ok(value) => value,
+                    };
+                    scope.init_var(ident, value);
+                }
+                Statement::Expr(expr) => {
+                    let value = match self.eval_with_scope(expr, &scope) {
+                        Err(label) => return Err(CallError::Runtime(label)),
+                        Ok(value) => value,
+                    };
+                    println!("{value}");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn eval(&self, expr: &Node<Expr>) -> Result<Value, Label> {
+        self.eval_with_scope(expr, &self.scope)
+    }
+
+    pub fn eval_with_scope(
+        &self,
+        expr: &Node<Expr>,
+        scope: &impl EngineScope,
+    ) -> Result<Value, Label> {
         match expr.deref() {
             Expr::Bool(v) => Ok(Value::Bool(*v)),
             Expr::Int(v) => Ok(Value::Int(*v)),
             Expr::Float(v) => Ok(Value::Float(*v)),
             Expr::String(v) => Ok(Value::String(v.clone())),
-            Expr::Neg(inner) => {
-                self.eval_unary(UnaryOpType::Neg, self.eval(scope, inner)?, expr.span())
-            }
-            Expr::Not(inner) => {
-                self.eval_unary(UnaryOpType::Not, self.eval(scope, inner)?, expr.span())
-            }
+            Expr::Neg(inner) => self.eval_unary(
+                UnaryOpType::Neg,
+                self.eval_with_scope(inner, scope)?,
+                expr.span(),
+            ),
+            Expr::Not(inner) => self.eval_unary(
+                UnaryOpType::Not,
+                self.eval_with_scope(inner, scope)?,
+                expr.span(),
+            ),
             Expr::Add(lhs, rhs) => self.eval_binary(
-                self.eval(scope, lhs)?,
+                self.eval_with_scope(lhs, scope)?,
                 BinaryOpType::Add,
-                self.eval(scope, rhs)?,
+                self.eval_with_scope(rhs, scope)?,
                 expr.span(),
             ),
             Expr::Sub(lhs, rhs) => self.eval_binary(
-                self.eval(scope, lhs)?,
+                self.eval_with_scope(lhs, scope)?,
                 BinaryOpType::Sub,
-                self.eval(scope, rhs)?,
+                self.eval_with_scope(rhs, scope)?,
                 expr.span(),
             ),
             Expr::Mul(lhs, rhs) => self.eval_binary(
-                self.eval(scope, lhs)?,
+                self.eval_with_scope(lhs, scope)?,
                 BinaryOpType::Mul,
-                self.eval(scope, rhs)?,
+                self.eval_with_scope(rhs, scope)?,
                 expr.span(),
             ),
             Expr::Div(lhs, rhs) => self.eval_binary(
-                self.eval(scope, lhs)?,
+                self.eval_with_scope(lhs, scope)?,
                 BinaryOpType::Div,
-                self.eval(scope, rhs)?,
+                self.eval_with_scope(rhs, scope)?,
                 expr.span(),
             ),
             Expr::Pow(lhs, rhs) => self.eval_binary(
-                self.eval(scope, lhs)?,
+                self.eval_with_scope(lhs, scope)?,
                 BinaryOpType::Pow,
-                self.eval(scope, rhs)?,
+                self.eval_with_scope(rhs, scope)?,
                 expr.span(),
             ),
-            Expr::Var(ident) => match scope.get_var(ident) {
+            Expr::Var(ident) => match ScopeGroup::new(scope, &self.scope).get_var(ident) {
                 Some(value) => Ok(value.clone()),
                 None => Err(Label::new(
                     format!("Unknown variable '{ident}'"),

@@ -14,68 +14,65 @@ pub struct Assign {
 
 impl Assign {
     pub fn parser(builder: &mut NodeBuilder) -> Result<Self, BobaError> {
-        const UNEXPECTED: &'static str = "Unexpected token found while parsing assignment";
-        const END_OF_INPUT: &'static str = "Unexpected end of input while parsing assignment";
+        const UNEXPECTED_TOKEN: &'static str = "Unexpected token found while parsing assignment";
+        const UNEXPECTED_END: &'static str = "Unexpected end of assignment";
 
         // match let
-        let let_span = match builder.next() {
-            Some((Token::Let, span)) => span,
+        match builder.next() {
+            Some((Token::Let, _)) => (),
             Some((token, span)) => {
-                return Err(BobaError::new(UNEXPECTED).label(Label::new(
+                return Err(BobaError::new(UNEXPECTED_TOKEN).label(Label::new(
                     format!("expected 'let' found '{token}'"),
                     Color::Red,
                     span,
                 )))
             }
-            _ => return Err(BobaError::new(END_OF_INPUT)),
+            _ => {
+                return Err(BobaError::new(UNEXPECTED_END).label(Label::new(
+                    "Expected 'let', found nothing",
+                    Color::Red,
+                    builder.span().end..builder.span().end,
+                )))
+            }
         };
 
         // match ident
-        let (ident, ident_span) = match builder.next() {
-            Some((Token::Ident(ident), span)) => (ident.clone(), span),
+        let ident = match builder.next() {
+            Some((Token::Ident(ident), _)) => ident,
             Some((token, span)) => {
-                return Err(BobaError::new(UNEXPECTED).label(Label::new(
-                    format!("expected identifier, found '{token}'"),
+                return Err(BobaError::new(UNEXPECTED_TOKEN).label(Label::new(
+                    format!("expected 'identifier', found '{token}'"),
                     Color::Red,
                     span,
                 )))
             }
             _ => {
-                return Err(BobaError::new(END_OF_INPUT).label(Label::new(
-                    "expected identifier after 'let' but found nothing",
+                return Err(BobaError::new(UNEXPECTED_END).label(Label::new(
+                    "expected 'identifier', found nothing",
                     Color::Red,
-                    let_span,
+                    builder.span().end..builder.span().end,
                 )))
             }
         };
 
         // match equal
-        let equal_span = match builder.next() {
+        match builder.next() {
             Some((Token::Equal, span)) => span,
             Some((token, span)) => {
-                return Err(BobaError::new(UNEXPECTED).label(Label::new(
+                return Err(BobaError::new(UNEXPECTED_TOKEN).label(Label::new(
                     format!("expected '=' found '{token}'"),
                     Color::Red,
                     span,
                 )))
             }
             _ => {
-                return Err(BobaError::new(END_OF_INPUT).label(Label::new(
-                    "expected '=' after identifier but found nothing",
+                return Err(BobaError::new(UNEXPECTED_END).label(Label::new(
+                    "expected '=', found nothing",
                     Color::Red,
-                    ident_span,
+                    builder.span().end..builder.span().end,
                 )))
             }
         };
-
-        // check if there is still tokens
-        if let None = builder.peek() {
-            return Err(BobaError::new(END_OF_INPUT).label(Label::new(
-                "expected expression after '=' but found nothing",
-                Color::Red,
-                equal_span,
-            )));
-        }
 
         // match expression till end
         let expr = builder.parse(Expr::parser)?;

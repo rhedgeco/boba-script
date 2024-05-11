@@ -1,22 +1,19 @@
+use std::path::PathBuf;
+
 use boba::shell;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct BobaCli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    Shell,
+    file: Option<PathBuf>,
 }
 
 fn main() {
     let cli = BobaCli::parse();
-    match cli.command {
-        Commands::Shell => shell::start_session(),
+    match cli.file {
+        None => shell::Session::start_console(),
+        Some(path) => println!("TODO: run file {}", path.display()),
     }
 }

@@ -24,14 +24,15 @@ fn parse_string(str: impl AsRef<str>) -> String {
 }
 
 fn parse_newline(str: impl AsRef<str>) -> usize {
-    str.as_ref()[1..].len()
+    str.as_ref().replace("\n", "").replace("\r", "").len()
 }
 
 #[derive(Logos, Debug, Display, Clone, PartialEq, PartialOrd)]
 #[logos(skip r" ")] // skip whitespace
 pub enum Token {
     // newlines
-    #[regex(r"\n[ ]*", |lex| parse_newline(lex.slice()))]
+    #[regex(r"(\n|\r)[ ]*", |lex| parse_newline(lex.slice()))]
+    #[display(fmt = "newline {}", _0)]
     Newline(usize),
 
     // identifiers
@@ -80,6 +81,9 @@ pub enum Token {
     #[token("let")]
     #[display(fmt = "let")]
     Let,
+    #[token("fn")]
+    #[display(fmt = "fn")]
+    Fn,
 
     // control flow
     #[token("(")]
@@ -88,6 +92,9 @@ pub enum Token {
     #[token(")")]
     #[display(fmt = ")")]
     CloseParen,
+    #[token(":")]
+    #[display(fmt = ":")]
+    Colon,
 
     // fallback for invalid tokens
     #[regex(".", |lex| lex.slice().to_string(), priority = 0)]

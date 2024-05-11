@@ -27,12 +27,12 @@ impl Expr {
     const UNEXPECTED_ERROR: &'static str = "Unexpected token found while parsing expression";
 
     pub fn parser(builder: &mut NodeBuilder) -> Result<Self, BobaError> {
-        Self::parse_closed(builder, None)
+        Self::parse_until(builder, |_| false)
     }
 
-    fn parse_closed(
+    pub fn parse_until(
         builder: &mut NodeBuilder,
-        close_with: Option<&Token>,
+        until: impl Fn(&Token) -> bool,
     ) -> Result<Self, BobaError> {
         // create helper function for parsing pow operators
         fn try_parse_pow(
@@ -91,7 +91,7 @@ impl Expr {
                 Token::Pow => try_parse_pow(lhs, builder)?,
                 Token::Mul | Token::Div => try_parse_mul(lhs, builder)?,
                 Token::Add | Token::Sub => try_parse_add(lhs, builder)?,
-                token if Some(token) == close_with => break,
+                token if until(token) => break,
                 token => {
                     return Err(BobaError::new(Self::UNEXPECTED_ERROR).label(Label::new(
                         format!("Expected '+', '-', '*', '/', or '**', but found '{token}'"),
@@ -143,7 +143,7 @@ impl Expr {
             // PARENTHESES
             Some((Token::OpenParen, span)) => {
                 // capture braced expression
-                let braced_expr = Expr::parse_closed(builder, Some(&Token::CloseParen))?;
+                let braced_expr = Expr::parse_until(builder, |t| t == &Token::CloseParen)?;
                 // ensure expression is closed with brace
                 match builder.next() {
                     Some(_) => Ok(braced_expr),
