@@ -5,7 +5,7 @@ use derive_more::Display;
 use crate::{
     error::{Color, Label},
     lexer::{token::Span, Ident},
-    parser::{Expr, Func, Node, Statement},
+    parser::{Expr, Node},
 };
 
 use super::{
@@ -57,47 +57,6 @@ impl Engine {
 
     pub fn insert_var(&mut self, ident: Ident, value: Value) {
         self.scope.init_var(ident, value);
-    }
-
-    pub fn insert_func(&mut self, func: Node<Func>) -> Result<(), Label> {
-        let span = func.span().clone();
-        let ident = func.ident.clone();
-        match self.scope.init_func(func) {
-            true => Ok(()),
-            false => Err(Label::new(
-                format!("function '{}' is already defined", ident),
-                Color::Red,
-                span,
-            )),
-        }
-    }
-
-    pub fn call_fn(&mut self, ident: &Ident) -> Result<(), CallError> {
-        let func = self.scope.get_func(ident).ok_or(CallError::NotFound)?;
-
-        let mut scope = Scope::new();
-        for statement in &func.body {
-            match statement.deref() {
-                Statement::Func(_) => todo!(),
-                Statement::Assign(assign) => {
-                    let ident = assign.ident.clone();
-                    let value = match self.eval_with_scope(&assign.expr, &scope) {
-                        Err(label) => return Err(CallError::Runtime(label)),
-                        Ok(value) => value,
-                    };
-                    scope.init_var(ident, value);
-                }
-                Statement::Expr(expr) => {
-                    let value = match self.eval_with_scope(expr, &scope) {
-                        Err(label) => return Err(CallError::Runtime(label)),
-                        Ok(value) => value,
-                    };
-                    println!("{value}");
-                }
-            }
-        }
-
-        Ok(())
     }
 
     pub fn eval(&self, expr: &Node<Expr>) -> Result<Value, Label> {
