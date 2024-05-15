@@ -1,10 +1,10 @@
 mod parser;
 
-pub mod error;
 pub mod node;
+pub mod report;
 pub mod source;
 
-pub use error::ParseError;
 pub use node::Node;
 pub use parser::*;
+pub use report::ParseReport;
 pub use source::TokenSource;

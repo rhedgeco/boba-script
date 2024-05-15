@@ -25,6 +25,10 @@ impl<T> Deref for Node<T> {
 }
 
 impl<T> Node<T> {
+    pub fn build(span: Span, item: T) -> Self {
+        Self { span, item }
+    }
+
     pub fn span(&self) -> &Span {
         &self.span
     }
@@ -50,7 +54,7 @@ impl<'a, 'source> NodeBuilder<'a, 'source> {
             Some(span) => span,
         };
 
-        Node { span, item }
+        Node::build(span, item)
     }
 }
 

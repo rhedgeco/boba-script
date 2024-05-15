@@ -50,7 +50,7 @@ impl Session {
             let mut tokens = TokenSource::new(&buffer);
 
             // parse expression
-            match Expr::parse_atom(&mut tokens) {
+            match Expr::parse(&mut tokens) {
                 Ok(expr) => println!("{expr:?}"),
                 Err(error) => eprintln!("{error}"),
             }
