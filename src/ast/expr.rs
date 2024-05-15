@@ -9,6 +9,8 @@ pub enum Expr {
     Float(f64),
     Bool(bool),
     String(String),
+    Neg(Box<Node<Expr>>),
+    Not(Box<Node<Expr>>),
 }
 
 impl Expr {
@@ -39,6 +41,25 @@ impl Expr {
             },
             Some((Token::Bool(bool), _)) => Ok(builder.build(Expr::Bool(bool))),
             Some((Token::String(str), _)) => Ok(builder.build(Expr::String(str.to_string()))),
+            Some((Token::Sub, _)) => match builder.peek() {
+                Some((Token::Int(str), _)) => match Self::parse_int(format!("-{str}")) {
+                    Ok(value) => Ok(builder.build(Expr::Int(value))),
+                    Err(message) => Err(message),
+                },
+                Some((Token::Float(str), _)) => match Self::parse_float(format!("-{str}")) {
+                    Ok(value) => Ok(builder.build(Expr::Float(value))),
+                    Err(message) => Err(message),
+                },
+                Some(_) => {
+                    let nested = Self::parse_atom(&mut builder)?;
+                    Ok(builder.build(Expr::Neg(Box::new(nested))))
+                }
+                None => Err(format!("expected expr after '-', found nothing")),
+            },
+            Some((Token::Not, _)) => {
+                let nested = Self::parse_atom(&mut builder)?;
+                Ok(builder.build(Expr::Not(Box::new(nested))))
+            }
             Some((token, _)) => Err(format!("invalid token {token}")),
             None => Err(format!("expected expr, found nothing")),
         }

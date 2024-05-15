@@ -50,7 +50,7 @@ impl<'source> ParserSource<'source> for TokenSource<'source> {
         }
     }
 
-    fn node_builder<'a>(&'a mut self) -> NodeBuilder<'a, 'source, Self> {
+    fn node_builder<'a>(&'a mut self) -> NodeBuilder<'a, 'source> {
         NodeBuilder::new(self)
     }
 }

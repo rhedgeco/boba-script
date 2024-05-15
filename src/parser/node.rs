@@ -1,7 +1,4 @@
-use std::{
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::lexer::{token::Span, Token};
 
@@ -37,19 +34,14 @@ impl<T> Node<T> {
     }
 }
 
-pub struct NodeBuilder<'a, 'source, P: ParserSource<'source>> {
-    _lt: PhantomData<&'source ()>,
+pub struct NodeBuilder<'a, 'source> {
+    source: &'a mut dyn ParserSource<'source>,
     span: Option<Span>,
-    source: &'a mut P,
 }
 
-impl<'a, 'source, P: ParserSource<'source>> NodeBuilder<'a, 'source, P> {
-    pub(super) fn new(source: &'a mut P) -> Self {
-        Self {
-            _lt: PhantomData,
-            span: None,
-            source,
-        }
+impl<'a, 'source> NodeBuilder<'a, 'source> {
+    pub(super) fn new(source: &'a mut impl ParserSource<'source>) -> Self {
+        Self { source, span: None }
     }
 
     pub fn build<T>(self, item: T) -> Node<T> {
@@ -62,7 +54,7 @@ impl<'a, 'source, P: ParserSource<'source>> NodeBuilder<'a, 'source, P> {
     }
 }
 
-impl<'a, 'source, P: ParserSource<'source>> ParserSource<'source> for NodeBuilder<'a, 'source, P> {
+impl<'a, 'source> ParserSource<'source> for NodeBuilder<'a, 'source> {
     fn pos(&self) -> usize {
         self.source.pos()
     }
@@ -87,7 +79,7 @@ impl<'a, 'source, P: ParserSource<'source>> ParserSource<'source> for NodeBuilde
         Some((token, span))
     }
 
-    fn node_builder(&mut self) -> NodeBuilder<'_, 'source, Self> {
+    fn node_builder(&mut self) -> NodeBuilder<'_, 'source> {
         NodeBuilder::new(self)
     }
 }
