@@ -141,13 +141,28 @@ impl Expr {
 
     /// Parses the provided [`TokenSource`] as an [`Expr`]
     ///
+    /// Equivilant to calling [`Expr::parse_with_lhs_until`] and providing the left hand expression.
+    pub fn parse_until<'a>(
+        source: &mut impl TokenSource<'a>,
+        until: impl Fn(&Token) -> bool,
+    ) -> Result<Node<Self>, PError> {
+        // parse initial atom
+        let lhs = Self::parse_atom(source)?;
+
+        // then parse the expression
+        Self::parse_with_lhs_until(lhs, source, until)
+    }
+
+    /// Parses the provided [`TokenSource`] as an [`Expr`] starting with `lhs`.
+    ///
     /// Stops when `until` evaluates to `true`.
     /// The `until` function is only run when an unexpected token is found.
     /// So if `until` expects a token that is used as an operator, it will not evaluate.
     ///
     /// EXAMPLE: `Token::Colon` will trigger the `until` evaluation,
     /// but `Token::Add` will not since it will be used as an operator in the expression.
-    pub fn parse_until<'a>(
+    pub fn parse_with_lhs_until<'a>(
+        mut lhs: Node<Expr>,
         source: &mut impl TokenSource<'a>,
         until: impl Fn(&Token) -> bool,
     ) -> Result<Node<Self>, PError> {
@@ -306,9 +321,6 @@ impl Expr {
                 Expr::Ternary(Box::new(lhs), Box::new(cond), Box::new(rhs)),
             ))
         }
-
-        // parse initial atom
-        let mut lhs = Self::parse_atom(source)?;
 
         // loop until all ops are handled
         loop {
