@@ -1,9 +1,5 @@
 use crate::{
-    parser::{
-        node::NodeBuilderExt,
-        report::{PError, PResult},
-        Node, TokenSource,
-    },
+    parser::{node::NodeBuilderExt, report::PError, Node, TokenSource},
     Token,
 };
 
@@ -16,7 +12,7 @@ pub struct Assign {
 }
 
 impl Assign {
-    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> PResult<Node<Self>> {
+    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> Result<Node<Self>, PError> {
         let mut builder = source.node_builder();
 
         // check for let token

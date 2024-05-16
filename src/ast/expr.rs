@@ -1,9 +1,5 @@
 use crate::{
-    parser::{
-        node::NodeBuilderExt,
-        report::{PError, PResult},
-        Node, TokenSource,
-    },
+    parser::{node::NodeBuilderExt, report::PError, Node, TokenSource},
     Token,
 };
 
@@ -43,7 +39,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn parse_atom<'a>(source: &mut impl TokenSource<'a>) -> PResult<Node<Self>> {
+    pub fn parse_atom<'a>(source: &mut impl TokenSource<'a>) -> Result<Node<Self>, PError> {
         let mut builder = source.node_builder();
         match builder.take() {
             // PARSE VARIABLES
@@ -52,20 +48,19 @@ impl Expr {
                 None => Err(PError::InvalidIdent {
                     ident: str.into(),
                     span,
-                }
-                .into()),
+                }),
             },
 
             // PARSE INTEGERS
             Some((Token::Int(str), span)) => match str.parse() {
                 Ok(value) => Ok(builder.build(Expr::Int(value))),
-                Err(error) => Err(PError::ParseIntError { error, span }.into()),
+                Err(error) => Err(PError::ParseIntError { error, span }),
             },
 
             // PARSE FLOATS
             Some((Token::Float(str), span)) => match str.parse() {
                 Ok(value) => Ok(builder.build(Expr::Float(value))),
-                Err(error) => Err(PError::ParseFloatError { error, span }.into()),
+                Err(error) => Err(PError::ParseFloatError { error, span }),
             },
 
             // PARSE BOOLS
@@ -81,16 +76,14 @@ impl Expr {
                     Err(error) => Err(PError::ParseIntError {
                         error,
                         span: sub_span.start..span.end,
-                    }
-                    .into()),
+                    }),
                 },
                 Some((Token::Float(str), span)) => match format!("-{str}").parse() {
                     Ok(value) => Ok(builder.build(Expr::Float(value))),
                     Err(error) => Err(PError::ParseFloatError {
                         error,
                         span: sub_span.start..span.end,
-                    }
-                    .into()),
+                    }),
                 },
                 Some(_) => {
                     let nested = Self::parse_atom(&mut builder)?;
@@ -99,8 +92,7 @@ impl Expr {
                 None => Err(PError::UnexpectedEnd {
                     expect: "expression".into(),
                     pos: builder.pos(),
-                }
-                .into()),
+                }),
             },
 
             // PARSE BOOLEAN NEGATION
@@ -123,8 +115,7 @@ impl Expr {
                         open_span,
                         close_message: "reached end with no closing brace".into(),
                         close_span: builder.pos()..builder.pos(),
-                    }
-                    .into()),
+                    }),
                 }
             }
 
@@ -133,20 +124,18 @@ impl Expr {
                 expect: "expression".into(),
                 found: format!("'{token}'"),
                 span,
-            }
-            .into()),
+            }),
             None => Err(PError::UnexpectedEnd {
                 expect: "expression".into(),
                 pos: source.pos(),
-            }
-            .into()),
+            }),
         }
     }
 
     /// Parses the provided [`TokenSource`] as an [`Expr`] until the end
     ///
     /// Equivilant to calling [`Expr::parse_until`] using `|_| false`.
-    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> PResult<Node<Self>> {
+    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> Result<Node<Self>, PError> {
         Self::parse_until(source, |_| false)
     }
 
@@ -161,11 +150,11 @@ impl Expr {
     pub fn parse_until<'a>(
         source: &mut impl TokenSource<'a>,
         until: impl Fn(&Token) -> bool,
-    ) -> PResult<Node<Self>> {
+    ) -> Result<Node<Self>, PError> {
         fn try_parse_pow<'a>(
             lhs: Node<Expr>,
             source: &mut impl TokenSource<'a>,
-        ) -> PResult<Node<Expr>> {
+        ) -> Result<Node<Expr>, PError> {
             let op = match source.peek() {
                 Some((Token::Pow, _)) => Expr::Pow,
                 _ => return Ok(lhs),
@@ -180,7 +169,7 @@ impl Expr {
         fn try_parse_mul<'a>(
             lhs: Node<Expr>,
             source: &mut impl TokenSource<'a>,
-        ) -> PResult<Node<Expr>> {
+        ) -> Result<Node<Expr>, PError> {
             let op = match source.peek() {
                 Some((Token::Mul, _)) => Expr::Mul,
                 Some((Token::Div, _)) => Expr::Div,
@@ -198,7 +187,7 @@ impl Expr {
         fn try_parse_add<'a>(
             lhs: Node<Expr>,
             source: &mut impl TokenSource<'a>,
-        ) -> PResult<Node<Expr>> {
+        ) -> Result<Node<Expr>, PError> {
             let op = match source.peek() {
                 Some((Token::Add, _)) => Expr::Add,
                 Some((Token::Sub, _)) => Expr::Sub,
@@ -215,7 +204,7 @@ impl Expr {
         fn try_parse_bool<'a>(
             lhs: Node<Expr>,
             source: &mut impl TokenSource<'a>,
-        ) -> PResult<Node<Expr>> {
+        ) -> Result<Node<Expr>, PError> {
             let op = match source.peek() {
                 Some((Token::Eq, _)) => Expr::Eq,
                 Some((Token::Lt, _)) => Expr::Lt,
@@ -236,7 +225,7 @@ impl Expr {
         fn try_parse_and<'a>(
             lhs: Node<Expr>,
             source: &mut impl TokenSource<'a>,
-        ) -> PResult<Node<Expr>> {
+        ) -> Result<Node<Expr>, PError> {
             let op = match source.peek() {
                 Some((Token::And, _)) => Expr::And,
                 _ => return try_parse_bool(lhs, source),
@@ -252,7 +241,7 @@ impl Expr {
         fn try_parse_or<'a>(
             lhs: Node<Expr>,
             source: &mut impl TokenSource<'a>,
-        ) -> PResult<Node<Expr>> {
+        ) -> Result<Node<Expr>, PError> {
             let op = match source.peek() {
                 Some((Token::Or, _)) => Expr::Or,
                 _ => return try_parse_and(lhs, source),
@@ -268,7 +257,7 @@ impl Expr {
         fn try_parse_ternary<'a>(
             lhs: Node<Expr>,
             source: &mut impl TokenSource<'a>,
-        ) -> PResult<Node<Expr>> {
+        ) -> Result<Node<Expr>, PError> {
             let if_span = match source.peek() {
                 Some((Token::If, span)) => span.clone(),
                 _ => return try_parse_and(lhs, source),
@@ -278,7 +267,22 @@ impl Expr {
             source.take();
 
             // parse condition
-            let cond = Expr::parse_until(source, |t| t == &Token::Else)?;
+            let cond = match Expr::parse_until(source, |t| t == &Token::Else) {
+                Ok(cond) => cond,
+                // make unexpected token error clearer
+                Err(PError::UnexpectedToken {
+                    expect: _,
+                    found,
+                    span,
+                }) => {
+                    return Err(PError::UnexpectedToken {
+                        expect: "operator or 'else'".into(),
+                        found,
+                        span,
+                    })
+                }
+                Err(e) => return Err(e),
+            };
 
             // ensure 'else' exists
             match source.peek() {
@@ -288,8 +292,7 @@ impl Expr {
                     return Err(PError::IncompleteTernary {
                         if_span,
                         end: source.pos(),
-                    }
-                    .into())
+                    })
                 }
             };
 
@@ -352,8 +355,7 @@ impl Expr {
                             expect: "operator".into(),
                             found: format!("'{token}'"),
                             span: span.clone(),
-                        }
-                        .into());
+                        });
                     }
                 },
             };

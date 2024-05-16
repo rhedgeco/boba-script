@@ -1,8 +1,5 @@
 use crate::{
-    parser::{
-        report::{PError, PResult},
-        Node, TokenSource,
-    },
+    parser::{report::PError, Node, TokenSource},
     token::Span,
     Token,
 };
@@ -23,15 +20,14 @@ impl Statement {
         }
     }
 
-    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> PResult<Self> {
+    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> Result<Self, PError> {
         match source.peek() {
             Some((Token::Let, _)) => Ok(Self::Assign(Assign::parse(source)?)),
             Some((_, _)) => Ok(Self::Expr(Expr::parse(source)?)),
             None => Err(PError::UnexpectedEnd {
                 expect: "statement".into(),
                 pos: source.pos(),
-            }
-            .into()),
+            }),
         }
     }
 }

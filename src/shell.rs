@@ -55,13 +55,11 @@ impl Session {
 
             // parse expression
             match Statement::parse(&mut source) {
-                Err(report) => {
-                    for error in report.errors() {
-                        error
-                            .as_ariadne("shell")
-                            .eprint(("shell", buffer.clone()))
-                            .unwrap();
-                    }
+                Err(error) => {
+                    error
+                        .as_ariadne("shell")
+                        .eprint(("shell", buffer.clone()))
+                        .unwrap();
                 }
                 Ok(statement) => match statement {
                     Statement::Expr(expr) => {

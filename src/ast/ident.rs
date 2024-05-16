@@ -3,10 +3,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use crate::{
-    parser::{
-        report::{PError, PResult},
-        Node, TokenSource,
-    },
+    parser::{report::PError, Node, TokenSource},
     Token,
 };
 
@@ -20,30 +17,27 @@ impl AsRef<str> for Ident {
 }
 
 impl Ident {
-    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> PResult<Node<Self>> {
+    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> Result<Node<Self>, PError> {
         match source.take() {
             Some((Token::Ident(str), span)) => match Self::parse_str(str) {
                 Some(ident) => Ok(Node::build(span, ident)),
                 None => Err(PError::InvalidIdent {
                     ident: str.into(),
                     span,
-                }
-                .into()),
+                }),
             },
             Some((token, span)) => {
                 return Err(PError::UnexpectedToken {
                     expect: "identifier".into(),
                     found: format!("'{token}'"),
                     span: span.clone(),
-                }
-                .into())
+                })
             }
             None => {
                 return Err(PError::UnexpectedEnd {
                     expect: "identifier".into(),
                     pos: source.pos(),
-                }
-                .into())
+                })
             }
         }
     }
