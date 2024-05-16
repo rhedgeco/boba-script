@@ -74,7 +74,7 @@ impl Engine {
         self.nested_scopes.pop().is_some()
     }
 
-    pub fn insert_var(&mut self, ident: Ident, value: Value) {
+    pub fn set_var(&mut self, ident: Ident, value: Value) {
         match self.nested_scopes.last_mut() {
             None => self.global_scope.init_var(ident, value),
             Some(scope) => scope.init_var(ident, value),
