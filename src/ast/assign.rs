@@ -23,15 +23,13 @@ impl Assign {
                     expect: "'let'".into(),
                     found: format!("'{token}'"),
                     span: span.clone(),
-                }
-                .into())
+                })
             }
             None => {
                 return Err(PError::UnexpectedEnd {
                     expect: "'let'".into(),
                     pos: builder.pos(),
-                }
-                .into())
+                })
             }
         }
 
@@ -46,15 +44,13 @@ impl Assign {
                     expect: "'='".into(),
                     found: format!("'{token}'"),
                     span: span.clone(),
-                }
-                .into())
+                })
             }
             None => {
                 return Err(PError::UnexpectedEnd {
                     expect: "'='".into(),
                     pos: builder.pos(),
-                }
-                .into())
+                })
             }
         }
 
