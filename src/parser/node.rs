@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::lexer::{token::Span, Token};
 
-use super::ParserSource;
+use super::TokenSource;
 
 #[derive(Debug)]
 pub struct Node<T> {
@@ -39,12 +39,12 @@ impl<T> Node<T> {
 }
 
 pub struct NodeBuilder<'a, 'source> {
-    source: &'a mut dyn ParserSource<'source>,
+    source: &'a mut dyn TokenSource<'source>,
     span: Option<Span>,
 }
 
 impl<'a, 'source> NodeBuilder<'a, 'source> {
-    pub(super) fn new(source: &'a mut impl ParserSource<'source>) -> Self {
+    pub(super) fn new(source: &'a mut impl TokenSource<'source>) -> Self {
         Self { source, span: None }
     }
 
@@ -58,7 +58,7 @@ impl<'a, 'source> NodeBuilder<'a, 'source> {
     }
 }
 
-impl<'a, 'source> ParserSource<'source> for NodeBuilder<'a, 'source> {
+impl<'a, 'source> TokenSource<'source> for NodeBuilder<'a, 'source> {
     fn pos(&self) -> usize {
         self.source.pos()
     }
@@ -82,8 +82,14 @@ impl<'a, 'source> ParserSource<'source> for NodeBuilder<'a, 'source> {
 
         Some((token, span))
     }
+}
 
-    fn node_builder(&mut self) -> NodeBuilder<'_, 'source> {
+impl<'source, S: TokenSource<'source>> NodeBuilderExt<'source> for S {}
+pub trait NodeBuilderExt<'source>: TokenSource<'source> {
+    fn node_builder(&mut self) -> NodeBuilder<'_, 'source>
+    where
+        Self: Sized,
+    {
         NodeBuilder::new(self)
     }
 }

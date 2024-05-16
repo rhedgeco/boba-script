@@ -2,33 +2,38 @@ use logos::{Logos, SpannedIter};
 
 use crate::lexer::{token::Span, Token};
 
-use super::{node::NodeBuilder, ParserSource};
+pub trait TokenSource<'source> {
+    fn pos(&self) -> usize;
+    fn source(&self) -> &str;
+    fn peek(&mut self) -> Option<&(Token<'source>, Span)>;
+    fn take(&mut self) -> Option<(Token<'source>, Span)>;
+}
 
-pub struct TokenSource<'source> {
-    source: &'source str,
+pub struct BufferSource<'source> {
+    buffer: &'source str,
     iter: SpannedIter<'source, Token<'source>>,
     peek: Option<(Token<'source>, Span)>,
     pos: usize,
 }
 
-impl<'source> TokenSource<'source> {
-    pub fn new(source: &'source str) -> Self {
+impl<'source> BufferSource<'source> {
+    pub fn new(buffer: &'source str) -> Self {
         Self {
-            source,
-            iter: Token::lexer(source).spanned(),
+            buffer,
+            iter: Token::lexer(buffer).spanned(),
             peek: None,
             pos: 0,
         }
     }
 }
 
-impl<'source> ParserSource<'source> for TokenSource<'source> {
+impl<'source> TokenSource<'source> for BufferSource<'source> {
     fn pos(&self) -> usize {
         self.pos
     }
 
     fn source(&self) -> &str {
-        &self.source
+        &self.buffer
     }
 
     fn peek(&mut self) -> Option<&(Token<'source>, Span)> {
@@ -45,12 +50,9 @@ impl<'source> ParserSource<'source> for TokenSource<'source> {
             None => {
                 let (token, span) = self.iter.next()?;
                 let token = token.expect("unhandled invalid token");
+                self.pos = span.end;
                 Some((token, span))
             }
         }
-    }
-
-    fn node_builder<'a>(&'a mut self) -> NodeBuilder<'a, 'source> {
-        NodeBuilder::new(self)
     }
 }

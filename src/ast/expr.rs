@@ -1,6 +1,10 @@
 use crate::{
     lexer::Token,
-    parser::{report::PResult, Node, ParserSource},
+    parser::{
+        node::NodeBuilderExt,
+        report::{PError, PResult},
+        Node, TokenSource,
+    },
 };
 
 #[derive(Debug)]
@@ -19,72 +23,117 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn parse_atom<'a>(source: &mut impl ParserSource<'a>) -> PResult<Node<Self>> {
-        fn parse_int(str: impl AsRef<str>) -> Result<i64, String> {
-            match str.as_ref().parse() {
-                Ok(value) => Ok(value),
-                Err(e) => Err(format!("{e}")),
-            }
-        }
-
-        fn parse_float(str: impl AsRef<str>) -> Result<f64, String> {
-            match str.as_ref().parse() {
-                Ok(value) => Ok(value),
-                Err(e) => Err(format!("{e}")),
-            }
-        }
-
+    pub fn parse_atom<'a>(source: &mut impl TokenSource<'a>) -> PResult<Node<Self>> {
         let mut builder = source.node_builder();
         match builder.take() {
-            Some((Token::Int(str), _)) => match parse_int(str) {
+            // PARSE INTEGERS
+            Some((Token::Int(str), span)) => match str.parse() {
                 Ok(value) => Ok(builder.build(Expr::Int(value))),
-                Err(message) => Err(message),
+                Err(error) => Err(PError::ParseIntError { error, span }.into()),
             },
-            Some((Token::Float(str), _)) => match parse_float(str) {
+
+            // PARSE FLOATS
+            Some((Token::Float(str), span)) => match str.parse() {
                 Ok(value) => Ok(builder.build(Expr::Float(value))),
-                Err(message) => Err(message),
+                Err(error) => Err(PError::ParseFloatError { error, span }.into()),
             },
+
+            // PARSE BOOLS
             Some((Token::Bool(bool), _)) => Ok(builder.build(Expr::Bool(bool))),
+
+            // PARSE STRINGS
             Some((Token::String(str), _)) => Ok(builder.build(Expr::String(str.to_string()))),
-            Some((Token::Sub, _)) => match builder.peek() {
-                Some((Token::Int(str), _)) => match parse_int(format!("-{str}")) {
+
+            // PARSE NEGATIVES
+            Some((Token::Sub, sub_span)) => match builder.peek() {
+                Some((Token::Int(str), span)) => match format!("-{str}").parse() {
                     Ok(value) => Ok(builder.build(Expr::Int(value))),
-                    Err(message) => Err(message),
+                    Err(error) => Err(PError::ParseIntError {
+                        error,
+                        span: sub_span.start..span.end,
+                    }
+                    .into()),
                 },
-                Some((Token::Float(str), _)) => match parse_float(format!("-{str}")) {
+                Some((Token::Float(str), span)) => match format!("-{str}").parse() {
                     Ok(value) => Ok(builder.build(Expr::Float(value))),
-                    Err(message) => Err(message),
+                    Err(error) => Err(PError::ParseFloatError {
+                        error,
+                        span: sub_span.start..span.end,
+                    }
+                    .into()),
                 },
                 Some(_) => {
                     let nested = Self::parse_atom(&mut builder)?;
                     Ok(builder.build(Expr::Neg(Box::new(nested))))
                 }
-                None => Err(format!("expected expr after '-', found nothing")),
+                None => Err(PError::UnexpectedEnd {
+                    expect: "expression".into(),
+                    pos: builder.pos(),
+                }
+                .into()),
             },
+
+            // PARSE BOOLEAN NEGATION
             Some((Token::Not, _)) => {
                 let nested = Self::parse_atom(&mut builder)?;
                 Ok(builder.build(Expr::Not(Box::new(nested))))
             }
-            Some((Token::OpenParen, _)) => {
-                // parse inner expression
-                let inner_expr = Self::parse(&mut builder)?;
 
-                // ensure closing paren
-                match builder.take() {
-                    Some((Token::CloseParen, _)) => Ok(inner_expr),
-                    Some((token, _)) => Err(format!("expected ')', found '{token}'")),
-                    None => Err(format!("expected ')', found nothing")),
+            // PARSE BRACED EXPRESSIONS
+            Some((Token::OpenParen, open_span)) => {
+                let inner_expr = Self::parse_until(&mut builder, |t| t == &Token::CloseParen)?;
+                match builder.peek() {
+                    Some((Token::CloseParen, _)) => {
+                        builder.take(); // consume close paren
+                        Ok(inner_expr)
+                    }
+                    Some((_, _)) => unreachable!(),
+                    None => Err(PError::UnclosedBrace {
+                        open_span,
+                        close_message: "reached end with no closing brace".into(),
+                        close_span: builder.pos()..builder.pos(),
+                    }
+                    .into()),
                 }
             }
-            Some((token, _)) => Err(format!("invalid token {token}")),
-            None => Err(format!("expected expr, found nothing")),
+
+            // ERROR CASES
+            Some((token, span)) => Err(PError::UnexpectedToken {
+                expect: "expression".into(),
+                found: format!("'{token}'"),
+                span,
+            }
+            .into()),
+            None => Err(PError::UnexpectedEnd {
+                expect: "expression".into(),
+                pos: source.pos(),
+            }
+            .into()),
         }
     }
 
-    pub fn parse<'a>(source: &mut impl ParserSource<'a>) -> PResult<Node<Self>> {
+    /// Parses the provided [`TokenSource`] as an [`Expr`] until the end
+    ///
+    /// Equivilant to calling [`Expr::parse_until`] using `|_| false`.
+    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> PResult<Node<Self>> {
+        Self::parse_until(source, |_| false)
+    }
+
+    /// Parses the provided [`TokenSource`] as an [`Expr`]
+    ///
+    /// Stops when `until` evaluates to `true`.
+    /// The `until` function is only run when an unexpected token is found.
+    /// So if `until` expects a token that is used as an operator, it will not evaluate.
+    ///
+    /// EXAMPLE: `Token::Colon` will trigger the `until` evaluation,
+    /// but `Token::Add` will not since it will be used as an operator in the expression.
+    pub fn parse_until<'a>(
+        source: &mut impl TokenSource<'a>,
+        until: impl Fn(&Token) -> bool,
+    ) -> PResult<Node<Self>> {
         fn try_parse_pow<'a>(
             lhs: Node<Expr>,
-            source: &mut impl ParserSource<'a>,
+            source: &mut impl TokenSource<'a>,
         ) -> PResult<Node<Expr>> {
             let op = match source.peek() {
                 Some((Token::Pow, _)) => Expr::Pow,
@@ -99,7 +148,7 @@ impl Expr {
 
         fn try_parse_mul<'a>(
             lhs: Node<Expr>,
-            source: &mut impl ParserSource<'a>,
+            source: &mut impl TokenSource<'a>,
         ) -> PResult<Node<Expr>> {
             let op = match source.peek() {
                 Some((Token::Mul, _)) => Expr::Mul,
@@ -116,7 +165,7 @@ impl Expr {
 
         fn try_parse_add<'a>(
             lhs: Node<Expr>,
-            source: &mut impl ParserSource<'a>,
+            source: &mut impl TokenSource<'a>,
         ) -> PResult<Node<Expr>> {
             let op = match source.peek() {
                 Some((Token::Add, _)) => Expr::Add,
@@ -137,10 +186,21 @@ impl Expr {
         // loop until all ops are handled
         loop {
             lhs = match source.peek() {
+                None => return Ok(lhs),
                 Some((Token::Pow, _)) => try_parse_pow(lhs, source)?,
                 Some((Token::Mul, _)) | Some((Token::Div, _)) => try_parse_mul(lhs, source)?,
                 Some((Token::Add, _)) | Some((Token::Sub, _)) => try_parse_add(lhs, source)?,
-                _ => return Ok(lhs),
+                Some((token, span)) => match until(token) {
+                    true => return Ok(lhs),
+                    false => {
+                        return Err(PError::UnexpectedToken {
+                            expect: "operator".into(),
+                            found: format!("'{token}'"),
+                            span: span.clone(),
+                        }
+                        .into())
+                    }
+                },
             };
         }
     }

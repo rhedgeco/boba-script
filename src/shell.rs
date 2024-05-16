@@ -1,6 +1,7 @@
+use ariadne::Source;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::{ast::Expr, parser::TokenSource};
+use crate::{ast::Expr, parser::BufferSource};
 
 pub struct Session {
     prompt: DefaultPrompt,
@@ -30,7 +31,7 @@ impl Session {
             let buffer = match shell.line_editor.read_line(&shell.prompt) {
                 Ok(Signal::Success(buffer)) => match buffer.len() {
                     0 => continue,
-                    _ => buffer,
+                    _ => Source::from(buffer),
                 },
                 Ok(Signal::CtrlD) => {
                     println!("Closing Shell...");
@@ -47,12 +48,19 @@ impl Session {
             };
 
             // create token source
-            let mut tokens = TokenSource::new(&buffer);
+            let mut source = BufferSource::new(buffer.text());
 
             // parse expression
-            match Expr::parse(&mut tokens) {
+            match Expr::parse(&mut source) {
                 Ok(expr) => println!("{expr:?}"),
-                Err(error) => eprintln!("{error}"),
+                Err(report) => {
+                    for error in report.errors() {
+                        error
+                            .as_ariadne("shell")
+                            .eprint(("shell", buffer.clone()))
+                            .unwrap();
+                    }
+                }
             }
         }
     }
