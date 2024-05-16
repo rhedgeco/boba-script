@@ -20,6 +20,11 @@ pub enum RunError {
         vtype2: String,
         span: Span,
     },
+    UnexpectedType {
+        expected: String,
+        found: String,
+        span: Span,
+    },
 }
 
 impl RunError {
@@ -59,6 +64,19 @@ impl RunError {
                         .with_message(format!(
                             "'{vtype1}' does not have a valid '{op}' operator for '{vtype2}'"
                         )),
+                ),
+
+            RunError::UnexpectedType {
+                expected,
+                found,
+                span,
+            } => Report::build(ReportKind::Error, id, span.start)
+                .with_message("Unexpected Type")
+                .with_code("R-004")
+                .with_label(
+                    Label::new((id, span.clone()))
+                        .with_color(Color::Red)
+                        .with_message(format!("expected {expected}, found {found}")),
                 ),
         }
         .finish()

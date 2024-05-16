@@ -32,8 +32,27 @@ pub enum BinaryOpType {
     Mul,
     #[display(fmt = "/")]
     Div,
+    #[display(fmt = "%")]
+    Mod,
     #[display(fmt = "**")]
     Pow,
+
+    #[display(fmt = "==")]
+    Eq,
+    #[display(fmt = "<")]
+    Lt,
+    #[display(fmt = ">")]
+    Gt,
+    #[display(fmt = "!=")]
+    NEq,
+    #[display(fmt = "<=")]
+    LtEq,
+    #[display(fmt = ">=")]
+    GtEq,
+    #[display(fmt = "and")]
+    And,
+    #[display(fmt = "or")]
+    Or,
 }
 
 pub enum CallError {
@@ -113,6 +132,60 @@ impl Engine {
                 self.eval_with_scope(rhs, scope)?,
                 expr.span(),
             ),
+            Expr::Mod(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::Mod,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
+            Expr::Eq(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::Eq,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
+            Expr::Lt(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::Lt,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
+            Expr::Gt(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::Gt,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
+            Expr::NEq(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::NEq,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
+            Expr::LtEq(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::LtEq,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
+            Expr::GtEq(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::GtEq,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
+            Expr::And(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::And,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
+            Expr::Or(lhs, rhs) => self.eval_binary(
+                self.eval_with_scope(lhs, scope)?,
+                BinaryOpType::Or,
+                self.eval_with_scope(rhs, scope)?,
+                expr.span(),
+            ),
             Expr::Var(ident) => match ScopeGroup::new(scope, &self.scope).get_var(ident) {
                 Some(value) => Ok(value.clone()),
                 None => Err(RunError::UnknownVariable {
@@ -120,7 +193,25 @@ impl Engine {
                     span: expr.span().clone(),
                 }),
             },
-            _ => todo!(),
+            Expr::Ternary(lhs, cond, rhs) => {
+                // evaluate condition
+                let cond = match self.eval(&cond)? {
+                    Value::Bool(cond) => cond,
+                    value => {
+                        return Err(RunError::UnexpectedType {
+                            expected: "'bool'".into(),
+                            found: format!("'{}'", value.type_name()),
+                            span: cond.span().clone(),
+                        })
+                    }
+                };
+
+                // then evaluate the correct expression
+                match cond {
+                    true => self.eval(&lhs),
+                    false => self.eval(&rhs),
+                }
+            }
         }
     }
 
@@ -176,12 +267,49 @@ impl Engine {
             (Value::Int(v1), BinaryOpType::Div, Value::Float(v2)) => {
                 Ok(Value::Float(v1 as f64 / v2))
             }
+            // int mod
+            (Value::Int(v1), BinaryOpType::Mod, Value::Int(v2)) => {
+                Ok(Value::Int(v1.rem_euclid(v2)))
+            }
+            (Value::Int(v1), BinaryOpType::Mod, Value::Float(v2)) => {
+                Ok(Value::Float((v1 as f64).rem_euclid(v2)))
+            }
             // int pow
             (Value::Int(v1), BinaryOpType::Pow, Value::Int(v2)) => {
                 Ok(Value::Float((v1 as f64).powf(v2 as f64)))
             }
             (Value::Int(v1), BinaryOpType::Pow, Value::Float(v2)) => {
                 Ok(Value::Float((v1 as f64).powf(v2)))
+            }
+            // int equality
+            (Value::Int(v1), BinaryOpType::Eq, Value::Int(v2)) => Ok(Value::Bool(v1 == v2)),
+            (Value::Int(v1), BinaryOpType::Eq, Value::Float(v2)) => {
+                Ok(Value::Bool((v1 as f64) == v2))
+            }
+            // int less than
+            (Value::Int(v1), BinaryOpType::Lt, Value::Int(v2)) => Ok(Value::Bool(v1 < v2)),
+            (Value::Int(v1), BinaryOpType::Lt, Value::Float(v2)) => {
+                Ok(Value::Bool((v1 as f64) < v2))
+            }
+            // int greater than
+            (Value::Int(v1), BinaryOpType::Gt, Value::Int(v2)) => Ok(Value::Bool(v1 > v2)),
+            (Value::Int(v1), BinaryOpType::Gt, Value::Float(v2)) => {
+                Ok(Value::Bool((v1 as f64) > v2))
+            }
+            // int not equal
+            (Value::Int(v1), BinaryOpType::NEq, Value::Int(v2)) => Ok(Value::Bool(v1 != v2)),
+            (Value::Int(v1), BinaryOpType::NEq, Value::Float(v2)) => {
+                Ok(Value::Bool((v1 as f64) != v2))
+            }
+            // int less than equal
+            (Value::Int(v1), BinaryOpType::LtEq, Value::Int(v2)) => Ok(Value::Bool(v1 <= v2)),
+            (Value::Int(v1), BinaryOpType::LtEq, Value::Float(v2)) => {
+                Ok(Value::Bool((v1 as f64) <= v2))
+            }
+            // int greater than equal
+            (Value::Int(v1), BinaryOpType::GtEq, Value::Int(v2)) => Ok(Value::Bool(v1 >= v2)),
+            (Value::Int(v1), BinaryOpType::GtEq, Value::Float(v2)) => {
+                Ok(Value::Bool((v1 as f64) >= v2))
             }
 
             // -----------------
@@ -215,6 +343,13 @@ impl Engine {
                 Ok(Value::Float(v1 / v2 as f64))
             }
             (Value::Float(v1), BinaryOpType::Div, Value::Float(v2)) => Ok(Value::Float(v1 / v2)),
+            // float mod
+            (Value::Float(v1), BinaryOpType::Mod, Value::Int(v2)) => {
+                Ok(Value::Float(v1.rem_euclid(v2 as f64)))
+            }
+            (Value::Float(v1), BinaryOpType::Mod, Value::Float(v2)) => {
+                Ok(Value::Float(v1.rem_euclid(v2)))
+            }
             // float pow
             (Value::Float(v1), BinaryOpType::Pow, Value::Int(v2)) => {
                 Ok(Value::Float(v1.powf(v2 as f64)))
@@ -222,6 +357,36 @@ impl Engine {
             (Value::Float(v1), BinaryOpType::Pow, Value::Float(v2)) => {
                 Ok(Value::Float(v1.powf(v2)))
             }
+            // float equality
+            (Value::Float(v1), BinaryOpType::Eq, Value::Int(v2)) => {
+                Ok(Value::Bool(v1 == (v2 as f64)))
+            }
+            (Value::Float(v1), BinaryOpType::Eq, Value::Float(v2)) => Ok(Value::Bool(v1 == v2)),
+            // float less than
+            (Value::Float(v1), BinaryOpType::Lt, Value::Int(v2)) => {
+                Ok(Value::Bool(v1 < (v2 as f64)))
+            }
+            (Value::Float(v1), BinaryOpType::Lt, Value::Float(v2)) => Ok(Value::Bool(v1 < v2)),
+            // float greater than
+            (Value::Float(v1), BinaryOpType::Gt, Value::Int(v2)) => {
+                Ok(Value::Bool(v1 > (v2 as f64)))
+            }
+            (Value::Float(v1), BinaryOpType::Gt, Value::Float(v2)) => Ok(Value::Bool(v1 > v2)),
+            // float not equal
+            (Value::Float(v1), BinaryOpType::NEq, Value::Int(v2)) => {
+                Ok(Value::Bool(v1 != (v2 as f64)))
+            }
+            (Value::Float(v1), BinaryOpType::NEq, Value::Float(v2)) => Ok(Value::Bool(v1 != v2)),
+            // float less than equal
+            (Value::Float(v1), BinaryOpType::LtEq, Value::Int(v2)) => {
+                Ok(Value::Bool(v1 <= (v2 as f64)))
+            }
+            (Value::Float(v1), BinaryOpType::LtEq, Value::Float(v2)) => Ok(Value::Bool(v1 <= v2)),
+            // float greater than equal
+            (Value::Float(v1), BinaryOpType::GtEq, Value::Int(v2)) => {
+                Ok(Value::Bool(v1 >= (v2 as f64)))
+            }
+            (Value::Float(v1), BinaryOpType::GtEq, Value::Float(v2)) => Ok(Value::Bool(v1 >= v2)),
 
             // ------------------
             // --- STRING OPS ---
@@ -245,6 +410,37 @@ impl Engine {
             (Value::String(v1), BinaryOpType::Mul, Value::Int(v2)) => {
                 Ok(Value::String(v1.repeat(v2 as usize)))
             }
+            // string equality
+            (Value::String(v1), BinaryOpType::Eq, Value::String(v2)) => Ok(Value::Bool(v1 == v2)),
+            // string less than
+            (Value::String(v1), BinaryOpType::Lt, Value::String(v2)) => Ok(Value::Bool(v1 < v2)),
+            // string greater than
+            (Value::String(v1), BinaryOpType::Gt, Value::String(v2)) => Ok(Value::Bool(v1 > v2)),
+            // string not equal
+            (Value::String(v1), BinaryOpType::NEq, Value::String(v2)) => Ok(Value::Bool(v1 != v2)),
+            // string less than equal
+            (Value::String(v1), BinaryOpType::LtEq, Value::String(v2)) => Ok(Value::Bool(v1 <= v2)),
+            // string greater than equal
+            (Value::String(v1), BinaryOpType::GtEq, Value::String(v2)) => Ok(Value::Bool(v1 >= v2)),
+
+            // -------------------
+            // --- BOOLEAN OPS ---
+            // boolean equality
+            (Value::Bool(v1), BinaryOpType::Eq, Value::Bool(v2)) => Ok(Value::Bool(v1 == v2)),
+            // boolean less than
+            (Value::Bool(v1), BinaryOpType::Lt, Value::Bool(v2)) => Ok(Value::Bool(v1 < v2)),
+            // boolean greater than
+            (Value::Bool(v1), BinaryOpType::Gt, Value::Bool(v2)) => Ok(Value::Bool(v1 > v2)),
+            // boolean not equal
+            (Value::Bool(v1), BinaryOpType::NEq, Value::Bool(v2)) => Ok(Value::Bool(v1 != v2)),
+            // boolean less than equal
+            (Value::Bool(v1), BinaryOpType::LtEq, Value::Bool(v2)) => Ok(Value::Bool(v1 <= v2)),
+            // boolean greater than equal
+            (Value::Bool(v1), BinaryOpType::GtEq, Value::Bool(v2)) => Ok(Value::Bool(v1 >= v2)),
+            // boolean and
+            (Value::Bool(v1), BinaryOpType::And, Value::Bool(v2)) => Ok(Value::Bool(v1 && v2)),
+            // boolean or
+            (Value::Bool(v1), BinaryOpType::Or, Value::Bool(v2)) => Ok(Value::Bool(v1 || v2)),
 
             // --------------------
             // --- FAILURE CASE ---

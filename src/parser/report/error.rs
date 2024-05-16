@@ -32,6 +32,10 @@ pub enum PError {
         ident: String,
         span: Span,
     },
+    IncompleteTernary {
+        if_span: Span,
+        end: usize,
+    },
 }
 
 impl PError {
@@ -110,6 +114,23 @@ impl PError {
                         Label::new((id, span.clone()))
                             .with_color(Color::Red)
                             .with_message(format!("'{ident}' is an invalid identifier")),
+                    )
+            }
+            PError::IncompleteTernary { if_span, end } => {
+                Report::build(ReportKind::Error, id, if_span.start)
+                    .with_code("C-007")
+                    .with_message("Incomplete Ternary")
+                    .with_label(
+                        Label::new((id, if_span.clone()))
+                            .with_color(Color::Red)
+                            .with_message("if condition found here"),
+                    )
+                    .with_label(
+                        Label::new((id, *end..*end))
+                            .with_color(Color::Cyan)
+                            .with_message(format!(
+                                "expected 'else' after expression, but found nothing"
+                            )),
                     )
             }
         }

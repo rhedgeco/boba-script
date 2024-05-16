@@ -37,6 +37,9 @@ pub enum Expr {
     GtEq(Box<Node<Expr>>, Box<Node<Expr>>),
     Or(Box<Node<Expr>>, Box<Node<Expr>>),
     And(Box<Node<Expr>>, Box<Node<Expr>>),
+
+    // ternary
+    Ternary(Box<Node<Expr>>, Box<Node<Expr>>, Box<Node<Expr>>),
 }
 
 impl Expr {
@@ -104,11 +107,6 @@ impl Expr {
             Some((Token::Bang, _)) => {
                 // bang notation applies not to a single atom
                 let nested = Self::parse_atom(&mut builder)?;
-                Ok(builder.build(Expr::Not(Box::new(nested))))
-            }
-            Some((Token::Not, _)) => {
-                // logical not has lower priority and captures the whole expression
-                let nested = Self::parse(&mut builder)?;
                 Ok(builder.build(Expr::Not(Box::new(nested))))
             }
 
@@ -267,6 +265,45 @@ impl Expr {
             Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
         }
 
+        fn try_parse_ternary<'a>(
+            lhs: Node<Expr>,
+            source: &mut impl TokenSource<'a>,
+        ) -> PResult<Node<Expr>> {
+            let if_span = match source.peek() {
+                Some((Token::If, span)) => span.clone(),
+                _ => return try_parse_and(lhs, source),
+            };
+
+            // consume if
+            source.take();
+
+            // parse condition
+            let cond = Expr::parse_until(source, |t| t == &Token::Else)?;
+
+            // ensure 'else' exists
+            match source.peek() {
+                Some((Token::Else, _)) => source.take(),
+                Some((_, _)) => unreachable!(),
+                None => {
+                    return Err(PError::IncompleteTernary {
+                        if_span,
+                        end: source.pos(),
+                    }
+                    .into())
+                }
+            };
+
+            // parse else expression until end
+            let rhs = Expr::parse(source)?;
+
+            // construct ternary
+            let span = lhs.span().start..rhs.span().end;
+            Ok(Node::build(
+                span,
+                Expr::Ternary(Box::new(lhs), Box::new(cond), Box::new(rhs)),
+            ))
+        }
+
         // parse initial atom
         let mut lhs = Self::parse_atom(source)?;
 
@@ -300,6 +337,9 @@ impl Expr {
 
                 // parse or
                 Some((Token::Or, _)) => try_parse_or(lhs, source)?,
+
+                // parse ternary
+                Some((Token::If, _)) => try_parse_ternary(lhs, source)?,
 
                 // check for failure or ending token
                 Some((token, span)) => match until(token) {

@@ -91,15 +91,12 @@ pub enum Token<'a> {
     #[token(">=")]
     #[display(fmt = ">=")]
     GtEq,
-    #[token("and")]
+    #[regex("(and|&&)")]
     #[display(fmt = "and")]
     And,
-    #[token("or")]
+    #[regex(r"(or|\|\|)")]
     #[display(fmt = "or")]
     Or,
-    #[token("not")]
-    #[display(fmt = "not")]
-    Not,
 
     // keywords
     #[token("let")]
@@ -108,6 +105,12 @@ pub enum Token<'a> {
     #[token("fn")]
     #[display(fmt = "fn")]
     Fn,
+    #[token("if")]
+    #[display(fmt = "if")]
+    If,
+    #[token("else")]
+    #[display(fmt = "else")]
+    Else,
 
     // control flow
     #[token("=")]
