@@ -9,17 +9,31 @@ use crate::{
 
 #[derive(Debug)]
 pub enum Expr {
+    // values
     Int(i64),
     Float(f64),
     Bool(bool),
     String(String),
+
+    // math operators
     Neg(Box<Node<Expr>>),
-    Not(Box<Node<Expr>>),
     Pow(Box<Node<Expr>>, Box<Node<Expr>>),
     Mul(Box<Node<Expr>>, Box<Node<Expr>>),
     Div(Box<Node<Expr>>, Box<Node<Expr>>),
+    Mod(Box<Node<Expr>>, Box<Node<Expr>>),
     Add(Box<Node<Expr>>, Box<Node<Expr>>),
     Sub(Box<Node<Expr>>, Box<Node<Expr>>),
+
+    // boolean operators
+    Not(Box<Node<Expr>>),
+    Eq(Box<Node<Expr>>, Box<Node<Expr>>),
+    Lt(Box<Node<Expr>>, Box<Node<Expr>>),
+    Gt(Box<Node<Expr>>, Box<Node<Expr>>),
+    NEq(Box<Node<Expr>>, Box<Node<Expr>>),
+    LtEq(Box<Node<Expr>>, Box<Node<Expr>>),
+    GtEq(Box<Node<Expr>>, Box<Node<Expr>>),
+    Or(Box<Node<Expr>>, Box<Node<Expr>>),
+    And(Box<Node<Expr>>, Box<Node<Expr>>),
 }
 
 impl Expr {
@@ -74,8 +88,14 @@ impl Expr {
             },
 
             // PARSE BOOLEAN NEGATION
-            Some((Token::Not, _)) => {
+            Some((Token::Bang, _)) => {
+                // bang notation applies not to a single atom
                 let nested = Self::parse_atom(&mut builder)?;
+                Ok(builder.build(Expr::Not(Box::new(nested))))
+            }
+            Some((Token::Not, _)) => {
+                // logical not has lower priority and captures the whole expression
+                let nested = Self::parse(&mut builder)?;
                 Ok(builder.build(Expr::Not(Box::new(nested))))
             }
 
@@ -153,7 +173,8 @@ impl Expr {
             let op = match source.peek() {
                 Some((Token::Mul, _)) => Expr::Mul,
                 Some((Token::Div, _)) => Expr::Div,
-                _ => return Ok(lhs),
+                Some((Token::Mod, _)) => Expr::Mod,
+                _ => return try_parse_pow(lhs, source),
             };
 
             source.take(); // consume token
@@ -170,12 +191,65 @@ impl Expr {
             let op = match source.peek() {
                 Some((Token::Add, _)) => Expr::Add,
                 Some((Token::Sub, _)) => Expr::Sub,
-                _ => return Ok(lhs),
+                _ => return try_parse_mul(lhs, source),
             };
 
             source.take(); // consume token
             let rhs = Expr::parse_atom(source)?;
             let rhs = try_parse_mul(rhs, source)?; // ensure op precedence
+            let span = lhs.span().start..rhs.span().end;
+            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+        }
+
+        fn try_parse_bool<'a>(
+            lhs: Node<Expr>,
+            source: &mut impl TokenSource<'a>,
+        ) -> PResult<Node<Expr>> {
+            let op = match source.peek() {
+                Some((Token::Eq, _)) => Expr::Eq,
+                Some((Token::Lt, _)) => Expr::Lt,
+                Some((Token::Gt, _)) => Expr::Gt,
+                Some((Token::NEq, _)) => Expr::NEq,
+                Some((Token::LtEq, _)) => Expr::LtEq,
+                Some((Token::GtEq, _)) => Expr::GtEq,
+                _ => return try_parse_add(lhs, source),
+            };
+
+            source.take(); // consume token
+            let rhs = Expr::parse_atom(source)?;
+            let rhs = try_parse_add(rhs, source)?; // ensure op precedence
+            let span = lhs.span().start..rhs.span().end;
+            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+        }
+
+        fn try_parse_and<'a>(
+            lhs: Node<Expr>,
+            source: &mut impl TokenSource<'a>,
+        ) -> PResult<Node<Expr>> {
+            let op = match source.peek() {
+                Some((Token::And, _)) => Expr::And,
+                _ => return try_parse_bool(lhs, source),
+            };
+
+            source.take(); // consume token
+            let rhs = Expr::parse_atom(source)?;
+            let rhs = try_parse_bool(rhs, source)?; // ensure op precedence
+            let span = lhs.span().start..rhs.span().end;
+            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+        }
+
+        fn try_parse_or<'a>(
+            lhs: Node<Expr>,
+            source: &mut impl TokenSource<'a>,
+        ) -> PResult<Node<Expr>> {
+            let op = match source.peek() {
+                Some((Token::Or, _)) => Expr::Or,
+                _ => return try_parse_and(lhs, source),
+            };
+
+            source.take(); // consume token
+            let rhs = Expr::parse_atom(source)?;
+            let rhs = try_parse_and(rhs, source)?; // ensure op precedence
             let span = lhs.span().start..rhs.span().end;
             Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
         }
@@ -186,10 +260,35 @@ impl Expr {
         // loop until all ops are handled
         loop {
             lhs = match source.peek() {
+                // return after no tokens
                 None => return Ok(lhs),
+
+                // parse power
                 Some((Token::Pow, _)) => try_parse_pow(lhs, source)?,
-                Some((Token::Mul, _)) | Some((Token::Div, _)) => try_parse_mul(lhs, source)?,
+
+                // parse add/sub
                 Some((Token::Add, _)) | Some((Token::Sub, _)) => try_parse_add(lhs, source)?,
+
+                // parse mul/div/mod
+                Some((Token::Mul, _)) | Some((Token::Div, _)) | Some((Token::Mod, _)) => {
+                    try_parse_mul(lhs, source)?
+                }
+
+                // parse relational
+                Some((Token::Eq, _))
+                | Some((Token::Lt, _))
+                | Some((Token::Gt, _))
+                | Some((Token::NEq, _))
+                | Some((Token::LtEq, _))
+                | Some((Token::GtEq, _)) => try_parse_bool(lhs, source)?,
+
+                // parse and
+                Some((Token::And, _)) => try_parse_and(lhs, source)?,
+
+                // parse or
+                Some((Token::Or, _)) => try_parse_or(lhs, source)?,
+
+                // check for failure or ending token
                 Some((token, span)) => match until(token) {
                     true => return Ok(lhs),
                     false => {

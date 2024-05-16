@@ -51,10 +51,7 @@ pub enum Token<'a> {
     #[display(fmt = "string")]
     String(&'a str),
 
-    // operators
-    #[token("=")]
-    #[display(fmt = "=")]
-    Equal,
+    // math operators
     #[token("+")]
     #[display(fmt = "+")]
     Add,
@@ -67,11 +64,43 @@ pub enum Token<'a> {
     #[token("/")]
     #[display(fmt = "/")]
     Div,
+    #[token("%")]
+    #[display(fmt = "%")]
+    Mod,
     #[token("**")]
     #[display(fmt = "**")]
     Pow,
+
+    // boolean operators
     #[token("!")]
     #[display(fmt = "!")]
+    Bang,
+    #[token("==")]
+    #[display(fmt = "==")]
+    Eq,
+    #[token("<")]
+    #[display(fmt = "<")]
+    Lt,
+    #[token(">")]
+    #[display(fmt = ">")]
+    Gt,
+    #[token("!=")]
+    #[display(fmt = "!=")]
+    NEq,
+    #[token("<=")]
+    #[display(fmt = "<=")]
+    LtEq,
+    #[token(">=")]
+    #[display(fmt = ">=")]
+    GtEq,
+    #[token("and")]
+    #[display(fmt = "and")]
+    And,
+    #[token("or")]
+    #[display(fmt = "or")]
+    Or,
+    #[token("not")]
+    #[display(fmt = "not")]
     Not,
 
     // keywords
@@ -83,6 +112,9 @@ pub enum Token<'a> {
     Fn,
 
     // control flow
+    #[token("=")]
+    #[display(fmt = "=")]
+    Assign,
     #[token("(")]
     #[display(fmt = "(")]
     OpenParen,
