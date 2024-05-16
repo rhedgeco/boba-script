@@ -81,6 +81,18 @@ impl Engine {
         }
     }
 
+    pub fn get_var(&self, ident: &Ident) -> Option<&Value> {
+        // try all nested scopes first
+        for scope in self.nested_scopes.iter().rev() {
+            if let Some(value) = scope.get_var(ident) {
+                return Some(value);
+            }
+        }
+
+        // then pull from global scope
+        self.global_scope.get_var(ident)
+    }
+
     pub fn eval(&self, expr: &Node<Expr>) -> Result<Value, RunError> {
         match expr.deref() {
             Expr::Bool(v) => Ok(Value::Bool(*v)),
@@ -195,7 +207,7 @@ impl Engine {
                 let cond = match self.eval(&cond)? {
                     Value::Bool(cond) => cond,
                     value => {
-                        return Err(RunError::UnexpectedType {
+                        return Err(RunError::TypeMismatch {
                             expected: "'bool'".into(),
                             found: format!("'{}'", value.type_name()),
                             span: cond.span().clone(),
