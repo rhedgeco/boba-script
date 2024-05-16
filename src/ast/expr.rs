@@ -132,14 +132,24 @@ impl Expr {
         }
     }
 
-    /// Parses the provided [`TokenSource`] as an [`Expr`] until the end
+    /// Parses the provided [`TokenSource`] as an [`Expr`] until the end.
     ///
     /// Equivilant to calling [`Expr::parse_until`] using `|_| false`.
     pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> Result<Node<Self>, PError> {
         Self::parse_until(source, |_| false)
     }
 
-    /// Parses the provided [`TokenSource`] as an [`Expr`]
+    /// Parses the provided [`TokenSource`] as an [`Expr`] starting with `lhs`.
+    ///
+    /// Equivilant to calling [`Expr::parse_with_lhs_until`] using `|_| false`.
+    pub fn parse_with_lhs<'a>(
+        lhs: Node<Expr>,
+        source: &mut impl TokenSource<'a>,
+    ) -> Result<Node<Self>, PError> {
+        Self::parse_with_lhs_until(lhs, source, |_| false)
+    }
+
+    /// Parses the provided [`TokenSource`] as an [`Expr`].
     ///
     /// Equivilant to calling [`Expr::parse_with_lhs_until`] and providing the left hand expression.
     pub fn parse_until<'a>(

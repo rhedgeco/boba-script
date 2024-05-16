@@ -29,56 +29,62 @@ impl Statement {
 
     pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> Result<Self, PError> {
         // parse expression or start assignment
-        let (init, ident) = match source.peek() {
-            Some((Token::Let, _)) => {
+        match source.peek() {
+            // parse init let statement
+            Some((Token::Let, span)) => {
+                let start = span.start;
                 source.take(); // consume let
-                (true, Ident::parse(source)?)
+                let ident = Ident::parse(source)?;
+                let expr = Expr::parse(source)?;
+                let span = start..expr.span().end;
+                Ok(Self::Assign(Node::build(
+                    span,
+                    Assign {
+                        init: true,
+                        ident,
+                        expr,
+                    },
+                )))
             }
-            Some((Token::Ident(_), _)) => (false, Ident::parse(source)?),
-            Some((token, span)) => {
-                return Err(PError::UnexpectedToken {
-                    expect: format!("'{}'", Token::Assign),
-                    found: format!("'{token}'"),
-                    span: span.clone(),
+            // parse set let statements or expressions
+            Some((Token::Ident(_), _)) => {
+                let ident = Ident::parse(source)?;
+                match source.peek() {
+                    Some((Token::Assign, _)) => {
+                        source.take(); // consume assign
+                        let expr = Expr::parse(source)?;
+                        let span = ident.span().start..expr.span().end;
+                        Ok(Self::Assign(Node::build(
+                            span,
+                            Assign {
+                                init: true,
+                                ident,
+                                expr,
+                            },
+                        )))
+                    }
+                    Some((_, _)) => {
+                        let lhs = Node::build(ident.span().clone(), Expr::Var(ident.into_inner()));
+                        let expr = Expr::parse_with_lhs(lhs, source)?;
+                        Ok(Self::Expr(expr))
+                    }
+                    None => Err(PError::UnexpectedEnd {
+                        expect: format!("'{}'", Token::Assign),
+                        pos: source.pos(),
+                    }
+                    .into()),
                 }
-                .into())
             }
-            None => {
-                return Err(PError::UnexpectedEnd {
-                    expect: "statement".into(),
-                    pos: source.pos(),
-                })
+            Some((token, span)) => Err(PError::UnexpectedToken {
+                expect: format!("'{}'", Token::Assign),
+                found: format!("'{token}'"),
+                span: span.clone(),
             }
-        };
-
-        // match assign symbol
-        match source.take() {
-            Some((Token::Assign, _)) => (),
-            Some((token, span)) => {
-                return Err(PError::UnexpectedToken {
-                    expect: format!("'{}'", Token::Assign),
-                    found: format!("'{token}'"),
-                    span: span.clone(),
-                }
-                .into())
-            }
-            None => {
-                return Err(PError::UnexpectedEnd {
-                    expect: format!("'{}'", Token::Assign),
-                    pos: source.pos(),
-                }
-                .into())
-            }
+            .into()),
+            None => Err(PError::UnexpectedEnd {
+                expect: "statement".into(),
+                pos: source.pos(),
+            }),
         }
-
-        // parse expression until end
-        let expr = Expr::parse(source)?;
-
-        // build and return assignment
-        let span = ident.span().start..expr.span().end;
-        Ok(Self::Assign(Node::build(
-            span,
-            Assign { init, ident, expr },
-        )))
     }
 }
