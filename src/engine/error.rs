@@ -20,7 +20,7 @@ pub enum RunError {
         vtype2: String,
         span: Span,
     },
-    UnexpectedType {
+    TypeMismatch {
         expected: String,
         found: String,
         span: Span,
@@ -66,12 +66,12 @@ impl RunError {
                         )),
                 ),
 
-            RunError::UnexpectedType {
+            RunError::TypeMismatch {
                 expected,
                 found,
                 span,
             } => Report::build(ReportKind::Error, id, span.start)
-                .with_message("Unexpected Type")
+                .with_message("Type Mismatch")
                 .with_code("R-004")
                 .with_label(
                     Label::new((id, span.clone()))
