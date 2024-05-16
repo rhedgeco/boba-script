@@ -1,8 +1,6 @@
 use derive_more::Display;
 use logos::Logos;
 
-use super::Ident;
-
 pub type Span = logos::Span;
 
 fn parse_string(str: &str) -> &str {
@@ -33,9 +31,9 @@ pub enum Token<'a> {
     Newline(usize),
 
     // identifiers
-    #[regex(r"[_a-zA-Z][_a-zA-z0-9]*", |lex| Ident::new(lex.slice()))]
+    #[regex(r"[_a-zA-Z][_a-zA-z0-9]*", |lex| lex.slice())]
     #[display(fmt = "identifier")]
-    Ident(Ident<'a>),
+    Ident(&'a str),
 
     // values
     #[regex(r"[0-9]+", |lex| lex.slice())]

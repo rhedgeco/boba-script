@@ -1,7 +1,8 @@
 // pub mod engine;
 pub mod ast;
-pub mod lexer;
 pub mod parser;
 pub mod shell;
+pub mod token;
 
+pub use token::Token;
 // pub use engine::Engine;

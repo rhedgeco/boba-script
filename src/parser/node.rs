@@ -1,6 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::lexer::{token::Span, Token};
+use crate::{token::Span, Token};
 
 use super::TokenSource;
 

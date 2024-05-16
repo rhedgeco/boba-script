@@ -1,6 +1,6 @@
 use logos::{Logos, SpannedIter};
 
-use crate::lexer::{token::Span, Token};
+use crate::{token::Span, Token};
 
 pub trait TokenSource<'source> {
     fn pos(&self) -> usize;

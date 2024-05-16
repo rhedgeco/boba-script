@@ -1,15 +1,18 @@
 use crate::{
-    lexer::Token,
     parser::{
         node::NodeBuilderExt,
         report::{PError, PResult},
         Node, TokenSource,
     },
+    Token,
 };
+
+use super::Ident;
 
 #[derive(Debug)]
 pub enum Expr {
     // values
+    Var(Ident),
     Int(i64),
     Float(f64),
     Bool(bool),
@@ -40,6 +43,16 @@ impl Expr {
     pub fn parse_atom<'a>(source: &mut impl TokenSource<'a>) -> PResult<Node<Self>> {
         let mut builder = source.node_builder();
         match builder.take() {
+            // PARSE VARIABLES
+            Some((Token::Ident(str), span)) => match Ident::parse_str(str) {
+                Some(ident) => Ok(builder.build(Expr::Var(ident))),
+                None => Err(PError::InvalidIdent {
+                    ident: str.into(),
+                    span,
+                }
+                .into()),
+            },
+
             // PARSE INTEGERS
             Some((Token::Int(str), span)) => match str.parse() {
                 Ok(value) => Ok(builder.build(Expr::Int(value))),
@@ -292,12 +305,15 @@ impl Expr {
                 Some((token, span)) => match until(token) {
                     true => return Ok(lhs),
                     false => {
+                        let span = span.clone();
+                        let token = token.clone();
+                        source.take(); // consume error token
                         return Err(PError::UnexpectedToken {
                             expect: "operator".into(),
                             found: format!("'{token}'"),
                             span: span.clone(),
                         }
-                        .into())
+                        .into());
                     }
                 },
             };

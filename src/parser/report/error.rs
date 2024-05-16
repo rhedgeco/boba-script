@@ -5,7 +5,7 @@ use std::{
 
 use ariadne::{Color, Label, Report, ReportKind};
 
-use crate::lexer::token::Span;
+use crate::token::Span;
 
 #[derive(Debug)]
 pub enum PError {
@@ -30,6 +30,10 @@ pub enum PError {
         open_span: Span,
         close_message: String,
         close_span: Span,
+    },
+    InvalidIdent {
+        ident: String,
+        span: Span,
     },
 }
 
@@ -101,6 +105,16 @@ impl PError {
                         .with_color(Color::Cyan)
                         .with_message(close_message),
                 ),
+            PError::InvalidIdent { ident, span } => {
+                Report::build(ReportKind::Error, id, span.start)
+                    .with_code(5)
+                    .with_message("Invalid identifier")
+                    .with_label(
+                        Label::new((id, span.clone()))
+                            .with_color(Color::Red)
+                            .with_message(format!("'{ident}' is an invalid identifier")),
+                    )
+            }
         }
         .finish()
     }

@@ -1,7 +1,7 @@
 use ariadne::Source;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::{ast::Expr, parser::BufferSource};
+use crate::{ast::Statement, parser::BufferSource};
 
 pub struct Session {
     prompt: DefaultPrompt,
@@ -51,8 +51,8 @@ impl Session {
             let mut source = BufferSource::new(buffer.text());
 
             // parse expression
-            match Expr::parse(&mut source) {
-                Ok(expr) => println!("{expr:?}"),
+            match Statement::parse(&mut source) {
+                Ok(statement) => println!("{statement:?}"),
                 Err(report) => {
                     for error in report.errors() {
                         error
