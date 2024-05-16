@@ -1,13 +1,9 @@
 use derive_more::Display;
 use logos::Logos;
 
-use super::Ident;
-
 pub type Span = logos::Span;
 
-fn parse_string(str: impl AsRef<str>) -> String {
-    let str = str.as_ref();
-
+fn parse_string(str: &str) -> &str {
     // remove quotes
     let str = match str.strip_prefix("'") {
         Some(stripped) => stripped.strip_suffix("'").unwrap_or(str),
@@ -15,8 +11,7 @@ fn parse_string(str: impl AsRef<str>) -> String {
             Some(stripped) => stripped.strip_suffix("\"").unwrap_or(str),
             None => str,
         },
-    }
-    .to_string();
+    };
 
     // TODO: parse escaped characters
 
@@ -29,35 +24,32 @@ fn parse_newline(str: impl AsRef<str>) -> usize {
 
 #[derive(Logos, Debug, Display, Clone, PartialEq, PartialOrd)]
 #[logos(skip r" ")] // skip whitespace
-pub enum Token {
+pub enum Token<'a> {
     // newlines
     #[regex(r"(\n|\r)[ ]*", |lex| parse_newline(lex.slice()))]
     #[display(fmt = "newline {}", _0)]
     Newline(usize),
 
     // identifiers
-    #[regex(r"[_a-zA-Z][_a-zA-z0-9]*", |lex| Ident::new(lex.slice()))]
+    #[regex(r"[_a-zA-Z][_a-zA-z0-9]*", |lex| lex.slice())]
     #[display(fmt = "identifier")]
-    Ident(Ident),
+    Ident(&'a str),
 
     // values
+    #[regex(r"[0-9]+", |lex| lex.slice())]
+    #[display(fmt = "int")]
+    Int(&'a str),
+    #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice())]
+    #[display(fmt = "float")]
+    Float(&'a str),
     #[regex(r"true|false", |lex| lex.slice() == "true")]
     #[display(fmt = "bool")]
     Bool(bool),
-    #[regex(r"[0-9]+", |lex| lex.slice().to_string())]
-    #[display(fmt = "int")]
-    Int(String),
-    #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice().to_string())]
-    #[display(fmt = "float")]
-    Float(String),
     #[regex("('[^']*')|(\"[^\"]*\")", |lex| parse_string(lex.slice()))]
     #[display(fmt = "string")]
-    String(String),
+    String(&'a str),
 
-    // operators
-    #[token("=")]
-    #[display(fmt = "=")]
-    Equal,
+    // math operators
     #[token("+")]
     #[display(fmt = "+")]
     Add,
@@ -70,12 +62,41 @@ pub enum Token {
     #[token("/")]
     #[display(fmt = "/")]
     Div,
+    #[token("%")]
+    #[display(fmt = "%")]
+    Mod,
     #[token("**")]
     #[display(fmt = "**")]
     Pow,
+
+    // boolean operators
     #[token("!")]
     #[display(fmt = "!")]
-    Not,
+    Bang,
+    #[token("==")]
+    #[display(fmt = "==")]
+    Eq,
+    #[token("<")]
+    #[display(fmt = "<")]
+    Lt,
+    #[token(">")]
+    #[display(fmt = ">")]
+    Gt,
+    #[token("!=")]
+    #[display(fmt = "!=")]
+    NEq,
+    #[token("<=")]
+    #[display(fmt = "<=")]
+    LtEq,
+    #[token(">=")]
+    #[display(fmt = ">=")]
+    GtEq,
+    #[regex("(and|&&)")]
+    #[display(fmt = "and")]
+    And,
+    #[regex(r"(or|\|\|)")]
+    #[display(fmt = "or")]
+    Or,
 
     // keywords
     #[token("let")]
@@ -84,8 +105,17 @@ pub enum Token {
     #[token("fn")]
     #[display(fmt = "fn")]
     Fn,
+    #[token("if")]
+    #[display(fmt = "if")]
+    If,
+    #[token("else")]
+    #[display(fmt = "else")]
+    Else,
 
     // control flow
+    #[token("=")]
+    #[display(fmt = "=")]
+    Assign,
     #[token("(")]
     #[display(fmt = "(")]
     OpenParen,
@@ -96,8 +126,7 @@ pub enum Token {
     #[display(fmt = ":")]
     Colon,
 
-    // fallback for invalid tokens
-    #[regex(".", |lex| lex.slice().to_string(), priority = 0)]
+    #[regex(r".", |lex| lex.slice(), priority = 0)]
     #[display(fmt = "{}", _0)]
-    Invalid(String),
+    Invalid(&'a str),
 }

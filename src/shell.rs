@@ -1,38 +1,13 @@
-use ariadne::{Label, Report, ReportKind, Source};
-use logos::Logos;
+use std::ops::Deref;
+
+use ariadne::Source;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::{
-    lexer::Token,
-    parser::{Assign, Expr, Node, NodeBuilder, ParseSource},
-    BobaError, Engine,
-};
-
-#[derive(Debug)]
-enum ShellCommand {
-    Assign(Node<Assign>),
-    Expr(Node<Expr>),
-}
-
-impl ShellCommand {
-    pub fn parser(builder: &mut NodeBuilder) -> Result<Self, BobaError> {
-        match builder.peek() {
-            Some((Token::Let, _)) => {
-                let assign = builder.parse(Assign::parser)?;
-                Ok(ShellCommand::Assign(assign))
-            }
-            _ => {
-                let expr = builder.parse(Expr::parser)?;
-                Ok(ShellCommand::Expr(expr))
-            }
-        }
-    }
-}
+use crate::{ast::Statement, parser::BufferSource, Engine};
 
 pub struct Session {
     prompt: DefaultPrompt,
     line_editor: Reedline,
-    engine: Engine,
 }
 
 impl Default for Session {
@@ -43,7 +18,6 @@ impl Default for Session {
                 DefaultPromptSegment::Empty,
             ),
             line_editor: Reedline::create(),
-            engine: Engine::new(),
         }
     }
 }
@@ -55,9 +29,13 @@ impl Session {
 
     pub fn start_console() {
         let mut shell = Session::new();
+        let mut engine = Engine::new();
         loop {
-            let line = match shell.line_editor.read_line(&shell.prompt) {
-                Ok(Signal::Success(buffer)) => buffer,
+            let buffer = match shell.line_editor.read_line(&shell.prompt) {
+                Ok(Signal::Success(buffer)) => match buffer.len() {
+                    0 => continue,
+                    _ => Source::from(buffer),
+                },
                 Ok(Signal::CtrlD) => {
                     println!("Closing Shell...");
                     return;
@@ -72,68 +50,66 @@ impl Session {
                 }
             };
 
-            // lex line into tokens
-            let line = Source::from(line);
-            let mut tokens = Token::lexer(line.text())
-                .spanned()
-                .map(|(result, span)| {
-                    (
-                        // panic on unexpected invalid token
-                        // all tokens 'should' be able to be parsed
-                        result.expect(&format!(
-                            "unexpected invalid token '{}' while lexing",
-                            &line.text()[span.clone()]
-                        )),
-                        span,
-                    )
-                })
-                .peekable();
+            // create token source
+            let mut source = BufferSource::new(buffer.text());
 
-            // retry if there are no tokens
-            if tokens.peek() == None {
-                continue;
-            }
-
-            // parse line into a shell command
-            let command = match ParseSource::new(&mut tokens).parse(ShellCommand::parser) {
-                Ok(statement) => statement,
-                Err(e) => {
-                    e.report("shell", line.clone());
-                    continue;
+            // parse expression
+            match Statement::parse(&mut source) {
+                Err(error) => {
+                    error
+                        .as_ariadne("shell")
+                        .eprint(("shell", buffer.clone()))
+                        .unwrap();
                 }
-            };
-
-            // execute shell command
-            match command.into_inner() {
-                ShellCommand::Expr(expr) => match shell.engine.eval(&expr) {
-                    Ok(value) => println!("{value}"),
-                    Err(label) => Report::build(ReportKind::Error, "shell", label.span.start)
-                        .with_message("Evaluation Error")
-                        .with_label(
-                            Label::new(("shell", label.span))
-                                .with_message(label.message)
-                                .with_color(label.color),
-                        )
-                        .finish()
-                        .eprint(("shell", line.clone()))
-                        .unwrap(),
-                },
-                ShellCommand::Assign(assign) => match shell.engine.eval(&assign.expr) {
-                    Ok(value) => {
-                        println!("{} = {value}", assign.ident);
-                        let ident = assign.ident.clone();
-                        shell.engine.insert_var(ident, value);
+                Ok(statement) => match statement {
+                    Statement::Expr(expr) => {
+                        match engine.eval(&expr) {
+                            Ok(value) => println!("{value}"),
+                            Err(error) => {
+                                error
+                                    .as_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        };
                     }
-                    Err(label) => Report::build(ReportKind::Error, "shell", label.span.start)
-                        .with_message("Evaluation Error")
-                        .with_label(
-                            Label::new(("shell", label.span))
-                                .with_message(label.message)
-                                .with_color(label.color),
-                        )
-                        .finish()
-                        .eprint(("shell", line.clone()))
-                        .unwrap(),
+                    Statement::LetVar(letvar) => {
+                        // evaluate expression
+                        let value = match engine.eval(&letvar.expr) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                error
+                                    .as_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        };
+
+                        // assign variable
+                        let ident = letvar.ident.deref();
+                        println!("{ident} = {value}");
+                        engine.set_var(ident.clone(), value);
+                    }
+                    Statement::Assign(assign) => {
+                        // evaluate expression
+                        let value = match engine.eval(&assign.expr) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                error
+                                    .as_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        };
+
+                        // assign variable
+                        let ident = assign.ident.deref();
+                        println!("{ident} = {value}");
+                        engine.set_var(ident.clone(), value);
+                    }
                 },
             }
         }
