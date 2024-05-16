@@ -93,18 +93,6 @@ impl Engine {
         self.global_scope.get_var(ident)
     }
 
-    pub fn get_var_mut(&mut self, ident: &Ident) -> Option<&mut Value> {
-        // try all nested scopes first
-        for scope in self.nested_scopes.iter_mut().rev() {
-            if let Some(value) = scope.get_var_mut(ident) {
-                return Some(value);
-            }
-        }
-
-        // then pull from global scope
-        self.global_scope.get_var_mut(ident)
-    }
-
     pub fn eval(&self, expr: &Node<Expr>) -> Result<Value, RunError> {
         match expr.deref() {
             Expr::Bool(v) => Ok(Value::Bool(*v)),
