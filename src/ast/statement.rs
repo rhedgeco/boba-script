@@ -57,12 +57,8 @@ impl Statement {
                     .into()),
                 }
             }
-            Some((token, span)) => Err(PError::UnexpectedToken {
-                expect: format!("'{}'", Token::Assign),
-                found: format!("'{token}'"),
-                span: span.clone(),
-            }
-            .into()),
+            // if let or ident is not found, parse expression normally
+            Some((_, _)) => Ok(Self::Expr(Expr::parse(source)?)),
             None => Err(PError::UnexpectedEnd {
                 expect: "statement".into(),
                 pos: source.pos(),
