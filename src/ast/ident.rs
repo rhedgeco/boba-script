@@ -1,3 +1,4 @@
+use derive_more::Display;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -9,11 +10,9 @@ use crate::{
     Token,
 };
 
-#[derive(Debug)]
-pub struct Ident {
-    ident: String,
-}
-
+#[derive(Debug, Display, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[display(fmt = "{}", _0)]
+pub struct Ident(String);
 impl AsRef<str> for Ident {
     fn as_ref(&self) -> &str {
         self.as_str()
@@ -54,12 +53,10 @@ impl Ident {
             Lazy::new(|| Regex::new(r"^[_a-zA-Z][_a-zA-z0-9]*$").expect("Invalid Ident regex"));
 
         let ident = ident.as_ref();
-        REGEX.is_match(ident).then(|| Self {
-            ident: ident.into(),
-        })
+        REGEX.is_match(ident).then(|| Self(ident.into()))
     }
 
     pub fn as_str(&self) -> &str {
-        &self.ident
+        &self.0
     }
 }

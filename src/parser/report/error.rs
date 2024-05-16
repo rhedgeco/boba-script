@@ -1,7 +1,4 @@
-use std::{
-    num::{IntErrorKind, ParseFloatError, ParseIntError},
-    ops::Range,
-};
+use std::num::{IntErrorKind, ParseFloatError, ParseIntError};
 
 use ariadne::{Color, Label, Report, ReportKind};
 
@@ -38,10 +35,10 @@ pub enum PError {
 }
 
 impl PError {
-    pub fn as_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Range<usize>)> {
+    pub fn as_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Span)> {
         match self {
             PError::UnexpectedEnd { expect, pos } => Report::build(ReportKind::Error, id, *pos)
-                .with_code(1)
+                .with_code("C-001")
                 .with_message("Unexpected end of input")
                 .with_label(
                     Label::new((id, *pos..*pos))
@@ -53,7 +50,7 @@ impl PError {
                 found,
                 span,
             } => Report::build(ReportKind::Error, id, span.start)
-                .with_code(2)
+                .with_code("C-002")
                 .with_message("Unexpected token")
                 .with_label(
                     Label::new((id, span.clone()))
@@ -62,7 +59,7 @@ impl PError {
                 ),
             PError::ParseIntError { error, span } => {
                 Report::build(ReportKind::Error, id, span.start)
-                    .with_code(3)
+                    .with_code("C-003")
                     .with_message("Failed to parse integer")
                     .with_label(
                         Label::new((id, span.clone()))
@@ -80,7 +77,7 @@ impl PError {
             }
             PError::ParseFloatError { error, span } => {
                 Report::build(ReportKind::Error, id, span.start)
-                    .with_code(4)
+                    .with_code("C-004")
                     .with_message("Failed to parse integer")
                     .with_label(
                         Label::new((id, span.clone()))
@@ -93,7 +90,7 @@ impl PError {
                 close_message,
                 close_span,
             } => Report::build(ReportKind::Error, id, open_span.start)
-                .with_code(5)
+                .with_code("C-005")
                 .with_message("Unclosed brace")
                 .with_label(
                     Label::new((id, open_span.clone()))
@@ -107,7 +104,7 @@ impl PError {
                 ),
             PError::InvalidIdent { ident, span } => {
                 Report::build(ReportKind::Error, id, span.start)
-                    .with_code(5)
+                    .with_code("C-006")
                     .with_message("Invalid identifier")
                     .with_label(
                         Label::new((id, span.clone()))

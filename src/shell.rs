@@ -1,7 +1,9 @@
+use std::ops::Deref;
+
 use ariadne::Source;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::{ast::Statement, parser::BufferSource};
+use crate::{ast::Statement, parser::BufferSource, Engine};
 
 pub struct Session {
     prompt: DefaultPrompt,
@@ -27,6 +29,7 @@ impl Session {
 
     pub fn start_console() {
         let mut shell = Session::new();
+        let mut engine = Engine::new();
         loop {
             let buffer = match shell.line_editor.read_line(&shell.prompt) {
                 Ok(Signal::Success(buffer)) => match buffer.len() {
@@ -52,7 +55,6 @@ impl Session {
 
             // parse expression
             match Statement::parse(&mut source) {
-                Ok(statement) => println!("{statement:?}"),
                 Err(report) => {
                     for error in report.errors() {
                         error
@@ -61,6 +63,38 @@ impl Session {
                             .unwrap();
                     }
                 }
+                Ok(statement) => match statement {
+                    Statement::Expr(expr) => {
+                        match engine.eval(&expr) {
+                            Ok(value) => println!("{value}"),
+                            Err(error) => {
+                                error
+                                    .as_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        };
+                    }
+                    Statement::Assign(assign) => {
+                        // evaluate expression
+                        let value = match engine.eval(&assign.expr) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                error
+                                    .as_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        };
+
+                        // assign variable
+                        let ident = assign.ident.deref();
+                        println!("{ident} = {value}");
+                        engine.insert_var(ident.clone(), value);
+                    }
+                },
             }
         }
     }

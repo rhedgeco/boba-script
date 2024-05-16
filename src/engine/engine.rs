@@ -3,19 +3,19 @@ use std::ops::Deref;
 use derive_more::Display;
 
 use crate::{
-    error::{Color, Label},
-    lexer::{token::Span, Ident},
-    parser::{Expr, Node},
+    ast::{Expr, Ident},
+    parser::Node,
+    token::Span,
 };
 
 use super::{
     scope::{EngineScope, ScopeGroup},
     types::Value,
-    Scope,
+    RunError, Scope,
 };
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum UnaryOpType {
+pub enum UnaryOpType {
     #[display(fmt = "-")]
     Neg,
     #[display(fmt = "!")]
@@ -23,7 +23,7 @@ enum UnaryOpType {
 }
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum BinaryOpType {
+pub enum BinaryOpType {
     #[display(fmt = "+")]
     Add,
     #[display(fmt = "-")]
@@ -37,7 +37,7 @@ enum BinaryOpType {
 }
 
 pub enum CallError {
-    Runtime(Label),
+    Runtime(RunError),
     NotFound,
 }
 
@@ -59,7 +59,7 @@ impl Engine {
         self.scope.init_var(ident, value);
     }
 
-    pub fn eval(&self, expr: &Node<Expr>) -> Result<Value, Label> {
+    pub fn eval(&self, expr: &Node<Expr>) -> Result<Value, RunError> {
         self.eval_with_scope(expr, &self.scope)
     }
 
@@ -67,7 +67,7 @@ impl Engine {
         &self,
         expr: &Node<Expr>,
         scope: &impl EngineScope,
-    ) -> Result<Value, Label> {
+    ) -> Result<Value, RunError> {
         match expr.deref() {
             Expr::Bool(v) => Ok(Value::Bool(*v)),
             Expr::Int(v) => Ok(Value::Int(*v)),
@@ -115,24 +115,27 @@ impl Engine {
             ),
             Expr::Var(ident) => match ScopeGroup::new(scope, &self.scope).get_var(ident) {
                 Some(value) => Ok(value.clone()),
-                None => Err(Label::new(
-                    format!("Unknown variable '{ident}'"),
-                    Color::Red,
-                    expr.span().clone(),
-                )),
+                None => Err(RunError::UnknownVariable {
+                    ident: ident.clone(),
+                    span: expr.span().clone(),
+                }),
             },
+            _ => todo!(),
         }
     }
 
-    fn eval_unary(&self, op: UnaryOpType, val: Value, span: &Span) -> Result<Value, Label> {
-        let val_ty = val.type_name();
+    fn eval_unary(&self, op: UnaryOpType, val: Value, span: &Span) -> Result<Value, RunError> {
+        let vtype = val.type_name();
         match (val, op) {
             (Value::Bool(v), UnaryOpType::Not) => Ok(Value::Bool(!v)),
             (Value::Int(v), UnaryOpType::Neg) => Ok(Value::Int(-v)),
             (Value::Float(v), UnaryOpType::Neg) => Ok(Value::Float(-v)),
-            _ => Err(format!("cannot use unary '{op}' prefix with '{val_ty}'",)),
+            _ => Err(RunError::InvalidUnary {
+                op,
+                vtype,
+                span: span.clone(),
+            }),
         }
-        .map_err(|message| Label::new(message, Color::Red, span.clone()))
     }
 
     fn eval_binary(
@@ -141,9 +144,9 @@ impl Engine {
         op: BinaryOpType,
         val2: Value,
         span: &Span,
-    ) -> Result<Value, Label> {
-        let val1_ty = val1.type_name();
-        let val2_ty = val2.type_name();
+    ) -> Result<Value, RunError> {
+        let vtype1 = val1.type_name();
+        let vtype2 = val2.type_name();
 
         match (val1, op, val2) {
             // ---------------
@@ -245,10 +248,12 @@ impl Engine {
 
             // --------------------
             // --- FAILURE CASE ---
-            _ => Err(format!(
-                "'{val1_ty}' does not have a valid '{op}' operator for '{val2_ty}'",
-            )),
+            _ => Err(RunError::InvalidBinary {
+                op,
+                vtype1,
+                vtype2,
+                span: span.clone(),
+            }),
         }
-        .map_err(|message| Label::new(message, Color::Red, span.clone()))
     }
 }
