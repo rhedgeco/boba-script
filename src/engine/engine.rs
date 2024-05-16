@@ -74,7 +74,7 @@ impl Engine {
         self.nested_scopes.pop().is_some()
     }
 
-    pub fn push_var(&mut self, ident: Ident, value: Value) {
+    pub fn insert_var(&mut self, ident: Ident, value: Value) {
         match self.nested_scopes.last_mut() {
             None => self.global_scope.init_var(ident, value),
             Some(scope) => scope.init_var(ident, value),
@@ -91,6 +91,18 @@ impl Engine {
 
         // then pull from global scope
         self.global_scope.get_var(ident)
+    }
+
+    pub fn get_var_mut(&mut self, ident: &Ident) -> Option<&mut Value> {
+        // try all nested scopes first
+        for scope in self.nested_scopes.iter_mut().rev() {
+            if let Some(value) = scope.get_var_mut(ident) {
+                return Some(value);
+            }
+        }
+
+        // then pull from global scope
+        self.global_scope.get_var_mut(ident)
     }
 
     pub fn eval(&self, expr: &Node<Expr>) -> Result<Value, RunError> {
