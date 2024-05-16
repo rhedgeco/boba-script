@@ -90,7 +90,7 @@ impl Session {
                         // assign variable
                         let ident = assign.ident.deref();
                         println!("{ident} = {value}");
-                        engine.insert_var(ident.clone(), value);
+                        engine.push_var(ident.clone(), value);
                     }
                 },
             }
