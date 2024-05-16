@@ -35,6 +35,27 @@ impl Statement {
                 let start = span.start;
                 source.take(); // consume let
                 let ident = Ident::parse(source)?;
+
+                // match equal symbol
+                match source.take() {
+                    Some((Token::Assign, _)) => (),
+                    Some((token, span)) => {
+                        return Err(PError::UnexpectedToken {
+                            expect: format!("'{}'", Token::Assign),
+                            found: format!("'{token}'"),
+                            span: span.clone(),
+                        }
+                        .into())
+                    }
+                    None => {
+                        return Err(PError::UnexpectedEnd {
+                            expect: format!("'{}'", Token::Assign),
+                            pos: source.pos(),
+                        }
+                        .into())
+                    }
+                }
+
                 let expr = Expr::parse(source)?;
                 let span = start..expr.span().end;
                 Ok(Self::Assign(Node::build(
