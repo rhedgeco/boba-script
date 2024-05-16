@@ -74,6 +74,24 @@ impl Session {
                             }
                         };
                     }
+                    Statement::LetVar(letvar) => {
+                        // evaluate expression
+                        let value = match engine.eval(&letvar.expr) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                error
+                                    .as_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        };
+
+                        // assign variable
+                        let ident = letvar.ident.deref();
+                        println!("{ident} = {value}");
+                        engine.set_var(ident.clone(), value);
+                    }
                     Statement::Assign(assign) => {
                         // evaluate expression
                         let value = match engine.eval(&assign.expr) {
