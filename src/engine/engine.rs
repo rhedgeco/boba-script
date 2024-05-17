@@ -198,10 +198,8 @@ impl Engine {
             Expr::Assign(ident, expr) => {
                 let ident = ident.clone();
                 let new_value = self.eval(&expr)?;
-                let old_value = self.get_var_mut(&ident)?;
-                let assignment = Value::Assignment(ident.to_string(), Box::new(new_value.clone()));
-                *old_value = new_value;
-                Ok(assignment)
+                *self.get_var_mut(&ident)? = new_value;
+                Ok(Value::Unit)
             }
             Expr::Ternary(lhs, cond, rhs) => {
                 // evaluate condition

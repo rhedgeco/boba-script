@@ -36,6 +36,9 @@ pub enum Token<'a> {
     Ident(&'a str),
 
     // values
+    #[token("unit")]
+    #[display(fmt = "unit")]
+    Unit,
     #[regex(r"[0-9]+", |lex| lex.slice())]
     #[display(fmt = "int")]
     Int(&'a str),

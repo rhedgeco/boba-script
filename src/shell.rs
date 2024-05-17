@@ -1,7 +1,7 @@
 use ariadne::Source;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::{ast::Statement, parser::TokenSource, Engine};
+use crate::{ast::Statement, engine::types::Value, parser::TokenSource, Engine};
 
 pub struct Session {
     prompt: DefaultPrompt,
@@ -62,7 +62,10 @@ impl Session {
                 Ok(statement) => match statement {
                     Statement::Expr(expr) => {
                         match engine.eval(&expr) {
-                            Ok(value) => println!("{value}"),
+                            Ok(value) => match value {
+                                Value::Unit => (), // do nothing with unit
+                                value => println!("{value}"),
+                            },
                             Err(error) => {
                                 error
                                     .as_ariadne("shell")
@@ -86,9 +89,7 @@ impl Session {
                         };
 
                         // assign variable
-                        let ident = assign.ident();
-                        println!("{ident} = {value}");
-                        engine.set_var(ident.clone(), value);
+                        engine.set_var(assign.ident().clone(), value);
                     }
                 },
             }
