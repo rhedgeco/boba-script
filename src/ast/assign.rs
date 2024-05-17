@@ -1,5 +1,5 @@
 use crate::{
-    parser::{report::PError, TokenSource},
+    parser::{PError, TokenSource},
     token::Span,
     Token,
 };

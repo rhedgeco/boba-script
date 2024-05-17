@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     ast::Spanned,
-    parser::{report::PError, TokenSource},
+    parser::{PError, TokenSource},
     token::Span,
     Token,
 };
