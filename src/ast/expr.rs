@@ -41,33 +41,37 @@ pub enum Expr {
 
     // ternary
     Ternary(Box<Self>, Box<Self>, Box<Self>),
+
+    // assignment
+    Assign(Ident, Box<Self>),
 }
 
 impl Spanned for Expr {
     fn span(&self) -> Span {
         match self {
-            Expr::Var(ident) => ident.span(),
-            Expr::Int(int) => int.span(),
-            Expr::Float(float) => float.span(),
-            Expr::Bool(bool) => bool.span(),
-            Expr::String(string) => string.span(),
-            Expr::Neg(expr) => expr.span(),
-            Expr::Not(expr) => expr.span(),
-            Expr::Pow(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Mul(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Div(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Mod(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Add(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Sub(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Eq(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Lt(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Gt(e1, e2) => e1.span().start..e2.span().end,
-            Expr::NEq(e1, e2) => e1.span().start..e2.span().end,
-            Expr::LtEq(e1, e2) => e1.span().start..e2.span().end,
-            Expr::GtEq(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Or(e1, e2) => e1.span().start..e2.span().end,
-            Expr::And(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Ternary(e1, _, e2) => e1.span().start..e2.span().end,
+            Self::Var(ident) => ident.span(),
+            Self::Int(int) => int.span(),
+            Self::Float(float) => float.span(),
+            Self::Bool(bool) => bool.span(),
+            Self::String(string) => string.span(),
+            Self::Neg(expr) => expr.span(),
+            Self::Not(expr) => expr.span(),
+            Self::Pow(e1, e2) => e1.span().start..e2.span().end,
+            Self::Mul(e1, e2) => e1.span().start..e2.span().end,
+            Self::Div(e1, e2) => e1.span().start..e2.span().end,
+            Self::Mod(e1, e2) => e1.span().start..e2.span().end,
+            Self::Add(e1, e2) => e1.span().start..e2.span().end,
+            Self::Sub(e1, e2) => e1.span().start..e2.span().end,
+            Self::Eq(e1, e2) => e1.span().start..e2.span().end,
+            Self::Lt(e1, e2) => e1.span().start..e2.span().end,
+            Self::Gt(e1, e2) => e1.span().start..e2.span().end,
+            Self::NEq(e1, e2) => e1.span().start..e2.span().end,
+            Self::LtEq(e1, e2) => e1.span().start..e2.span().end,
+            Self::GtEq(e1, e2) => e1.span().start..e2.span().end,
+            Self::Or(e1, e2) => e1.span().start..e2.span().end,
+            Self::And(e1, e2) => e1.span().start..e2.span().end,
+            Self::Ternary(e1, _, e2) => e1.span().start..e2.span().end,
+            Self::Assign(i, e) => i.span().start..e.span().end,
         }
     }
 }
@@ -160,35 +164,13 @@ impl Expr {
 
     /// Parses the provided [`TokenSource`] as an [`Expr`] starting with `lhs`.
     ///
-    /// Equivilant to calling [`Expr::parse_with_lhs_until`] using `|_| false`.
-    pub fn parse_with_lhs(lhs: Expr, source: &mut TokenSource) -> Result<Self, PError> {
-        Self::parse_with_lhs_until(lhs, source, |_| false)
-    }
-
-    /// Parses the provided [`TokenSource`] as an [`Expr`].
-    ///
-    /// Equivilant to calling [`Expr::parse_with_lhs_until`] and providing the left hand expression.
-    pub fn parse_until(
-        source: &mut TokenSource,
-        until: impl Fn(&Token) -> bool,
-    ) -> Result<Self, PError> {
-        // parse initial atom
-        let lhs = Self::parse_atom(source)?;
-
-        // then parse the expression
-        Self::parse_with_lhs_until(lhs, source, until)
-    }
-
-    /// Parses the provided [`TokenSource`] as an [`Expr`] starting with `lhs`.
-    ///
     /// Stops when `until` evaluates to `true`.
     /// The `until` function is only run when an unexpected token is found.
     /// So if `until` expects a token that is used as an operator, it will not evaluate.
     ///
     /// EXAMPLE: `Token::Colon` will trigger the `until` evaluation,
     /// but `Token::Add` will not since it will be used as an operator in the expression.
-    pub fn parse_with_lhs_until(
-        mut lhs: Self,
+    pub fn parse_until(
         source: &mut TokenSource,
         until: impl Fn(&Token) -> bool,
     ) -> Result<Self, PError> {
@@ -315,6 +297,21 @@ impl Expr {
 
             // construct ternary
             Ok(Expr::Ternary(Box::new(lhs), Box::new(cond), Box::new(rhs)))
+        }
+
+        // parse initial atom
+        let mut lhs = Self::parse_atom(source)?;
+
+        // try to parse assignment
+        if let (Expr::Var(ident), Some((Token::Assign, _))) = (&lhs, source.peek()) {
+            // consume assign token
+            source.take();
+
+            // parse expression
+            let expr = Self::parse(source)?;
+
+            // return assignment
+            return Ok(Self::Assign(ident.clone(), Box::new(expr)));
         }
 
         // loop until all ops are handled

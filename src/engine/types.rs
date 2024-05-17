@@ -1,6 +1,6 @@
 use derive_more::Display;
 
-#[derive(Debug, Display, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Display, Clone)]
 pub enum Value {
     #[display(fmt = "{}", _0)]
     Bool(bool),
@@ -10,6 +10,8 @@ pub enum Value {
     Float(f64),
     #[display(fmt = "'{}'", _0)]
     String(String),
+    #[display(fmt = "{} = {}", _0, _1)]
+    Assignment(String, Box<Value>),
 }
 
 impl Value {
@@ -19,6 +21,7 @@ impl Value {
             Value::Int(_) => format!("int"),
             Value::Float(_) => format!("float"),
             Value::String(_) => format!("string"),
+            Value::Assignment(_, _) => format!("assignment"),
         }
     }
 }
