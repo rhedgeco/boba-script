@@ -36,6 +36,9 @@ pub enum PError {
         if_span: Span,
         end: usize,
     },
+    AssignmentError {
+        lhs_span: Span,
+    },
 }
 
 impl PError {
@@ -132,6 +135,17 @@ impl PError {
                                 "expected 'else' after expression, but found nothing"
                             )),
                     )
+            }
+            PError::AssignmentError { lhs_span } => {
+                Report::build(ReportKind::Error, id, lhs_span.start)
+                    .with_code("C-008")
+                    .with_message("Assignment Error")
+                    .with_label(
+                        Label::new((id, lhs_span.clone()))
+                            .with_color(Color::Red)
+                            .with_message("trying to assign value to expression"),
+                    )
+                    .with_help("did you mean to use '=='?")
             }
         }
         .finish()

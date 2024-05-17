@@ -13,6 +13,7 @@ use super::{
 #[derive(Debug)]
 pub enum Expr {
     // values
+    Unit(Span),
     Var(Ident),
     Int(Int),
     Float(Float),
@@ -39,16 +40,18 @@ pub enum Expr {
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
 
-    // ternary
-    Ternary(Box<Self>, Box<Self>, Box<Self>),
-
     // assignment
     Assign(Ident, Box<Self>),
+    Walrus(Ident, Box<Self>),
+
+    // ternary
+    Ternary(Box<Self>, Box<Self>, Box<Self>),
 }
 
 impl Spanned for Expr {
     fn span(&self) -> Span {
         match self {
+            Self::Unit(span) => span.clone(),
             Self::Var(ident) => ident.span(),
             Self::Int(int) => int.span(),
             Self::Float(float) => float.span(),
@@ -72,14 +75,31 @@ impl Spanned for Expr {
             Self::And(e1, e2) => e1.span().start..e2.span().end,
             Self::Ternary(e1, _, e2) => e1.span().start..e2.span().end,
             Self::Assign(i, e) => i.span().start..e.span().end,
+            Self::Walrus(i, e) => i.span().start..e.span().end,
         }
     }
 }
 
 impl Expr {
+    pub fn parse_unit(source: &mut TokenSource) -> Result<Self, PError> {
+        match source.take() {
+            Some((Token::Unit, span)) => Ok(Self::Unit(span)),
+            Some((token, span)) => Err(PError::UnexpectedToken {
+                expect: "unit".into(),
+                found: format!("'{token}'"),
+                span,
+            }),
+            None => Err(PError::UnexpectedEnd {
+                expect: "unit".into(),
+                pos: source.pos(),
+            }),
+        }
+    }
+
     pub fn parse_atom(source: &mut TokenSource) -> Result<Self, PError> {
         match source.peek() {
             // PARSE VALUES
+            Some((Token::Unit, _)) => Self::parse_unit(source),
             Some((Token::Ident(_), _)) => Ok(Self::Var(Ident::parse(source)?)),
             Some((Token::Int(_), _)) => Ok(Self::Int(Int::parse(source)?)),
             Some((Token::Float(_), _)) => Ok(Self::Float(Float::parse(source)?)),
@@ -299,20 +319,30 @@ impl Expr {
             Ok(Expr::Ternary(Box::new(lhs), Box::new(cond), Box::new(rhs)))
         }
 
+        fn try_parse_assign(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
+            let op = match source.peek() {
+                Some((Token::Assign, _)) => Expr::Assign,
+                Some((Token::Walrus, _)) => Expr::Walrus,
+                _ => return try_parse_ternary(lhs, source),
+            };
+
+            let ident = match lhs {
+                Expr::Var(ident) => ident,
+                _ => {
+                    return Err(PError::AssignmentError {
+                        lhs_span: lhs.span(),
+                    })
+                }
+            };
+
+            source.take(); // consume token
+            let rhs = Expr::parse_atom(source)?;
+            let rhs = try_parse_ternary(rhs, source)?; // ensure op precedence
+            Ok(op(ident, Box::new(rhs)))
+        }
+
         // parse initial atom
         let mut lhs = Self::parse_atom(source)?;
-
-        // try to parse assignment
-        if let (Expr::Var(ident), Some((Token::Assign, _))) = (&lhs, source.peek()) {
-            // consume assign token
-            source.take();
-
-            // parse expression
-            let expr = Self::parse(source)?;
-
-            // return assignment
-            return Ok(Self::Assign(ident.clone(), Box::new(expr)));
-        }
 
         // loop until all ops are handled
         loop {
@@ -347,6 +377,11 @@ impl Expr {
 
                 // parse ternary
                 Some((Token::If, _)) => try_parse_ternary(lhs, source)?,
+
+                // parse assignment
+                Some((Token::Assign, _)) | Some((Token::Walrus, _)) => {
+                    try_parse_assign(lhs, source)?
+                }
 
                 // check for failure or ending token
                 Some((token, span)) => match until(token) {

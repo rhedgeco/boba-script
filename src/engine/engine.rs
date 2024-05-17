@@ -112,6 +112,7 @@ impl Engine {
 
     pub fn eval(&mut self, expr: &Expr) -> Result<Value, RunError> {
         match expr {
+            Expr::Unit(_) => Ok(Value::Unit),
             Expr::Bool(v) => Ok(Value::Bool(v.value())),
             Expr::Int(v) => Ok(Value::Int(v.value())),
             Expr::Float(v) => Ok(Value::Float(v.value())),
@@ -200,6 +201,12 @@ impl Engine {
                 let new_value = self.eval(&expr)?;
                 *self.get_var_mut(&ident)? = new_value;
                 Ok(Value::Unit)
+            }
+            Expr::Walrus(ident, expr) => {
+                let ident = ident.clone();
+                let new_value = self.eval(&expr)?;
+                *self.get_var_mut(&ident)? = new_value.clone();
+                Ok(new_value)
             }
             Expr::Ternary(lhs, cond, rhs) => {
                 // evaluate condition

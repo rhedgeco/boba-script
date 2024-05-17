@@ -36,7 +36,7 @@ pub enum Token<'a> {
     Ident(&'a str),
 
     // values
-    #[token("unit")]
+    #[regex(r"(unit|\(\))")]
     #[display(fmt = "unit")]
     Unit,
     #[regex(r"[0-9]+", |lex| lex.slice())]
@@ -101,6 +101,14 @@ pub enum Token<'a> {
     #[display(fmt = "or")]
     Or,
 
+    // other operators
+    #[token("=")]
+    #[display(fmt = "=")]
+    Assign,
+    #[token(":=")]
+    #[display(fmt = ":=")]
+    Walrus,
+
     // keywords
     #[token("let")]
     #[display(fmt = "let")]
@@ -116,9 +124,6 @@ pub enum Token<'a> {
     Else,
 
     // control flow
-    #[token("=")]
-    #[display(fmt = "=")]
-    Assign,
     #[token("(")]
     #[display(fmt = "(")]
     OpenParen,
