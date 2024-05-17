@@ -1,23 +1,37 @@
 use crate::{
-    parser::{node::NodeBuilderExt, report::PError, Node, TokenSource},
+    parser::{report::PError, TokenSource},
+    token::Span,
     Token,
 };
 
-use super::{Expr, Ident};
+use super::{Expr, Ident, Spanned};
 
 #[derive(Debug)]
-pub struct LetVar {
-    pub ident: Node<Ident>,
-    pub expr: Node<Expr>,
+pub struct Assign {
+    start: usize,
+    ident: Ident,
+    expr: Expr,
 }
 
-impl LetVar {
-    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> Result<Node<Self>, PError> {
-        let mut builder = source.node_builder();
+impl Spanned for Assign {
+    fn span(&self) -> Span {
+        self.start..self.expr.span().end
+    }
+}
 
+impl Assign {
+    pub fn ident(&self) -> &Ident {
+        &self.ident
+    }
+
+    pub fn expr(&self) -> &Expr {
+        &self.expr
+    }
+
+    pub fn parse<'a>(source: &mut TokenSource) -> Result<Self, PError> {
         // match let
-        match builder.take() {
-            Some((Token::Let, _)) => (),
+        let start = match source.take() {
+            Some((Token::Let, span)) => span.start,
             Some((token, span)) => {
                 return Err(PError::UnexpectedToken {
                     expect: format!("'{}'", Token::Let),
@@ -29,17 +43,17 @@ impl LetVar {
             None => {
                 return Err(PError::UnexpectedEnd {
                     expect: format!("'{}'", Token::Let),
-                    pos: builder.pos(),
+                    pos: source.pos(),
                 }
                 .into())
             }
-        }
+        };
 
         // parse ident
-        let ident = Ident::parse(&mut builder)?;
+        let ident = Ident::parse(source)?;
 
         // match assign
-        match builder.take() {
+        match source.take() {
             Some((Token::Assign, _)) => (),
             Some((token, span)) => {
                 return Err(PError::UnexpectedToken {
@@ -52,16 +66,16 @@ impl LetVar {
             None => {
                 return Err(PError::UnexpectedEnd {
                     expect: format!("'{}'", Token::Assign),
-                    pos: builder.pos(),
+                    pos: source.pos(),
                 }
                 .into())
             }
         }
 
         // parse expression until end
-        let expr = Expr::parse(&mut builder)?;
+        let expr = Expr::parse(source)?;
 
-        // build letvar
-        Ok(builder.build(Self { ident, expr }))
+        // build assignment
+        Ok(Self { start, ident, expr })
     }
 }

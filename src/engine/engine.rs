@@ -1,10 +1,7 @@
-use std::ops::Deref;
-
 use derive_more::Display;
 
 use crate::{
-    ast::{Expr, Ident},
-    parser::Node,
+    ast::{Expr, Ident, Spanned},
     token::Span,
 };
 
@@ -93,12 +90,12 @@ impl Engine {
         self.global_scope.get_var(ident)
     }
 
-    pub fn eval(&self, expr: &Node<Expr>) -> Result<Value, RunError> {
-        match expr.deref() {
-            Expr::Bool(v) => Ok(Value::Bool(*v)),
-            Expr::Int(v) => Ok(Value::Int(*v)),
-            Expr::Float(v) => Ok(Value::Float(*v)),
-            Expr::String(v) => Ok(Value::String(v.clone())),
+    pub fn eval(&self, expr: &Expr) -> Result<Value, RunError> {
+        match expr {
+            Expr::Bool(v) => Ok(Value::Bool(v.value())),
+            Expr::Int(v) => Ok(Value::Int(v.value())),
+            Expr::Float(v) => Ok(Value::Float(v.value())),
+            Expr::String(v) => Ok(Value::String(v.value())),
             Expr::Neg(inner) => self.eval_unary(UnaryOpType::Neg, self.eval(inner)?, expr.span()),
             Expr::Not(inner) => self.eval_unary(UnaryOpType::Not, self.eval(inner)?, expr.span()),
             Expr::Add(lhs, rhs) => self.eval_binary(
@@ -188,13 +185,13 @@ impl Engine {
             Expr::Var(ident) => {
                 // try all nested scopes first
                 for scope in self.nested_scopes.iter().rev() {
-                    if let Some(value) = scope.get_var(ident) {
+                    if let Some(value) = scope.get_var(&ident) {
                         return Ok(value.clone());
                     }
                 }
 
                 // then pull from global scope
-                match self.global_scope.get_var(ident) {
+                match self.global_scope.get_var(&ident) {
                     Some(value) => Ok(value.clone()),
                     None => Err(RunError::UnknownVariable {
                         ident: ident.clone(),
@@ -224,7 +221,7 @@ impl Engine {
         }
     }
 
-    fn eval_unary(&self, op: UnaryOpType, val: Value, span: &Span) -> Result<Value, RunError> {
+    fn eval_unary(&self, op: UnaryOpType, val: Value, span: Span) -> Result<Value, RunError> {
         let vtype = val.type_name();
         match (val, op) {
             (Value::Bool(v), UnaryOpType::Not) => Ok(Value::Bool(!v)),
@@ -243,7 +240,7 @@ impl Engine {
         val1: Value,
         op: BinaryOpType,
         val2: Value,
-        span: &Span,
+        span: Span,
     ) -> Result<Value, RunError> {
         let vtype1 = val1.type_name();
         let vtype2 = val2.type_name();
