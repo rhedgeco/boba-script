@@ -38,6 +38,7 @@ pub enum PError {
     },
     AssignmentError {
         lhs_span: Span,
+        assign_span: Span,
     },
 }
 
@@ -136,17 +137,23 @@ impl PError {
                             )),
                     )
             }
-            PError::AssignmentError { lhs_span } => {
-                Report::build(ReportKind::Error, id, lhs_span.start)
-                    .with_code("C-008")
-                    .with_message("Assignment Error")
-                    .with_label(
-                        Label::new((id, lhs_span.clone()))
-                            .with_color(Color::Red)
-                            .with_message("trying to assign value to expression"),
-                    )
-                    .with_help("did you mean to use '=='?")
-            }
+            PError::AssignmentError {
+                lhs_span,
+                assign_span,
+            } => Report::build(ReportKind::Error, id, lhs_span.start)
+                .with_code("C-008")
+                .with_message("Assignment Error")
+                .with_label(
+                    Label::new((id, lhs_span.clone()))
+                        .with_color(Color::Red)
+                        .with_message("trying to assign value to expression"),
+                )
+                .with_label(
+                    Label::new((id, assign_span.clone()))
+                        .with_color(Color::Cyan)
+                        .with_message("assignment happens here"),
+                )
+                .with_help("did you mean to use '=='?"),
         }
         .finish()
     }

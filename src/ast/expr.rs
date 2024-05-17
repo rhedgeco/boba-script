@@ -320,9 +320,9 @@ impl Expr {
         }
 
         fn try_parse_assign(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
-            let op = match source.peek() {
-                Some((Token::Assign, _)) => Expr::Assign,
-                Some((Token::Walrus, _)) => Expr::Walrus,
+            let (op, assign_span) = match source.peek() {
+                Some((Token::Assign, span)) => (Expr::Assign as fn(_, _) -> Expr, span),
+                Some((Token::Walrus, span)) => (Expr::Walrus as fn(_, _) -> Expr, span),
                 _ => return try_parse_ternary(lhs, source),
             };
 
@@ -330,6 +330,7 @@ impl Expr {
                 Expr::Var(ident) => ident,
                 _ => {
                     return Err(PError::AssignmentError {
+                        assign_span: assign_span.clone(),
                         lhs_span: lhs.span(),
                     })
                 }
