@@ -145,13 +145,13 @@ impl PError {
                 .with_message("Assignment Error")
                 .with_label(
                     Label::new((id, lhs_span.clone()))
-                        .with_color(Color::Red)
-                        .with_message("trying to assign value to expression"),
+                        .with_color(Color::Cyan)
+                        .with_message("left hand side of assignment is an expression"),
                 )
                 .with_label(
                     Label::new((id, assign_span.clone()))
-                        .with_color(Color::Cyan)
-                        .with_message("assignment happens here"),
+                        .with_color(Color::Red)
+                        .with_message("assignment operator not valid here"),
                 )
                 .with_help("did you mean to use '=='?"),
         }
