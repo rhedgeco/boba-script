@@ -1,13 +1,15 @@
 use ariadne::{Color, Label, Report, ReportKind};
 
-use crate::{ast::Ident, token::Span};
+use crate::{
+    ast::{Ident, Spanned},
+    token::Span,
+};
 
 use super::{BinaryOpType, UnaryOpType};
 
 pub enum RunError {
     UnknownVariable {
         ident: Ident,
-        span: Span,
     },
     InvalidUnary {
         op: UnaryOpType,
@@ -30,12 +32,13 @@ pub enum RunError {
 impl RunError {
     pub fn as_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Span)> {
         match self {
-            RunError::UnknownVariable { ident, span } => {
+            RunError::UnknownVariable { ident } => {
+                let span = ident.span();
                 Report::build(ReportKind::Error, id, span.start)
                     .with_message("Unknown Variable")
                     .with_code("R-001")
                     .with_label(
-                        Label::new((id, span.clone()))
+                        Label::new((id, span))
                             .with_color(Color::Red)
                             .with_message(format!("unknown variable '{ident}'")),
                     )

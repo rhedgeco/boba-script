@@ -1,120 +1,143 @@
 use crate::{
-    parser::{node::NodeBuilderExt, report::PError, Node, TokenSource},
+    parser::{report::PError, TokenSource},
+    token::Span,
     Token,
 };
 
-use super::Ident;
+use super::{
+    span::Spanner,
+    values::{Bool, Float, Int, StringSpan},
+    Ident, Spanned,
+};
 
 #[derive(Debug)]
 pub enum Expr {
     // values
     Var(Ident),
-    Int(i64),
-    Float(f64),
-    Bool(bool),
-    String(String),
+    Int(Int),
+    Float(Float),
+    Bool(Bool),
+    String(StringSpan),
 
     // math operators
-    Neg(Box<Node<Expr>>),
-    Pow(Box<Node<Expr>>, Box<Node<Expr>>),
-    Mul(Box<Node<Expr>>, Box<Node<Expr>>),
-    Div(Box<Node<Expr>>, Box<Node<Expr>>),
-    Mod(Box<Node<Expr>>, Box<Node<Expr>>),
-    Add(Box<Node<Expr>>, Box<Node<Expr>>),
-    Sub(Box<Node<Expr>>, Box<Node<Expr>>),
+    Neg(Spanner<Box<Self>>),
+    Pow(Box<Self>, Box<Self>),
+    Mul(Box<Self>, Box<Self>),
+    Div(Box<Self>, Box<Self>),
+    Mod(Box<Self>, Box<Self>),
+    Add(Box<Self>, Box<Self>),
+    Sub(Box<Self>, Box<Self>),
 
     // boolean operators
-    Not(Box<Node<Expr>>),
-    Eq(Box<Node<Expr>>, Box<Node<Expr>>),
-    Lt(Box<Node<Expr>>, Box<Node<Expr>>),
-    Gt(Box<Node<Expr>>, Box<Node<Expr>>),
-    NEq(Box<Node<Expr>>, Box<Node<Expr>>),
-    LtEq(Box<Node<Expr>>, Box<Node<Expr>>),
-    GtEq(Box<Node<Expr>>, Box<Node<Expr>>),
-    Or(Box<Node<Expr>>, Box<Node<Expr>>),
-    And(Box<Node<Expr>>, Box<Node<Expr>>),
+    Not(Spanner<Box<Self>>),
+    Eq(Box<Self>, Box<Self>),
+    Lt(Box<Self>, Box<Self>),
+    Gt(Box<Self>, Box<Self>),
+    NEq(Box<Self>, Box<Self>),
+    LtEq(Box<Self>, Box<Self>),
+    GtEq(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
+    And(Box<Self>, Box<Self>),
 
     // ternary
-    Ternary(Box<Node<Expr>>, Box<Node<Expr>>, Box<Node<Expr>>),
+    Ternary(Box<Self>, Box<Self>, Box<Self>),
+
+    // assignment
+    Assign(Ident, Box<Self>),
+}
+
+impl Spanned for Expr {
+    fn span(&self) -> Span {
+        match self {
+            Self::Var(ident) => ident.span(),
+            Self::Int(int) => int.span(),
+            Self::Float(float) => float.span(),
+            Self::Bool(bool) => bool.span(),
+            Self::String(string) => string.span(),
+            Self::Neg(expr) => expr.span(),
+            Self::Not(expr) => expr.span(),
+            Self::Pow(e1, e2) => e1.span().start..e2.span().end,
+            Self::Mul(e1, e2) => e1.span().start..e2.span().end,
+            Self::Div(e1, e2) => e1.span().start..e2.span().end,
+            Self::Mod(e1, e2) => e1.span().start..e2.span().end,
+            Self::Add(e1, e2) => e1.span().start..e2.span().end,
+            Self::Sub(e1, e2) => e1.span().start..e2.span().end,
+            Self::Eq(e1, e2) => e1.span().start..e2.span().end,
+            Self::Lt(e1, e2) => e1.span().start..e2.span().end,
+            Self::Gt(e1, e2) => e1.span().start..e2.span().end,
+            Self::NEq(e1, e2) => e1.span().start..e2.span().end,
+            Self::LtEq(e1, e2) => e1.span().start..e2.span().end,
+            Self::GtEq(e1, e2) => e1.span().start..e2.span().end,
+            Self::Or(e1, e2) => e1.span().start..e2.span().end,
+            Self::And(e1, e2) => e1.span().start..e2.span().end,
+            Self::Ternary(e1, _, e2) => e1.span().start..e2.span().end,
+            Self::Assign(i, e) => i.span().start..e.span().end,
+        }
+    }
 }
 
 impl Expr {
-    pub fn parse_atom<'a>(source: &mut impl TokenSource<'a>) -> Result<Node<Self>, PError> {
-        let mut builder = source.node_builder();
-        match builder.take() {
-            // PARSE VARIABLES
-            Some((Token::Ident(str), span)) => match Ident::parse_str(str) {
-                Some(ident) => Ok(builder.build(Expr::Var(ident))),
-                None => Err(PError::InvalidIdent {
-                    ident: str.into(),
-                    span,
-                }),
-            },
-
-            // PARSE INTEGERS
-            Some((Token::Int(str), span)) => match str.parse() {
-                Ok(value) => Ok(builder.build(Expr::Int(value))),
-                Err(error) => Err(PError::ParseIntError { error, span }),
-            },
-
-            // PARSE FLOATS
-            Some((Token::Float(str), span)) => match str.parse() {
-                Ok(value) => Ok(builder.build(Expr::Float(value))),
-                Err(error) => Err(PError::ParseFloatError { error, span }),
-            },
-
-            // PARSE BOOLS
-            Some((Token::Bool(bool), _)) => Ok(builder.build(Expr::Bool(bool))),
-
-            // PARSE STRINGS
-            Some((Token::String(str), _)) => Ok(builder.build(Expr::String(str.to_string()))),
-
-            // PARSE NEGATIVES
-            Some((Token::Sub, sub_span)) => match builder.peek() {
-                Some((Token::Int(str), span)) => match format!("-{str}").parse() {
-                    Ok(value) => Ok(builder.build(Expr::Int(value))),
-                    Err(error) => Err(PError::ParseIntError {
-                        error,
-                        span: sub_span.start..span.end,
-                    }),
-                },
-                Some((Token::Float(str), span)) => match format!("-{str}").parse() {
-                    Ok(value) => Ok(builder.build(Expr::Float(value))),
-                    Err(error) => Err(PError::ParseFloatError {
-                        error,
-                        span: sub_span.start..span.end,
-                    }),
-                },
-                Some(_) => {
-                    let nested = Self::parse_atom(&mut builder)?;
-                    Ok(builder.build(Expr::Neg(Box::new(nested))))
-                }
-                None => Err(PError::UnexpectedEnd {
-                    expect: "expression".into(),
-                    pos: builder.pos(),
-                }),
-            },
+    pub fn parse_atom(source: &mut TokenSource) -> Result<Self, PError> {
+        match source.peek() {
+            // PARSE VALUES
+            Some((Token::Ident(_), _)) => Ok(Self::Var(Ident::parse(source)?)),
+            Some((Token::Int(_), _)) => Ok(Self::Int(Int::parse(source)?)),
+            Some((Token::Float(_), _)) => Ok(Self::Float(Float::parse(source)?)),
+            Some((Token::Bool(_), _)) => Ok(Self::Bool(Bool::parse(source)?)),
+            Some((Token::String(_), _)) => Ok(Self::String(StringSpan::parse(source)?)),
 
             // PARSE BOOLEAN NEGATION
-            Some((Token::Bang, _)) => {
-                // bang notation applies not to a single atom
-                let nested = Self::parse_atom(&mut builder)?;
-                Ok(builder.build(Expr::Not(Box::new(nested))))
+            Some((Token::Bang, span)) => {
+                let span_start = span.start;
+                let nested = Self::parse_atom(source)?;
+                Ok(Expr::Not(Spanner::new(
+                    span_start..nested.span().end,
+                    Box::new(nested),
+                )))
+            }
+
+            // PARSE NEGATIVES
+            Some((Token::Sub, sub_span)) => {
+                let span_start = sub_span.start;
+                source.take(); // consume sub token
+                match source.peek() {
+                    Some((Token::Int(str), span)) => {
+                        let nested = Int::parse_str(format!("-{str}"), span_start..span.end)?;
+                        Ok(Self::Int(nested))
+                    }
+                    Some((Token::Float(str), span)) => {
+                        let nested = Float::parse_str(format!("-{str}"), span_start..span.end)?;
+                        Ok(Self::Float(nested))
+                    }
+                    Some(_) => {
+                        let nested = Self::parse_atom(source)?;
+                        Ok(Self::Neg(Spanner::new(
+                            span_start..nested.span().end,
+                            Box::new(nested),
+                        )))
+                    }
+                    None => Err(PError::UnexpectedEnd {
+                        expect: "expression".into(),
+                        pos: source.pos(),
+                    }),
+                }
             }
 
             // PARSE BRACED EXPRESSIONS
             Some((Token::OpenParen, open_span)) => {
-                let inner_expr = Self::parse_until(&mut builder, |t| t == &Token::CloseParen)?;
-                match builder.peek() {
+                let open_span = open_span.clone();
+                source.take(); // consume open token
+                let inner_expr = Self::parse_until(source, |t| t == &Token::CloseParen)?;
+                match source.peek() {
                     Some((Token::CloseParen, _)) => {
-                        builder.take(); // consume close paren
+                        source.take(); // consume close token
                         Ok(inner_expr)
                     }
                     Some((_, _)) => unreachable!(),
                     None => Err(PError::UnclosedBrace {
-                        open_span,
+                        open_span: open_span.clone(),
                         close_message: "reached end with no closing brace".into(),
-                        close_span: builder.pos()..builder.pos(),
+                        close_span: source.pos()..source.pos(),
                     }),
                 }
             }
@@ -123,7 +146,7 @@ impl Expr {
             Some((token, span)) => Err(PError::UnexpectedToken {
                 expect: "expression".into(),
                 found: format!("'{token}'"),
-                span,
+                span: span.clone(),
             }),
             None => Err(PError::UnexpectedEnd {
                 expect: "expression".into(),
@@ -135,32 +158,8 @@ impl Expr {
     /// Parses the provided [`TokenSource`] as an [`Expr`] until the end.
     ///
     /// Equivilant to calling [`Expr::parse_until`] using `|_| false`.
-    pub fn parse<'a>(source: &mut impl TokenSource<'a>) -> Result<Node<Self>, PError> {
+    pub fn parse(source: &mut TokenSource) -> Result<Self, PError> {
         Self::parse_until(source, |_| false)
-    }
-
-    /// Parses the provided [`TokenSource`] as an [`Expr`] starting with `lhs`.
-    ///
-    /// Equivilant to calling [`Expr::parse_with_lhs_until`] using `|_| false`.
-    pub fn parse_with_lhs<'a>(
-        lhs: Node<Expr>,
-        source: &mut impl TokenSource<'a>,
-    ) -> Result<Node<Self>, PError> {
-        Self::parse_with_lhs_until(lhs, source, |_| false)
-    }
-
-    /// Parses the provided [`TokenSource`] as an [`Expr`].
-    ///
-    /// Equivilant to calling [`Expr::parse_with_lhs_until`] and providing the left hand expression.
-    pub fn parse_until<'a>(
-        source: &mut impl TokenSource<'a>,
-        until: impl Fn(&Token) -> bool,
-    ) -> Result<Node<Self>, PError> {
-        // parse initial atom
-        let lhs = Self::parse_atom(source)?;
-
-        // then parse the expression
-        Self::parse_with_lhs_until(lhs, source, until)
     }
 
     /// Parses the provided [`TokenSource`] as an [`Expr`] starting with `lhs`.
@@ -171,30 +170,22 @@ impl Expr {
     ///
     /// EXAMPLE: `Token::Colon` will trigger the `until` evaluation,
     /// but `Token::Add` will not since it will be used as an operator in the expression.
-    pub fn parse_with_lhs_until<'a>(
-        mut lhs: Node<Expr>,
-        source: &mut impl TokenSource<'a>,
+    pub fn parse_until(
+        source: &mut TokenSource,
         until: impl Fn(&Token) -> bool,
-    ) -> Result<Node<Self>, PError> {
-        fn try_parse_pow<'a>(
-            lhs: Node<Expr>,
-            source: &mut impl TokenSource<'a>,
-        ) -> Result<Node<Expr>, PError> {
-            let op = match source.peek() {
-                Some((Token::Pow, _)) => Expr::Pow,
+    ) -> Result<Self, PError> {
+        fn try_parse_pow(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
+            match source.peek() {
+                Some((Token::Pow, _)) => (),
                 _ => return Ok(lhs),
             };
 
             source.take(); // consume token
             let rhs = Expr::parse_atom(source)?;
-            let span = lhs.span().start..rhs.span().end;
-            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+            Ok(Expr::Pow(Box::new(lhs), Box::new(rhs)))
         }
 
-        fn try_parse_mul<'a>(
-            lhs: Node<Expr>,
-            source: &mut impl TokenSource<'a>,
-        ) -> Result<Node<Expr>, PError> {
+        fn try_parse_mul(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
             let op = match source.peek() {
                 Some((Token::Mul, _)) => Expr::Mul,
                 Some((Token::Div, _)) => Expr::Div,
@@ -205,14 +196,10 @@ impl Expr {
             source.take(); // consume token
             let rhs = Expr::parse_atom(source)?;
             let rhs = try_parse_pow(rhs, source)?; // ensure op precedence
-            let span = lhs.span().start..rhs.span().end;
-            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+            Ok(op(Box::new(lhs), Box::new(rhs)))
         }
 
-        fn try_parse_add<'a>(
-            lhs: Node<Expr>,
-            source: &mut impl TokenSource<'a>,
-        ) -> Result<Node<Expr>, PError> {
+        fn try_parse_add(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
             let op = match source.peek() {
                 Some((Token::Add, _)) => Expr::Add,
                 Some((Token::Sub, _)) => Expr::Sub,
@@ -222,14 +209,10 @@ impl Expr {
             source.take(); // consume token
             let rhs = Expr::parse_atom(source)?;
             let rhs = try_parse_mul(rhs, source)?; // ensure op precedence
-            let span = lhs.span().start..rhs.span().end;
-            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+            Ok(op(Box::new(lhs), Box::new(rhs)))
         }
 
-        fn try_parse_bool<'a>(
-            lhs: Node<Expr>,
-            source: &mut impl TokenSource<'a>,
-        ) -> Result<Node<Expr>, PError> {
+        fn try_parse_bool(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
             let op = match source.peek() {
                 Some((Token::Eq, _)) => Expr::Eq,
                 Some((Token::Lt, _)) => Expr::Lt,
@@ -243,14 +226,10 @@ impl Expr {
             source.take(); // consume token
             let rhs = Expr::parse_atom(source)?;
             let rhs = try_parse_add(rhs, source)?; // ensure op precedence
-            let span = lhs.span().start..rhs.span().end;
-            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+            Ok(op(Box::new(lhs), Box::new(rhs)))
         }
 
-        fn try_parse_and<'a>(
-            lhs: Node<Expr>,
-            source: &mut impl TokenSource<'a>,
-        ) -> Result<Node<Expr>, PError> {
+        fn try_parse_and(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
             let op = match source.peek() {
                 Some((Token::And, _)) => Expr::And,
                 _ => return try_parse_bool(lhs, source),
@@ -259,14 +238,10 @@ impl Expr {
             source.take(); // consume token
             let rhs = Expr::parse_atom(source)?;
             let rhs = try_parse_bool(rhs, source)?; // ensure op precedence
-            let span = lhs.span().start..rhs.span().end;
-            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+            Ok(op(Box::new(lhs), Box::new(rhs)))
         }
 
-        fn try_parse_or<'a>(
-            lhs: Node<Expr>,
-            source: &mut impl TokenSource<'a>,
-        ) -> Result<Node<Expr>, PError> {
+        fn try_parse_or(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
             let op = match source.peek() {
                 Some((Token::Or, _)) => Expr::Or,
                 _ => return try_parse_and(lhs, source),
@@ -275,14 +250,10 @@ impl Expr {
             source.take(); // consume token
             let rhs = Expr::parse_atom(source)?;
             let rhs = try_parse_and(rhs, source)?; // ensure op precedence
-            let span = lhs.span().start..rhs.span().end;
-            Ok(Node::build(span, op(Box::new(lhs), Box::new(rhs))))
+            Ok(op(Box::new(lhs), Box::new(rhs)))
         }
 
-        fn try_parse_ternary<'a>(
-            lhs: Node<Expr>,
-            source: &mut impl TokenSource<'a>,
-        ) -> Result<Node<Expr>, PError> {
+        fn try_parse_ternary(lhs: Expr, source: &mut TokenSource) -> Result<Expr, PError> {
             let if_span = match source.peek() {
                 Some((Token::If, span)) => span.clone(),
                 _ => return try_parse_and(lhs, source),
@@ -325,11 +296,22 @@ impl Expr {
             let rhs = Expr::parse(source)?;
 
             // construct ternary
-            let span = lhs.span().start..rhs.span().end;
-            Ok(Node::build(
-                span,
-                Expr::Ternary(Box::new(lhs), Box::new(cond), Box::new(rhs)),
-            ))
+            Ok(Expr::Ternary(Box::new(lhs), Box::new(cond), Box::new(rhs)))
+        }
+
+        // parse initial atom
+        let mut lhs = Self::parse_atom(source)?;
+
+        // try to parse assignment
+        if let (Expr::Var(ident), Some((Token::Assign, _))) = (&lhs, source.peek()) {
+            // consume assign token
+            source.take();
+
+            // parse expression
+            let expr = Self::parse(source)?;
+
+            // return assignment
+            return Ok(Self::Assign(ident.clone(), Box::new(expr)));
         }
 
         // loop until all ops are handled

@@ -1,9 +1,7 @@
-use std::ops::Deref;
-
 use ariadne::Source;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::{ast::Statement, parser::BufferSource, Engine};
+use crate::{ast::Statement, engine::types::Value, parser::TokenSource, Engine};
 
 pub struct Session {
     prompt: DefaultPrompt,
@@ -51,7 +49,7 @@ impl Session {
             };
 
             // create token source
-            let mut source = BufferSource::new(buffer.text());
+            let mut source = TokenSource::new(buffer.text());
 
             // parse expression
             match Statement::parse(&mut source) {
@@ -64,7 +62,10 @@ impl Session {
                 Ok(statement) => match statement {
                     Statement::Expr(expr) => {
                         match engine.eval(&expr) {
-                            Ok(value) => println!("{value}"),
+                            Ok(value) => match value {
+                                Value::Unit => (), // do nothing with unit
+                                value => println!("{value}"),
+                            },
                             Err(error) => {
                                 error
                                     .as_ariadne("shell")
@@ -73,28 +74,10 @@ impl Session {
                                 continue;
                             }
                         };
-                    }
-                    Statement::LetVar(letvar) => {
-                        // evaluate expression
-                        let value = match engine.eval(&letvar.expr) {
-                            Ok(value) => value,
-                            Err(error) => {
-                                error
-                                    .as_ariadne("shell")
-                                    .eprint(("shell", buffer.clone()))
-                                    .unwrap();
-                                continue;
-                            }
-                        };
-
-                        // assign variable
-                        let ident = letvar.ident.deref();
-                        println!("{ident} = {value}");
-                        engine.set_var(ident.clone(), value);
                     }
                     Statement::Assign(assign) => {
                         // evaluate expression
-                        let value = match engine.eval(&assign.expr) {
+                        let value = match engine.eval(assign.expr()) {
                             Ok(value) => value,
                             Err(error) => {
                                 error
@@ -106,9 +89,7 @@ impl Session {
                         };
 
                         // assign variable
-                        let ident = assign.ident.deref();
-                        println!("{ident} = {value}");
-                        engine.set_var(ident.clone(), value);
+                        engine.set_var(assign.ident().clone(), value);
                     }
                 },
             }
