@@ -1,6 +1,6 @@
 use ariadne::{Color, Label, Report, ReportKind};
 
-use crate::lexer::token::Span;
+use crate::parser::token::Span;
 
 pub type PResult<'source, T> = Result<T, PError<'source>>;
 

@@ -6,7 +6,7 @@ use unic::ucd::{
 };
 use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
 
-use crate::{error::PResult, PError};
+use crate::parser::{PError, PResult};
 
 use super::{
     token::{self, Span},

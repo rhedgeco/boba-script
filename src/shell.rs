@@ -1,6 +1,6 @@
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::TokenLines;
+use crate::parser::TokenLines;
 
 pub struct Session {
     prompt: DefaultPrompt,
