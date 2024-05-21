@@ -1,14 +1,5 @@
 use derive_more::Display;
 
-pub type Span = std::ops::Range<usize>;
-
-pub static KEYWORDS: phf::Map<&str, Token> = phf::phf_map! {
-    "let" => Token::Let,
-    "fn" => Token::Fn,
-    "true" => Token::Bool(true),
-    "false" => Token::Bool(false),
-};
-
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Token<'source> {
     #[display(fmt = "{}", _0)]
@@ -79,4 +70,17 @@ pub enum Token<'source> {
     Let,
     #[display(fmt = "fn")]
     Fn,
+}
+
+impl<'source> Token<'source> {
+    pub fn get_keyword(str: impl AsRef<str>) -> Option<Self> {
+        static KEYWORDS: phf::Map<&str, Token> = phf::phf_map! {
+            "let" => Token::Let,
+            "fn" => Token::Fn,
+            "true" => Token::Bool(true),
+            "false" => Token::Bool(false),
+        };
+
+        KEYWORDS.get(str.as_ref()).cloned()
+    }
 }

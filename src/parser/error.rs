@@ -1,20 +1,63 @@
+use std::num::{IntErrorKind, ParseFloatError, ParseIntError};
+
 use ariadne::{Color, Label, Report, ReportKind};
 
-use crate::parser::token::Span;
+use crate::parser::Span;
 
-pub type PResult<'source, T> = Result<T, PError<'source>>;
+pub type PResult<T> = Result<T, PError>;
 
-#[derive(Debug)]
-pub enum PError<'source> {
-    InvalidToken { part: &'source str, span: Span },
-    UnclosedString { quote: &'source str, span: Span },
+#[derive(Debug, Clone)]
+#[repr(u8)]
+pub enum PError {
+    EndOfLine {
+        expected: String,
+        pos: usize,
+    },
+    InvalidToken {
+        part: String,
+        span: Span,
+    },
+    UnclosedString {
+        quote: String,
+        span: Span,
+    },
+    ParseIntError {
+        error: ParseIntError,
+        span: Span,
+    },
+    ParseFloatError {
+        error: ParseFloatError,
+        span: Span,
+    },
+    UnexpectedToken {
+        expected: String,
+        found: String,
+        span: Span,
+    },
 }
 
-impl<'source> PError<'source> {
+impl PError {
+    pub fn code(&self) -> u8 {
+        // From the docs for discriminants
+        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
+        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
+        // field, so we can read the discriminant without offsetting the pointer.
+        unsafe { *<*const _>::from(self).cast::<u8>() }
+    }
+
     pub fn to_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Span)> {
         match self {
+            PError::EndOfLine { expected, pos } => Report::build(ReportKind::Error, id, *pos)
+                .with_code(format!("C-{:0>3}", self.code()))
+                .with_message("Unexpected Line End")
+                .with_label(
+                    Label::new((id, *pos..*pos))
+                        .with_color(Color::Red)
+                        .with_message(format!("expected '{expected}', found end of line")),
+                )
+                .finish(),
             PError::InvalidToken { part, span } => Report::build(ReportKind::Error, id, span.start)
-                .with_code("C-001")
+                .with_code(format!("C-{:0>3}", self.code()))
                 .with_message("Invalid Token")
                 .with_label(
                     Label::new((id, span.clone()))
@@ -24,7 +67,7 @@ impl<'source> PError<'source> {
                 .finish(),
             PError::UnclosedString { quote, span } => {
                 Report::build(ReportKind::Error, id, span.start)
-                    .with_code("C-002")
+                    .with_code(format!("C-{:0>3}", self.code()))
                     .with_message("Unclosed String")
                     .with_labels([
                         Label::new((id, span.clone()))
@@ -36,6 +79,49 @@ impl<'source> PError<'source> {
                     ])
                     .finish()
             }
+            PError::ParseIntError { error, span } => {
+                Report::build(ReportKind::Error, id, span.start)
+                    .with_code(format!("C-{:0>3}", self.code()))
+                    .with_message("Invalid Integer")
+                    .with_label(
+                        Label::new((id, span.clone()))
+                            .with_color(Color::Red)
+                            .with_message(match error.kind() {
+                                IntErrorKind::PosOverflow => {
+                                    format!("too large. must be at max 9,223,372,036,854,775,807")
+                                }
+                                IntErrorKind::NegOverflow => {
+                                    format!("too small. must be at min -9,223,372,036,854,775,808")
+                                }
+                                _ => format!("{error}"),
+                            }),
+                    )
+                    .finish()
+            }
+            PError::ParseFloatError { error, span } => {
+                Report::build(ReportKind::Error, id, span.start)
+                    .with_code(format!("C-{:0>3}", self.code()))
+                    .with_message("Invalid Integer")
+                    .with_label(
+                        Label::new((id, span.clone()))
+                            .with_color(Color::Red)
+                            .with_message(format!("{error}")),
+                    )
+                    .finish()
+            }
+            PError::UnexpectedToken {
+                expected,
+                found,
+                span,
+            } => Report::build(ReportKind::Error, id, span.start)
+                .with_code(format!("C-{:0>3}", self.code()))
+                .with_message("Unexpected Token")
+                .with_label(
+                    Label::new((id, span.clone()))
+                        .with_color(Color::Red)
+                        .with_message(format!("expected {expected}, found {found}")),
+                )
+                .finish(),
         }
     }
 }

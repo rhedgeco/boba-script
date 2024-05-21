@@ -8,10 +8,7 @@ use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
 
 use crate::parser::{PError, PResult};
 
-use super::{
-    token::{self, Span},
-    Token,
-};
+use super::{Span, Token};
 
 pub type LexResult<'source> = Option<(Result<Token<'source>, &'source str>, Span)>;
 
@@ -65,7 +62,7 @@ impl<'source> Iterator for TokenLines<'source> {
 }
 
 pub struct TokenLine<'source> {
-    peeked: Option<PResult<'source, (Token<'source>, Span)>>,
+    peeked: Option<(Token<'source>, Span)>,
     parts: Peekable<GraphemeIndices<'source>>,
     line: &'source str,
     indent: usize,
@@ -81,25 +78,55 @@ impl<'source> TokenLine<'source> {
         self.indent
     }
 
-    pub fn peek(&mut self) -> Option<&PResult<(Token<'source>, Span)>> {
+    pub fn span(&self) -> Span {
+        self.start..self.start + self.line.len()
+    }
+
+    pub fn peek(&mut self) -> Option<PResult<&(Token<'source>, Span)>> {
         if self.peeked.is_some() {
-            return self.peeked.as_ref();
+            return Some(Ok(self.peeked.as_ref().unwrap()));
         }
 
-        let peek = self.next()?;
-        self.peeked = Some(peek);
-        self.peeked.as_ref()
+        self.peeked = match self.next() {
+            Some(Ok(items)) => Some(items),
+            Some(Err(error)) => return Some(Err(error)),
+            None => None,
+        };
+
+        let peeked = self.peeked.as_ref()?;
+        Some(Ok(peeked))
+    }
+
+    pub fn next_expect(&mut self, expect: impl Into<String>) -> PResult<(Token<'source>, Span)> {
+        match self.next() {
+            Some(result) => result,
+            None => Err(PError::EndOfLine {
+                expected: expect.into(),
+                pos: self.start + self.line.len(),
+            }),
+        }
+    }
+
+    pub fn peek_expect(&mut self, expect: impl Into<String>) -> PResult<&(Token<'source>, Span)> {
+        let line_end = self.start + self.line.len();
+        match self.peek() {
+            Some(result) => result,
+            None => Err(PError::EndOfLine {
+                expected: expect.into(),
+                pos: line_end,
+            }),
+        }
     }
 }
 
 impl<'source> Iterator for TokenLine<'source> {
-    type Item = PResult<'source, (Token<'source>, Span)>;
+    type Item = PResult<(Token<'source>, Span)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // get the next part and index
         let (part_index, part) = match self.peeked.take() {
             // if it was already calculated, return it
-            Some(result) => return Some(result),
+            Some(items) => return Some(Ok(items)),
             None => self.parts.next()?,
         };
 
@@ -193,15 +220,18 @@ impl<'source> Iterator for TokenLine<'source> {
             // STRINGS
             quote @ "'" | quote @ "\"" => loop {
                 match self.parts.peek() {
-                    None => {
-                        let span = span_start..self.start + self.line.len();
-                        return Some(Err(PError::UnclosedString { quote, span }));
-                    }
                     Some((quote_index, part)) if *part == quote => {
                         let str_span = part_index + quote.len()..*quote_index;
                         let span = span_start + quote.len()..self.start + quote_index;
                         self.parts.next(); // consume token
                         return Some(Ok((Token::String(&self.line[str_span]), span)));
+                    }
+                    None => {
+                        let span = span_start..self.start + self.line.len();
+                        return Some(Err(PError::UnclosedString {
+                            quote: quote.into(),
+                            span,
+                        }));
                     }
                     Some(_) => {
                         self.parts.next(); // consume token
@@ -223,8 +253,8 @@ impl<'source> Iterator for TokenLine<'source> {
                         let span = span_start..self.start + ident_end;
 
                         // check for keywords
-                        return match token::KEYWORDS.get(str) {
-                            Some(token) => Some(Ok((*token, span))),
+                        return match Token::get_keyword(str) {
+                            Some(token) => Some(Ok((token, span))),
                             None => Some(Ok((Token::Ident(str), span))),
                         };
                     }
@@ -233,8 +263,8 @@ impl<'source> Iterator for TokenLine<'source> {
                         let span = span_start..self.start + self.line.len();
 
                         // check for keywords
-                        return match token::KEYWORDS.get(str) {
-                            Some(token) => Some(Ok((*token, span))),
+                        return match Token::get_keyword(str) {
+                            Some(token) => Some(Ok((token, span))),
                             None => Some(Ok((Token::Ident(str), span))),
                         };
                     }
@@ -292,7 +322,10 @@ impl<'source> Iterator for TokenLine<'source> {
             // INVALID TOKENS
             part => {
                 let span = span_start..span_start + part.len();
-                Some(Err(PError::InvalidToken { part, span }))
+                Some(Err(PError::InvalidToken {
+                    part: part.into(),
+                    span,
+                }))
             }
         }
     }
