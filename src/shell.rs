@@ -1,7 +1,6 @@
-use ariadne::Source;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::{ast::Statement, engine::types::Value, parser::TokenSource, Engine};
+use crate::TokenLines;
 
 pub struct Session {
     prompt: DefaultPrompt,
@@ -27,12 +26,11 @@ impl Session {
 
     pub fn start_console() {
         let mut shell = Session::new();
-        let mut engine = Engine::new();
         loop {
             let buffer = match shell.line_editor.read_line(&shell.prompt) {
-                Ok(Signal::Success(buffer)) => match buffer.len() {
+                Ok(Signal::Success(buffer)) => match buffer.trim().len() {
                     0 => continue,
-                    _ => Source::from(buffer),
+                    _ => ariadne::Source::from(buffer),
                 },
                 Ok(Signal::CtrlD) => {
                     println!("Closing Shell...");
@@ -48,50 +46,24 @@ impl Session {
                 }
             };
 
-            // create token source
-            let mut source = TokenSource::new(buffer.text());
+            let line = match TokenLines::new(buffer.text()).next() {
+                Some(line) => line,
+                None => continue,
+            };
 
-            // parse expression
-            match Statement::parse(&mut source) {
-                Err(error) => {
-                    error
-                        .as_ariadne("shell")
-                        .eprint(("shell", buffer.clone()))
-                        .unwrap();
+            for result in line {
+                match result {
+                    Ok((token, span)) => {
+                        let str = &buffer.text()[span];
+                        println!("'{str}' => {token:?}");
+                    }
+                    Err(error) => {
+                        error
+                            .to_ariadne("shell")
+                            .eprint(("shell", buffer.clone()))
+                            .unwrap();
+                    }
                 }
-                Ok(statement) => match statement {
-                    Statement::Expr(expr) => {
-                        match engine.eval(&expr) {
-                            Ok(value) => match value {
-                                Value::Unit => (), // do nothing with unit
-                                value => println!("{value}"),
-                            },
-                            Err(error) => {
-                                error
-                                    .as_ariadne("shell")
-                                    .eprint(("shell", buffer.clone()))
-                                    .unwrap();
-                                continue;
-                            }
-                        };
-                    }
-                    Statement::Assign(assign) => {
-                        // evaluate expression
-                        let value = match engine.eval(assign.expr()) {
-                            Ok(value) => value,
-                            Err(error) => {
-                                error
-                                    .as_ariadne("shell")
-                                    .eprint(("shell", buffer.clone()))
-                                    .unwrap();
-                                continue;
-                            }
-                        };
-
-                        // assign variable
-                        engine.set_var(assign.ident().clone(), value);
-                    }
-                },
             }
         }
     }
