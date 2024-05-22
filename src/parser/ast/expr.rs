@@ -1,20 +1,17 @@
-use crate::parser::{PError, PResult, Span, Token, TokenLine};
+use crate::parser::{PError, PResult, Token, TokenLine};
 
-use super::{
-    span::{SpanPrefix, Spanned, Spanner},
-    utils,
-};
+use super::{utils, Node};
 
 pub enum Expr {
     // values
-    Var(Spanner<String>),
-    Bool(Spanner<bool>),
-    Int(Spanner<i64>),
-    Float(Spanner<f64>),
-    String(Spanner<String>),
+    Var(String),
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    String(String),
 
     // math operations
-    Neg(SpanPrefix<Box<Expr>>),
+    Neg(Box<Expr>),
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
     Mul(Box<Expr>, Box<Expr>),
@@ -23,7 +20,7 @@ pub enum Expr {
     Pow(Box<Expr>, Box<Expr>),
 
     // boolean operations
-    Not(SpanPrefix<Box<Expr>>),
+    Not(Box<Expr>),
     Eq(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
     Gt(Box<Expr>, Box<Expr>),
@@ -32,69 +29,41 @@ pub enum Expr {
     GtEq(Box<Expr>, Box<Expr>),
 
     // walrus
-    Walrus(Spanner<String>, Box<Expr>),
+    Walrus(Node<String>, Box<Expr>),
 
     // ternary
     Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
-impl Spanned for Expr {
-    fn span(&self) -> Span {
-        match self {
-            Expr::Var(v) => v.span(),
-            Expr::Bool(v) => v.span(),
-            Expr::Int(v) => v.span(),
-            Expr::Float(v) => v.span(),
-            Expr::String(v) => v.span(),
-            Expr::Neg(e) => e.span(),
-            Expr::Add(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Sub(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Mul(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Div(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Mod(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Pow(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Not(e) => e.span(),
-            Expr::Eq(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Lt(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Gt(e1, e2) => e1.span().start..e2.span().end,
-            Expr::NEq(e1, e2) => e1.span().start..e2.span().end,
-            Expr::LtEq(e1, e2) => e1.span().start..e2.span().end,
-            Expr::GtEq(e1, e2) => e1.span().start..e2.span().end,
-            Expr::Walrus(v, e) => v.span().start..e.span().end,
-            Expr::Ternary(e1, _, e2) => e1.span().start..e2.span().end,
-        }
-    }
-}
-
 impl Expr {
-    pub fn parse_atom(tokens: &mut TokenLine) -> PResult<Self> {
+    pub fn parse_atom(tokens: &mut TokenLine) -> PResult<Node<Self>> {
         match tokens.next_expect("expression")? {
             // values
-            (Token::Ident(str), span) => Ok(Expr::Var(Spanner::new(span, str.into()))),
-            (Token::Bool(bool), span) => Ok(Expr::Bool(Spanner::new(span, bool))),
-            (Token::UInt(str), span) => Ok(Expr::Int(utils::parse_int(span, str)?)),
-            (Token::UFloat(str), span) => Ok(Expr::Float(utils::parse_float(span, str)?)),
-            (Token::String(str), span) => Ok(Expr::String(Spanner::new(span, str.into()))),
+            (Token::Ident(str), span) => Ok(Node::new(span, Expr::Var(str.into()))),
+            (Token::Bool(bool), span) => Ok(Node::new(span, Expr::Bool(bool))),
+            (Token::UInt(str), span) => Ok(utils::parse_int(span, str)?),
+            (Token::UFloat(str), span) => Ok(utils::parse_float(span, str)?),
+            (Token::String(str), span) => Ok(Node::new(span, Expr::String(str.into()))),
 
             // prefix expressions
             (Token::Not, span) => {
                 let nested = Self::parse_atom(tokens)?;
-                let offset = nested.span().start - span.start;
-                Ok(Expr::Not(SpanPrefix::new(offset, Box::new(nested))))
+                let span = span.start..nested.span().end;
+                Ok(Node::new(span, Expr::Not(Box::new(nested.into_inner()))))
             }
             (Token::Sub, span) => match tokens.peek_expect("expression")? {
-                (Token::UInt(str), sub_span) => Ok(Expr::Int(utils::parse_int(
-                    span.start..sub_span.end,
+                (Token::UInt(str), num_span) => Ok(utils::parse_int(
+                    span.start..num_span.end,
                     format!("-{str}"),
-                )?)),
-                (Token::UFloat(str), sub_span) => Ok(Expr::Float(utils::parse_float(
-                    span.start..sub_span.end,
+                )?),
+                (Token::UFloat(str), num_span) => Ok(utils::parse_float(
+                    span.start..num_span.end,
                     format!("-{str}"),
-                )?)),
+                )?),
                 _ => {
                     let nested = Self::parse_atom(tokens)?;
-                    let offset = nested.span().start - span.start;
-                    Ok(Expr::Neg(SpanPrefix::new(offset, Box::new(nested))))
+                    let span = span.start..nested.span().end;
+                    Ok(Node::new(span, Expr::Neg(Box::new(nested.into_inner()))))
                 }
             },
 
