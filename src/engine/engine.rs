@@ -138,13 +138,37 @@ impl Engine {
             })
     }
 
-    pub fn eval_func(&mut self, ident: &Node<String>) -> Result<Value, RunError> {
+    pub fn eval_func(
+        &mut self,
+        ident: &Node<String>,
+        values: Vec<Value>,
+    ) -> Result<Value, RunError> {
+        // get and validate function
+        let func = self.get_func(ident)?;
+        if func.params.len() < values.len() {
+            return Err(RunError::ParameterCount {
+                expected: func.params.len(),
+                found: values.len(),
+                span: ident.span().clone(),
+            });
+        }
+
+        let func = func.clone();
         self.push_scope(); // create scope for function
-        let func = self.get_func(ident)?.clone();
+        for (param, value) in func.params.iter().zip(values) {
+            // init all variables with their values
+            self.init_var(param.deref(), value);
+        }
 
         let mut output = Value::None;
-        for statement in func.body {
-            output = self.eval_statement(&statement)?;
+        for statement in func.body.clone() {
+            match self.eval_statement(&statement) {
+                Ok(value) => output = value,
+                Err(e) => {
+                    self.pop_scope(); // ensure scope is popped before error
+                    return Err(e);
+                }
+            }
         }
 
         Ok(output)
@@ -195,7 +219,13 @@ impl Engine {
             Expr::Int(v) => Ok(Value::Int(*v)),
             Expr::Float(v) => Ok(Value::Float(*v)),
             Expr::String(v) => Ok(Value::String(v.clone())),
-            Expr::Call(ident) => self.eval_func(ident),
+            Expr::Call(ident, params) => {
+                let mut values = Vec::new();
+                for expr in params {
+                    values.push(self.eval(expr)?);
+                }
+                self.eval_func(ident, values)
+            }
             Expr::Neg(inner) => {
                 let inner = self.eval(inner)?;
                 self.eval_unary(UnaryOpType::Neg, inner, expr.span())

@@ -63,7 +63,7 @@ impl PError {
                     .with_label(
                         Label::new((id, *pos..*pos))
                             .with_color(Color::Red)
-                            .with_message(format!("expected '{expected}', found end of line")),
+                            .with_message(format!("expected {expected}, found end of line")),
                     )
                     .finish()
             }
@@ -73,7 +73,7 @@ impl PError {
                 .with_label(
                     Label::new((id, span.clone()))
                         .with_color(Color::Red)
-                        .with_message(format!("invalid token '{part}'")),
+                        .with_message(format!("invalid token {part}")),
                 )
                 .finish(),
             PError::UnclosedString { quote, span } => {

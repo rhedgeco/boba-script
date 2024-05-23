@@ -31,6 +31,11 @@ pub enum RunError {
         found: String,
         span: Span,
     },
+    ParameterCount {
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
 }
 
 impl RunError {
@@ -101,6 +106,20 @@ impl RunError {
                     Label::new((id, span.clone()))
                         .with_color(Color::Red)
                         .with_message(format!("expected {expected}, found {found}")),
+                ),
+            RunError::ParameterCount {
+                expected,
+                found,
+                span,
+            } => Report::build(ReportKind::Error, id, span.start)
+                .with_message("Wrong Parameter Count")
+                .with_code(format!("C-{:0>3}", self.code()))
+                .with_label(
+                    Label::new((id, span.clone()))
+                        .with_color(Color::Red)
+                        .with_message(format!(
+                            "function expects {expected} parameters, found {found}"
+                        )),
                 ),
         }
         .finish()

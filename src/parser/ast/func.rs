@@ -5,6 +5,7 @@ use super::{Expr, Node, Statement};
 #[derive(Debug, Clone)]
 pub struct Func {
     pub ident: Node<String>,
+    pub params: Vec<Node<String>>,
     pub body: Vec<Node<Statement>>,
 }
 
@@ -46,6 +47,23 @@ impl Func {
             }
         };
 
+        // capture parameters
+        let mut params = Vec::new();
+        while let (Token::Ident(param), span) = tokens.expect_peek("parameter or ')'")? {
+            // push parameter
+            params.push(Node::new(span.clone(), param.to_string()));
+            tokens.next(); // consume ident
+
+            // capture comma
+            match tokens.expect_peek("',' or ')'")? {
+                (Token::Comma, _) => {
+                    tokens.next(); // consume comma
+                }
+                // if no comma found, then there are no more params
+                _ => break,
+            }
+        }
+
         // capture close paren
         match tokens.expect_next("')'")? {
             (Token::CloseParen, _) => (),
@@ -75,6 +93,7 @@ impl Func {
             start..end,
             Self {
                 ident,
+                params,
                 body: Vec::new(),
             },
         );

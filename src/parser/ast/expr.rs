@@ -11,7 +11,7 @@ pub enum Expr {
     String(String),
 
     // function
-    Call(Node<String>),
+    Call(Node<String>, Vec<Node<Expr>>),
 
     // math operations
     Neg(Box<Node<Expr>>),
@@ -70,7 +70,24 @@ impl Expr {
             Some(Ok((Token::OpenParen, _))) => {
                 tokens.next(); // consume open paren
 
-                // TODO: parse parameters
+                // check for close paren or parameters
+                let mut params = Vec::new();
+                match tokens.expect_peek("expression or ')'")? {
+                    (Token::CloseParen, _) => (),
+                    _ => loop {
+                        // parse expression for parameter
+                        params.push(Self::parse(tokens)?);
+
+                        // capture comma
+                        match tokens.expect_peek("',' or ')'")? {
+                            (Token::Comma, _) => {
+                                tokens.next(); // consume comma
+                            }
+                            // if no comma found, then there are no more params
+                            _ => break,
+                        }
+                    },
+                }
 
                 // capture close paren
                 let end = match tokens.expect_next("')'")? {
@@ -85,7 +102,7 @@ impl Expr {
                 };
 
                 let start = lhs.span().start;
-                Ok(Node::new(start..end, Self::Call(lhs)))
+                Ok(Node::new(start..end, Self::Call(lhs, params)))
             }
             Some(_) | None => {
                 let (span, ident) = lhs.into_parts();
