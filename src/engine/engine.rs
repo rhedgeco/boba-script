@@ -3,7 +3,7 @@ use std::ops::Deref;
 use derive_more::Display;
 
 use crate::parser::{
-    ast::{Expr, Node},
+    ast::{Expr, Func, Node},
     Span,
 };
 
@@ -80,6 +80,13 @@ impl Engine {
         }
     }
 
+    pub fn insert_func(&mut self, func: Func) {
+        match self.nested_scopes.last_mut() {
+            None => self.global_scope.init_func(func),
+            Some(scope) => scope.init_func(func),
+        }
+    }
+
     pub fn get_var(&self, ident: &Node<String>) -> Result<&Value, RunError> {
         // try all nested scopes first
         for scope in self.nested_scopes.iter().rev() {
@@ -97,6 +104,23 @@ impl Engine {
             })
     }
 
+    pub fn get_func(&self, ident: &Node<String>) -> Result<&Func, RunError> {
+        // try all nested scopes first
+        for scope in self.nested_scopes.iter().rev() {
+            if let Some(func) = scope.get_func(ident.deref()) {
+                return Ok(func);
+            }
+        }
+
+        // then pull from global scope
+        self.global_scope
+            .get_func(ident.deref())
+            .ok_or_else(|| RunError::UnknownVariable {
+                ident: ident.deref().into(),
+                span: ident.span().clone(),
+            })
+    }
+
     pub fn get_var_mut(&mut self, ident: &Node<String>) -> Result<&mut Value, RunError> {
         // try all nested scopes first
         for scope in self.nested_scopes.iter_mut().rev() {
@@ -108,6 +132,23 @@ impl Engine {
         // then pull from global scope
         self.global_scope
             .get_var_mut(ident.deref())
+            .ok_or_else(|| RunError::UnknownVariable {
+                ident: ident.deref().into(),
+                span: ident.span().clone(),
+            })
+    }
+
+    pub fn get_func_mut(&mut self, ident: &Node<String>) -> Result<&mut Func, RunError> {
+        // try all nested scopes first
+        for scope in self.nested_scopes.iter_mut().rev() {
+            if let Some(func) = scope.get_func_mut(ident.deref()) {
+                return Ok(func);
+            }
+        }
+
+        // then pull from global scope
+        self.global_scope
+            .get_func_mut(ident.deref())
             .ok_or_else(|| RunError::UnknownVariable {
                 ident: ident.deref().into(),
                 span: ident.span().clone(),

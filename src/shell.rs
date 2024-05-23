@@ -58,7 +58,8 @@ impl Session {
             };
 
             match Statement::parse(&mut line) {
-                Ok(statement) => match statement.deref() {
+                Ok(statement) => match statement.into_item() {
+                    Statement::Func(func) => engine.insert_func(func.into_item()),
                     Statement::LetAssign(var, expr) => {
                         let value = match engine.eval(&expr) {
                             Ok(value) => value,
@@ -85,7 +86,7 @@ impl Session {
                             }
                         };
 
-                        match engine.get_var_mut(var) {
+                        match engine.get_var_mut(&var) {
                             Ok(old_value) => *old_value = new_value,
                             Err(error) => {
                                 error

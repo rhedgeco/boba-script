@@ -1,11 +1,13 @@
 use crate::parser::{PError, PResult, Token, TokenLine};
 
-use super::{Expr, Node};
+use super::{Expr, Func, Node};
 
+#[derive(Debug, Clone)]
 pub enum Statement {
     Assign(Node<String>, Node<Expr>),
     LetAssign(Node<String>, Node<Expr>),
     Expr(Node<Expr>),
+    Func(Node<Func>),
 }
 
 impl Statement {
@@ -71,6 +73,10 @@ impl Statement {
                         Ok(Node::new(expr.span().clone(), Self::Expr(expr)))
                     }
                 }
+            }
+            (Token::Fn, _) => {
+                let func = Func::parse(tokens)?;
+                Ok(Node::new(func.span().clone(), Self::Func(func)))
             }
             _ => {
                 let expr = Expr::parse(tokens)?;

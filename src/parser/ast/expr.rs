@@ -1,6 +1,6 @@
 use crate::parser::{ast::Node, PError, PResult, Span, Token, TokenLine};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     // values
     None,
