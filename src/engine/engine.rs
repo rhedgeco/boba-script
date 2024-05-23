@@ -215,10 +215,10 @@ impl Engine {
     pub fn eval(&mut self, expr: &Node<Expr>) -> Result<Value, RunError> {
         match expr.deref() {
             Expr::None => Ok(Value::None),
-            Expr::Bool(v) => Ok(Value::Bool(*v)),
-            Expr::Int(v) => Ok(Value::Int(*v)),
-            Expr::Float(v) => Ok(Value::Float(*v)),
-            Expr::String(v) => Ok(Value::String(v.clone())),
+            Expr::Bool(v) => Ok(Value::Bool(*v.deref())),
+            Expr::Int(v) => Ok(Value::Int(*v.deref())),
+            Expr::Float(v) => Ok(Value::Float(*v.deref())),
+            Expr::String(v) => Ok(Value::String(v.deref().clone())),
             Expr::Call(ident, params) => {
                 let mut values = Vec::new();
                 for expr in params {
@@ -304,12 +304,11 @@ impl Engine {
                 let rhs = self.eval(rhs)?;
                 self.eval_binary(lhs, BinaryOpType::Or, rhs, expr.span())
             }
-            Expr::Var(ident) => self
-                .get_var(&Node::new(expr.span().clone(), ident.clone()))
-                .cloned(),
+            Expr::Var(ident) => self.get_var(ident).cloned(),
             Expr::Walrus(ident, assign_expr) => {
                 let new_value = self.eval(&assign_expr)?;
-                *self.get_var_mut(ident)? = new_value.clone();
+                let old_value = self.get_var_mut(ident)?;
+                *old_value = new_value.clone();
                 Ok(new_value)
             }
             Expr::Ternary(lhs, cond, rhs) => {

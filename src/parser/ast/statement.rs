@@ -47,29 +47,26 @@ impl Statement {
                 Ok(Node::new(start..rhs.span().end, Self::LetAssign(lhs, rhs)))
             }
             (Token::Ident(ident), span) => {
-                let span = span.clone();
-                let var = ident.to_string();
+                let ident = Node::new(span.clone(), ident.to_string());
                 tokens.next(); // consume ident
 
                 match tokens.peek() {
                     Some(Err(error)) => Err(error),
                     None => Ok(Node::new(
-                        span.clone(),
-                        Self::Expr(Node::new(span, Expr::Var(var))),
+                        ident.span().clone(),
+                        Self::Expr(Node::new(ident.span().clone(), Expr::Var(ident))),
                     )),
                     Some(Ok((Token::Assign, _))) => {
-                        let lhs = Node::new(span, var);
                         tokens.next(); // consume assign
                         let rhs = Expr::parse(tokens)?;
                         tokens.expect_end()?;
                         Ok(Node::new(
-                            lhs.span().start..rhs.span().end,
-                            Self::Assign(lhs, rhs),
+                            ident.span().start..rhs.span().end,
+                            Self::Assign(ident, rhs),
                         ))
                     }
                     Some(Ok(_)) => {
-                        let lhs = Node::new(span, var);
-                        let lhs = Expr::parse_ident(lhs, tokens)?;
+                        let lhs = Expr::parse_ident(ident, tokens)?;
                         let expr = Expr::parse_with_lhs(lhs, tokens)?;
                         tokens.expect_end()?;
                         Ok(Node::new(expr.span().clone(), Self::Expr(expr)))

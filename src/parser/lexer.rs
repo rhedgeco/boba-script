@@ -241,7 +241,7 @@ impl<'source> Iterator for TokenLine<'source> {
                 match self.parts.peek() {
                     Some((quote_index, part)) if *part == quote => {
                         let str_span = part_index + quote.len()..*quote_index;
-                        let span = span_start + quote.len()..self.start + quote_index;
+                        let span = span_start..self.start + quote_index + quote.len();
                         self.parts.next(); // consume token
                         return Some(Ok((Token::String(&self.line[str_span]), span)));
                     }

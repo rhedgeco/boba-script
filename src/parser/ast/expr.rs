@@ -4,11 +4,11 @@ use crate::parser::{ast::Node, PError, PResult, Span, Token, TokenLine};
 pub enum Expr {
     // values
     None,
-    Var(String),
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    String(String),
+    Var(Node<String>),
+    Bool(Node<bool>),
+    Int(Node<i64>),
+    Float(Node<f64>),
+    String(Node<String>),
 
     // function
     Call(Node<String>, Vec<Node<Expr>>),
@@ -44,14 +44,14 @@ impl Expr {
     fn parse_int(span: Span, str: impl AsRef<str>) -> PResult<Node<Expr>> {
         match str.as_ref().parse() {
             Err(error) => Err(PError::ParseIntError { error, span }),
-            Ok(value) => Ok(Node::new(span, Expr::Int(value))),
+            Ok(value) => Ok(Node::new(span.clone(), Expr::Int(Node::new(span, value)))),
         }
     }
 
     fn parse_float(span: Span, str: impl AsRef<str>) -> PResult<Node<Expr>> {
         match str.as_ref().parse() {
             Err(error) => Err(PError::ParseFloatError { error, span }),
-            Ok(value) => Ok(Node::new(span, Expr::Float(value))),
+            Ok(value) => Ok(Node::new(span.clone(), Expr::Float(Node::new(span, value)))),
         }
     }
 
@@ -104,10 +104,7 @@ impl Expr {
                 let start = lhs.span().start;
                 Ok(Node::new(start..end, Self::Call(lhs, params)))
             }
-            Some(_) | None => {
-                let (span, ident) = lhs.into_parts();
-                Ok(Node::new(span, Expr::Var(ident)))
-            }
+            Some(_) | None => Ok(Node::new(lhs.span().clone(), Expr::Var(lhs))),
         }
     }
 
@@ -115,10 +112,15 @@ impl Expr {
         match tokens.expect_next("expression")? {
             // values
             (Token::None, span) => Ok(Node::new(span, Expr::None)),
-            (Token::Bool(bool), span) => Ok(Node::new(span, Expr::Bool(bool))),
             (Token::UInt(str), span) => Ok(Self::parse_int(span, str)?),
             (Token::UFloat(str), span) => Ok(Self::parse_float(span, str)?),
-            (Token::String(str), span) => Ok(Node::new(span, Expr::String(str.into()))),
+            (Token::Bool(bool), span) => {
+                Ok(Node::new(span.clone(), Expr::Bool(Node::new(span, bool))))
+            }
+            (Token::String(str), span) => Ok(Node::new(
+                span.clone(),
+                Expr::String(Node::new(span, str.into())),
+            )),
 
             // variables and functions
             (Token::Ident(str), span) => {
@@ -319,7 +321,7 @@ impl Expr {
         tokens.next();
 
         let lhs = match lhs.into_parts() {
-            (span, Expr::Var(var)) => Node::new(span, var),
+            (_, Expr::Var(var)) => var,
             (expr_span, _) => {
                 return Err(PError::InvalidWalrusAssignment {
                     walrus_span,
