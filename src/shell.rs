@@ -1,6 +1,9 @@
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::parser::{ast::Expr, TokenLines};
+use crate::{
+    parser::{ast::Expr, TokenLines},
+    Engine,
+};
 
 pub struct Session {
     prompt: DefaultPrompt,
@@ -25,6 +28,7 @@ impl Session {
     }
 
     pub fn start_console() {
+        let mut engine = Engine::new();
         let mut shell = Session::new();
         loop {
             let buffer = match shell.line_editor.read_line(&shell.prompt) {
@@ -52,7 +56,13 @@ impl Session {
             };
 
             match Expr::parse(&mut line) {
-                Ok(expr) => println!("{expr:?}"),
+                Ok(expr) => match engine.eval(&expr) {
+                    Ok(value) => println!("{value}"),
+                    Err(error) => error
+                        .to_ariadne("shell")
+                        .eprint(("shell", buffer.clone()))
+                        .unwrap(),
+                },
                 Err(error) => {
                     error
                         .to_ariadne("shell")

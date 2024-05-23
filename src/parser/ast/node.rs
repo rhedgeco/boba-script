@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::parser::Span;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node<T> {
     span: Span,
     item: T,
