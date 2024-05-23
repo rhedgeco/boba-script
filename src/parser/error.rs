@@ -46,12 +46,12 @@ pub enum PError {
 }
 
 impl PError {
-    pub fn code(&self) -> u8 {
+    pub fn code(&self) -> usize {
         // From the docs for discriminants
         // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
         // between `repr(C)` structs, each of which has the `u8` discriminant as its first
         // field, so we can read the discriminant without offsetting the pointer.
-        unsafe { *<*const _>::from(self).cast::<u8>() }
+        unsafe { *<*const _>::from(self).cast::<u8>() as usize + 1 }
     }
 
     pub fn to_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Span)> {
