@@ -1,7 +1,4 @@
-use crate::parser::{
-    ast::{utils, Node},
-    PError, PResult, Token, TokenLine,
-};
+use crate::parser::{ast::Node, PError, PResult, Span, Token, TokenLine};
 
 #[derive(Debug)]
 pub enum Expr {
@@ -41,6 +38,20 @@ pub enum Expr {
 }
 
 impl Expr {
+    fn parse_int(span: Span, str: impl AsRef<str>) -> PResult<Node<Expr>> {
+        match str.as_ref().parse() {
+            Err(error) => Err(PError::ParseIntError { error, span }),
+            Ok(value) => Ok(Node::new(span, Expr::Int(value))),
+        }
+    }
+
+    fn parse_float(span: Span, str: impl AsRef<str>) -> PResult<Node<Expr>> {
+        match str.as_ref().parse() {
+            Err(error) => Err(PError::ParseFloatError { error, span }),
+            Ok(value) => Ok(Node::new(span, Expr::Float(value))),
+        }
+    }
+
     pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
         let lhs = Self::parse_atom(tokens)?;
         Self::parse_with(lhs, tokens)
@@ -56,8 +67,8 @@ impl Expr {
             (Token::None, span) => Ok(Node::new(span, Expr::None)),
             (Token::Ident(str), span) => Ok(Node::new(span, Expr::Var(str.into()))),
             (Token::Bool(bool), span) => Ok(Node::new(span, Expr::Bool(bool))),
-            (Token::UInt(str), span) => Ok(utils::parse_int(span, str)?),
-            (Token::UFloat(str), span) => Ok(utils::parse_float(span, str)?),
+            (Token::UInt(str), span) => Ok(Self::parse_int(span, str)?),
+            (Token::UFloat(str), span) => Ok(Self::parse_float(span, str)?),
             (Token::String(str), span) => Ok(Node::new(span, Expr::String(str.into()))),
 
             // prefix expressions
