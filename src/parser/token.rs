@@ -32,6 +32,10 @@ pub enum Token<'source> {
     Walrus,
 
     // boolean operators
+    #[display(fmt = "and")]
+    And,
+    #[display(fmt = "or")]
+    Or,
     #[display(fmt = "!")]
     Not,
     #[display(fmt = "==")]
@@ -79,6 +83,8 @@ impl<'source> Token<'source> {
             "fn" => Token::Fn,
             "true" => Token::Bool(true),
             "false" => Token::Bool(false),
+            "and" => Token::And,
+            "or" => Token::Or,
         };
 
         KEYWORDS.get(str.as_ref()).cloned()

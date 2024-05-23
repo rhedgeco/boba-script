@@ -34,6 +34,15 @@ pub enum PError {
         found: String,
         span: Span,
     },
+    UnclosedBrace {
+        found: String,
+        open: Span,
+        close: Span,
+    },
+    InvalidWalrusAssignment {
+        walrus_span: Span,
+        expr_span: Span,
+    },
 }
 
 impl PError {
@@ -121,6 +130,35 @@ impl PError {
                         .with_color(Color::Red)
                         .with_message(format!("expected {expected}, found {found}")),
                 )
+                .finish(),
+            PError::UnclosedBrace { found, open, close } => {
+                Report::build(ReportKind::Error, id, open.start)
+                    .with_code(format!("C-{:0>3}", self.code()))
+                    .with_message("Unclosed Brace")
+                    .with_labels([
+                        Label::new((id, open.clone()))
+                            .with_color(Color::Red)
+                            .with_message(format!("opening brace has no closing brace")),
+                        Label::new((id, close.clone()))
+                            .with_color(Color::Cyan)
+                            .with_message(format!("expected closing brace here, found {found}")),
+                    ])
+                    .finish()
+            }
+            PError::InvalidWalrusAssignment {
+                walrus_span,
+                expr_span,
+            } => Report::build(ReportKind::Error, id, expr_span.start)
+                .with_code(format!("C-{:0>3}", self.code()))
+                .with_message("Invalid Walrus Assignment")
+                .with_labels([
+                    Label::new((id, walrus_span.clone()))
+                        .with_color(Color::Red)
+                        .with_message(format!("cannot assign expression to another expression")),
+                    Label::new((id, expr_span.clone()))
+                        .with_color(Color::Cyan)
+                        .with_message(format!("expected variable, found expression")),
+                ])
                 .finish(),
         }
     }

@@ -33,7 +33,7 @@ impl<'source> TokenLines<'source> {
 }
 
 impl<'source> Iterator for TokenLines<'source> {
-    type Item = TokenLine<'source>;
+    type Item = (usize, TokenLine<'source>);
 
     fn next(&mut self) -> Option<Self::Item> {
         let line = self.lines.next()?; // get the next line of code
@@ -51,13 +51,15 @@ impl<'source> Iterator for TokenLines<'source> {
         }
 
         // return new token line
-        Some(TokenLine {
-            peeked: None,
-            parts,
+        Some((
             indent,
-            line,
-            start,
-        })
+            TokenLine {
+                peeked: None,
+                parts,
+                line,
+                start,
+            },
+        ))
     }
 }
 
@@ -65,7 +67,6 @@ pub struct TokenLine<'source> {
     peeked: Option<(Token<'source>, Span)>,
     parts: Peekable<GraphemeIndices<'source>>,
     line: &'source str,
-    indent: usize,
     start: usize,
 }
 
@@ -74,12 +75,16 @@ impl<'source> TokenLine<'source> {
         self.line
     }
 
-    pub fn indent(&self) -> usize {
-        self.indent
+    pub fn line_span(&self) -> Span {
+        self.line_start()..self.line_end()
     }
 
-    pub fn span(&self) -> Span {
-        self.start..self.start + self.line.len()
+    pub fn line_start(&self) -> usize {
+        self.start
+    }
+
+    pub fn line_end(&self) -> usize {
+        self.start + self.line.len()
     }
 
     pub fn peek(&mut self) -> Option<PResult<&(Token<'source>, Span)>> {
@@ -97,23 +102,25 @@ impl<'source> TokenLine<'source> {
         Some(Ok(peeked))
     }
 
-    pub fn next_expect(&mut self, expect: impl Into<String>) -> PResult<(Token<'source>, Span)> {
+    pub fn expect_next(&mut self, expect: impl Into<String>) -> PResult<(Token<'source>, Span)> {
         match self.next() {
-            Some(result) => result,
+            Some(Ok(items)) => Ok(items),
+            Some(Err(error)) => Err(error),
             None => Err(PError::EndOfLine {
-                expected: expect.into(),
                 pos: self.start + self.line.len(),
+                expected: expect.into(),
             }),
         }
     }
 
-    pub fn peek_expect(&mut self, expect: impl Into<String>) -> PResult<&(Token<'source>, Span)> {
-        let line_end = self.start + self.line.len();
+    pub fn expect_peek(&mut self, expect: impl Into<String>) -> PResult<&(Token<'source>, Span)> {
+        let pos = self.start + self.line.len();
         match self.peek() {
-            Some(result) => result,
+            Some(Ok(items)) => Ok(items),
+            Some(Err(error)) => Err(error),
             None => Err(PError::EndOfLine {
                 expected: expect.into(),
-                pos: line_end,
+                pos,
             }),
         }
     }
@@ -175,14 +182,6 @@ impl<'source> Iterator for TokenLine<'source> {
                 }
                 _ => Some(Ok((Token::Mul, span_start..span_start + part.len()))),
             },
-            ":" => match self.parts.peek() {
-                Some((i, part @ "=")) => {
-                    let end = i + part.len();
-                    self.parts.next(); // consume peeked token
-                    Some(Ok((Token::Walrus, span_start..end)))
-                }
-                _ => Some(Ok((Token::Colon, span_start..span_start + part.len()))),
-            },
             "!" => match self.parts.peek() {
                 Some((i, part @ "=")) => {
                     let end = i + part.len();
@@ -214,6 +213,14 @@ impl<'source> Iterator for TokenLine<'source> {
                     Some(Ok((Token::Eq, span_start..end)))
                 }
                 _ => Some(Ok((Token::Assign, span_start..span_start + part.len()))),
+            },
+            ":" => match self.parts.peek() {
+                Some((i, part @ "=")) => {
+                    let end = i + part.len();
+                    self.parts.next(); // consume peeked token
+                    Some(Ok((Token::Walrus, span_start..end)))
+                }
+                _ => Some(Ok((Token::Colon, span_start..span_start + part.len()))),
             },
 
             // -------

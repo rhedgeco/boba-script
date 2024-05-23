@@ -1,6 +1,6 @@
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use crate::parser::TokenLines;
+use crate::parser::{ast::Expr, TokenLines};
 
 pub struct Session {
     prompt: DefaultPrompt,
@@ -46,23 +46,18 @@ impl Session {
                 }
             };
 
-            let line = match TokenLines::new(buffer.text()).next() {
-                Some(line) => line,
+            let (_indent, mut line) = match TokenLines::new(buffer.text()).next() {
+                Some(line_data) => line_data,
                 None => continue,
             };
 
-            for result in line {
-                match result {
-                    Ok((token, span)) => {
-                        let str = &buffer.text()[span];
-                        println!("'{str}' => {token:?}");
-                    }
-                    Err(error) => {
-                        error
-                            .to_ariadne("shell")
-                            .eprint(("shell", buffer.clone()))
-                            .unwrap();
-                    }
+            match Expr::parse(&mut line) {
+                Ok(expr) => println!("{expr:?}"),
+                Err(error) => {
+                    error
+                        .to_ariadne("shell")
+                        .eprint(("shell", buffer.clone()))
+                        .unwrap();
                 }
             }
         }

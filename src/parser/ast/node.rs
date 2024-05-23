@@ -2,6 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::parser::Span;
 
+#[derive(Debug)]
 pub struct Node<T> {
     span: Span,
     item: T,
@@ -30,7 +31,15 @@ impl<T> Node<T> {
         &self.span
     }
 
-    pub fn into_inner(self) -> T {
+    pub fn into_item(self) -> T {
         self.item
+    }
+
+    pub fn into_span(self) -> Span {
+        self.span
+    }
+
+    pub fn into_parts(self) -> (Span, T) {
+        (self.span, self.item)
     }
 }
