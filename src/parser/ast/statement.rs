@@ -1,6 +1,6 @@
 use crate::parser::{PError, PResult, Token, TokenLine};
 
-use super::{Expr, Func, Node};
+use super::{Expr, Func, Node, While};
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -8,6 +8,7 @@ pub enum Statement {
     LetAssign(Node<String>, Node<Expr>),
     Expr(Node<Expr>),
     Func(Node<Func>),
+    While(Node<While>),
 }
 
 impl Statement {
@@ -78,6 +79,10 @@ impl Statement {
             (Token::Fn, _) => {
                 let func = Func::parse(tokens)?;
                 Ok(Node::new(func.span().clone(), Self::Func(func)))
+            }
+            (Token::While, _) => {
+                let r#while = While::parse(tokens)?;
+                Ok(Node::new(r#while.span().clone(), Self::While(r#while)))
             }
             _ => {
                 let expr = Expr::parse(tokens)?;

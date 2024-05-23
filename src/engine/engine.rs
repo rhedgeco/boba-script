@@ -168,6 +168,23 @@ impl Engine {
                 *old_value = new_value;
                 Ok(Value::None)
             }
+            Statement::While(w) => loop {
+                match self.eval(&w.cond)? {
+                    Value::Bool(true) => (),
+                    Value::Bool(false) => return Ok(Value::None),
+                    value => {
+                        return Err(RunError::TypeMismatch {
+                            expected: format!("bool"),
+                            found: format!("{}", value.type_name()),
+                            span: w.cond.span().clone(),
+                        })
+                    }
+                }
+
+                for statement in w.body.iter() {
+                    self.eval_statement(&statement)?;
+                }
+            },
         }
     }
 

@@ -70,12 +70,12 @@ pub enum Token<'source> {
     Assign,
     #[display(fmt = "->")]
     Arrow,
-
-    // keywords
     #[display(fmt = "let")]
     Let,
     #[display(fmt = "fn")]
     Fn,
+    #[display(fmt = "while")]
+    While,
 }
 
 impl<'source> Token<'source> {
@@ -88,6 +88,7 @@ impl<'source> Token<'source> {
             "and" => Token::And,
             "or" => Token::Or,
             "none" => Token::None,
+            "while" => Token::While,
         };
 
         KEYWORDS.get(str.as_ref()).cloned()
