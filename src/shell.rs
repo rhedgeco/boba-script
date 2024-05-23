@@ -1,7 +1,9 @@
+use std::ops::Deref;
+
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 use crate::{
-    parser::{ast::Expr, TokenLines},
+    parser::{ast::Statement, TokenLines},
     Engine,
 };
 
@@ -55,19 +57,62 @@ impl Session {
                 None => continue,
             };
 
-            match Expr::parse(&mut line) {
-                Ok(expr) => match engine.eval(&expr) {
-                    Ok(value) => println!("{value}"),
-                    Err(error) => error
-                        .to_ariadne("shell")
-                        .eprint(("shell", buffer.clone()))
-                        .unwrap(),
+            match Statement::parse(&mut line) {
+                Ok(statement) => match statement.deref() {
+                    Statement::LetAssign(var, expr) => {
+                        let value = match engine.eval(&expr) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                error
+                                    .to_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        };
+
+                        engine.set_var(var.deref(), value);
+                    }
+                    Statement::Assign(var, expr) => {
+                        let new_value = match engine.eval(&expr) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                error
+                                    .to_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        };
+
+                        match engine.get_var_mut(var) {
+                            Ok(old_value) => *old_value = new_value,
+                            Err(error) => {
+                                error
+                                    .to_ariadne("shell")
+                                    .eprint(("shell", buffer.clone()))
+                                    .unwrap();
+                                continue;
+                            }
+                        }
+                    }
+                    Statement::Expr(expr) => match engine.eval(&expr) {
+                        Ok(value) => println!("{value}"),
+                        Err(error) => {
+                            error
+                                .to_ariadne("shell")
+                                .eprint(("shell", buffer.clone()))
+                                .unwrap();
+                            continue;
+                        }
+                    },
                 },
                 Err(error) => {
                     error
                         .to_ariadne("shell")
                         .eprint(("shell", buffer.clone()))
                         .unwrap();
+                    continue;
                 }
             }
         }

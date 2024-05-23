@@ -106,7 +106,7 @@ impl<'source> TokenLine<'source> {
         match self.next() {
             Some(Ok(items)) => Ok(items),
             Some(Err(error)) => Err(error),
-            None => Err(PError::EndOfLine {
+            None => Err(PError::UnexpectedEndOfLine {
                 pos: self.start + self.line.len(),
                 expected: expect.into(),
             }),
@@ -118,9 +118,21 @@ impl<'source> TokenLine<'source> {
         match self.peek() {
             Some(Ok(items)) => Ok(items),
             Some(Err(error)) => Err(error),
-            None => Err(PError::EndOfLine {
+            None => Err(PError::UnexpectedEndOfLine {
                 expected: expect.into(),
                 pos,
+            }),
+        }
+    }
+
+    pub fn expect_end(&mut self) -> PResult<()> {
+        match self.peek() {
+            None => Ok(()),
+            Some(Err(error)) => Err(error),
+            Some(Ok((token, span))) => Err(PError::UnexpectedToken {
+                expected: format!("end of line"),
+                found: format!("'{token}'"),
+                span: span.clone(),
             }),
         }
     }

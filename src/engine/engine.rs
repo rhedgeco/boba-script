@@ -80,41 +80,37 @@ impl Engine {
         }
     }
 
-    pub fn get_var(&self, ident: impl AsRef<str>, span: Span) -> Result<&Value, RunError> {
+    pub fn get_var(&self, ident: &Node<String>) -> Result<&Value, RunError> {
         // try all nested scopes first
         for scope in self.nested_scopes.iter().rev() {
-            if let Some(value) = scope.get_var(ident.as_ref()) {
+            if let Some(value) = scope.get_var(ident.deref()) {
                 return Ok(value);
             }
         }
 
         // then pull from global scope
         self.global_scope
-            .get_var(ident.as_ref())
+            .get_var(ident.deref())
             .ok_or_else(|| RunError::UnknownVariable {
-                ident: ident.as_ref().into(),
-                span: span.clone(),
+                ident: ident.deref().into(),
+                span: ident.span().clone(),
             })
     }
 
-    pub fn get_var_mut(
-        &mut self,
-        ident: impl AsRef<str>,
-        span: Span,
-    ) -> Result<&mut Value, RunError> {
+    pub fn get_var_mut(&mut self, ident: &Node<String>) -> Result<&mut Value, RunError> {
         // try all nested scopes first
         for scope in self.nested_scopes.iter_mut().rev() {
-            if let Some(value) = scope.get_var_mut(ident.as_ref()) {
+            if let Some(value) = scope.get_var_mut(ident.deref()) {
                 return Ok(value);
             }
         }
 
         // then pull from global scope
         self.global_scope
-            .get_var_mut(ident.as_ref())
+            .get_var_mut(ident.deref())
             .ok_or_else(|| RunError::UnknownVariable {
-                ident: ident.as_ref().into(),
-                span: span.into(),
+                ident: ident.deref().into(),
+                span: ident.span().clone(),
             })
     }
 
@@ -203,11 +199,12 @@ impl Engine {
                 let rhs = self.eval(rhs)?;
                 self.eval_binary(lhs, BinaryOpType::Or, rhs, expr.span())
             }
-            Expr::Var(ident) => self.get_var(ident, expr.span().clone()).cloned(),
+            Expr::Var(ident) => self
+                .get_var(&Node::new(expr.span().clone(), ident.clone()))
+                .cloned(),
             Expr::Walrus(ident, assign_expr) => {
-                let (span, ident) = ident.clone().into_parts();
                 let new_value = self.eval(&assign_expr)?;
-                *self.get_var_mut(ident, span)? = new_value.clone();
+                *self.get_var_mut(ident)? = new_value.clone();
                 Ok(new_value)
             }
             Expr::Ternary(lhs, cond, rhs) => {

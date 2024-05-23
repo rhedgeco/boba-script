@@ -9,7 +9,7 @@ pub type PResult<T> = Result<T, PError>;
 #[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum PError {
-    EndOfLine {
+    UnexpectedEndOfLine {
         expected: String,
         pos: usize,
     },
@@ -56,15 +56,17 @@ impl PError {
 
     pub fn to_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Span)> {
         match self {
-            PError::EndOfLine { expected, pos } => Report::build(ReportKind::Error, id, *pos)
-                .with_code(format!("C-{:0>3}", self.code()))
-                .with_message("Unexpected Line End")
-                .with_label(
-                    Label::new((id, *pos..*pos))
-                        .with_color(Color::Red)
-                        .with_message(format!("expected '{expected}', found end of line")),
-                )
-                .finish(),
+            PError::UnexpectedEndOfLine { expected, pos } => {
+                Report::build(ReportKind::Error, id, *pos)
+                    .with_code(format!("C-{:0>3}", self.code()))
+                    .with_message("Unexpected Line End")
+                    .with_label(
+                        Label::new((id, *pos..*pos))
+                            .with_color(Color::Red)
+                            .with_message(format!("expected '{expected}', found end of line")),
+                    )
+                    .finish()
+            }
             PError::InvalidToken { part, span } => Report::build(ReportKind::Error, id, span.start)
                 .with_code(format!("C-{:0>3}", self.code()))
                 .with_message("Invalid Token")
