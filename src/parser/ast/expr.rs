@@ -6,6 +6,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub enum Expr {
     // values
+    None,
     Var(String),
     Bool(bool),
     Int(i64),
@@ -52,6 +53,7 @@ impl Expr {
     pub fn parse_atom(tokens: &mut TokenLine) -> PResult<Node<Self>> {
         match tokens.expect_next("expression")? {
             // values
+            (Token::None, span) => Ok(Node::new(span, Expr::None)),
             (Token::Ident(str), span) => Ok(Node::new(span, Expr::Var(str.into()))),
             (Token::Bool(bool), span) => Ok(Node::new(span, Expr::Bool(bool))),
             (Token::UInt(str), span) => Ok(utils::parse_int(span, str)?),

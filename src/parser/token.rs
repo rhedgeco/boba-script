@@ -6,6 +6,8 @@ pub enum Token<'source> {
     Ident(&'source str),
 
     // values
+    #[display(fmt = "none")]
+    None,
     #[display(fmt = "{}", _0)]
     Bool(bool),
     #[display(fmt = "int")]
@@ -85,6 +87,7 @@ impl<'source> Token<'source> {
             "false" => Token::Bool(false),
             "and" => Token::And,
             "or" => Token::Or,
+            "none" => Token::None,
         };
 
         KEYWORDS.get(str.as_ref()).cloned()
