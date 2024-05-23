@@ -70,27 +70,25 @@ impl Func {
             }
         };
 
+        // create output
+        let mut output = Node::new(
+            start..end,
+            Self {
+                ident,
+                body: Vec::new(),
+            },
+        );
+
         // return early if end of line is found
         if let None = tokens.peek() {
-            return Ok(Node::new(
-                start..end,
-                Self {
-                    ident,
-                    body: Vec::new(),
-                },
-            ));
+            return Ok(output);
         }
 
         // capture single expression
         let expr = Expr::parse(tokens)?;
         tokens.expect_end()?;
         let statement = Node::new(expr.span().clone(), Statement::Expr(expr));
-        Ok(Node::new(
-            start..end,
-            Self {
-                ident,
-                body: vec![statement],
-            },
-        ))
+        output.body.push(statement);
+        Ok(output)
     }
 }
