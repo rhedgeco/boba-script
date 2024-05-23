@@ -10,6 +10,9 @@ pub enum Expr {
     Float(f64),
     String(String),
 
+    // function
+    Call(Node<String>),
+
     // math operations
     Neg(Box<Node<Expr>>),
     Add(Box<Node<Expr>>, Box<Node<Expr>>),
@@ -54,22 +57,57 @@ impl Expr {
 
     pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
         let lhs = Self::parse_atom(tokens)?;
-        Self::parse_with(lhs, tokens)
+        Self::parse_with_lhs(lhs, tokens)
     }
 
-    pub fn parse_with(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Self>> {
+    pub fn parse_with_lhs(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Self>> {
         Self::parse_walrus(lhs, tokens) // start parsing at lowest precedence operator
+    }
+
+    pub fn parse_ident(lhs: Node<String>, tokens: &mut TokenLine) -> PResult<Node<Self>> {
+        match tokens.peek() {
+            Some(Err(error)) => Err(error),
+            Some(Ok((Token::OpenParen, _))) => {
+                tokens.next(); // consume open paren
+
+                // TODO: parse parameters
+
+                // capture close paren
+                let end = match tokens.expect_next("')'")? {
+                    (Token::CloseParen, span) => span.end,
+                    (token, span) => {
+                        return Err(PError::UnexpectedToken {
+                            expected: format!("')'"),
+                            found: format!("'{token}'"),
+                            span,
+                        })
+                    }
+                };
+
+                let start = lhs.span().start;
+                Ok(Node::new(start..end, Self::Call(lhs)))
+            }
+            Some(_) | None => {
+                let (span, ident) = lhs.into_parts();
+                Ok(Node::new(span, Expr::Var(ident)))
+            }
+        }
     }
 
     pub fn parse_atom(tokens: &mut TokenLine) -> PResult<Node<Self>> {
         match tokens.expect_next("expression")? {
             // values
             (Token::None, span) => Ok(Node::new(span, Expr::None)),
-            (Token::Ident(str), span) => Ok(Node::new(span, Expr::Var(str.into()))),
             (Token::Bool(bool), span) => Ok(Node::new(span, Expr::Bool(bool))),
             (Token::UInt(str), span) => Ok(Self::parse_int(span, str)?),
             (Token::UFloat(str), span) => Ok(Self::parse_float(span, str)?),
             (Token::String(str), span) => Ok(Node::new(span, Expr::String(str.into()))),
+
+            // variables and functions
+            (Token::Ident(str), span) => {
+                let ident = Node::new(span, str.to_string());
+                Self::parse_ident(ident, tokens)
+            }
 
             // prefix expressions
             (Token::Not, span) => {

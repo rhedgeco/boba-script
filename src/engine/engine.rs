@@ -3,7 +3,7 @@ use std::ops::Deref;
 use derive_more::Display;
 
 use crate::parser::{
-    ast::{Expr, Func, Node},
+    ast::{Expr, Func, Node, Statement},
     Span,
 };
 
@@ -73,7 +73,7 @@ impl Engine {
         self.nested_scopes.pop().is_some()
     }
 
-    pub fn set_var(&mut self, ident: impl Into<String>, value: Value) {
+    pub fn init_var(&mut self, ident: impl Into<String>, value: Value) {
         match self.nested_scopes.last_mut() {
             None => self.global_scope.init_var(ident, value),
             Some(scope) => scope.init_var(ident, value),
@@ -104,24 +104,7 @@ impl Engine {
             })
     }
 
-    pub fn get_func(&self, ident: &Node<String>) -> Result<&Func, RunError> {
-        // try all nested scopes first
-        for scope in self.nested_scopes.iter().rev() {
-            if let Some(func) = scope.get_func(ident.deref()) {
-                return Ok(func);
-            }
-        }
-
-        // then pull from global scope
-        self.global_scope
-            .get_func(ident.deref())
-            .ok_or_else(|| RunError::UnknownVariable {
-                ident: ident.deref().into(),
-                span: ident.span().clone(),
-            })
-    }
-
-    pub fn get_var_mut(&mut self, ident: &Node<String>) -> Result<&mut Value, RunError> {
+    fn get_var_mut(&mut self, ident: &Node<String>) -> Result<&mut Value, RunError> {
         // try all nested scopes first
         for scope in self.nested_scopes.iter_mut().rev() {
             if let Some(value) = scope.get_var_mut(ident.deref()) {
@@ -138,21 +121,54 @@ impl Engine {
             })
     }
 
-    pub fn get_func_mut(&mut self, ident: &Node<String>) -> Result<&mut Func, RunError> {
+    pub fn get_func(&self, ident: &Node<String>) -> Result<&Func, RunError> {
         // try all nested scopes first
-        for scope in self.nested_scopes.iter_mut().rev() {
-            if let Some(func) = scope.get_func_mut(ident.deref()) {
+        for scope in self.nested_scopes.iter().rev() {
+            if let Some(func) = scope.get_func(ident.deref()) {
                 return Ok(func);
             }
         }
 
         // then pull from global scope
         self.global_scope
-            .get_func_mut(ident.deref())
-            .ok_or_else(|| RunError::UnknownVariable {
+            .get_func(ident.deref())
+            .ok_or_else(|| RunError::UnknownFunction {
                 ident: ident.deref().into(),
                 span: ident.span().clone(),
             })
+    }
+
+    pub fn eval_func(&mut self, ident: &Node<String>) -> Result<Value, RunError> {
+        self.push_scope(); // create scope for function
+        let func = self.get_func(ident)?.clone();
+
+        let mut output = Value::None;
+        for statement in func.body {
+            output = self.eval_statement(&statement)?;
+        }
+
+        Ok(output)
+    }
+
+    pub fn eval_statement(&mut self, statement: &Node<Statement>) -> Result<Value, RunError> {
+        match statement.deref() {
+            Statement::Expr(expr) => self.eval(expr),
+            Statement::Func(func) => {
+                self.insert_func(func.deref().clone());
+                Ok(Value::None)
+            }
+            Statement::LetAssign(var, expr) => {
+                let value = self.eval(expr)?;
+                self.init_var(var.deref(), value);
+                Ok(Value::None)
+            }
+            Statement::Assign(var, expr) => {
+                let new_value = self.eval(expr)?;
+                let old_value = self.get_var_mut(var)?;
+                *old_value = new_value;
+                Ok(Value::None)
+            }
+        }
     }
 
     pub fn eval(&mut self, expr: &Node<Expr>) -> Result<Value, RunError> {
@@ -162,6 +178,7 @@ impl Engine {
             Expr::Int(v) => Ok(Value::Int(*v)),
             Expr::Float(v) => Ok(Value::Float(*v)),
             Expr::String(v) => Ok(Value::String(v.clone())),
+            Expr::Call(ident) => self.eval_func(ident),
             Expr::Neg(inner) => {
                 let inner = self.eval(inner)?;
                 self.eval_unary(UnaryOpType::Neg, inner, expr.span())

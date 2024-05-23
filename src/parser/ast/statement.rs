@@ -67,8 +67,9 @@ impl Statement {
                         ))
                     }
                     Some(Ok(_)) => {
-                        let lhs = Node::new(span, Expr::Var(var));
-                        let expr = Expr::parse_with(lhs, tokens)?;
+                        let lhs = Node::new(span, var);
+                        let lhs = Expr::parse_ident(lhs, tokens)?;
+                        let expr = Expr::parse_with_lhs(lhs, tokens)?;
                         tokens.expect_end()?;
                         Ok(Node::new(expr.span().clone(), Self::Expr(expr)))
                     }

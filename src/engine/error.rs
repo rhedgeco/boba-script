@@ -11,6 +11,10 @@ pub enum RunError {
         ident: String,
         span: Span,
     },
+    UnknownFunction {
+        ident: String,
+        span: Span,
+    },
     InvalidUnary {
         op: UnaryOpType,
         vtype: String,
@@ -48,6 +52,16 @@ impl RunError {
                         Label::new((id, span.clone()))
                             .with_color(Color::Red)
                             .with_message(format!("unknown variable '{ident}'")),
+                    )
+            }
+            RunError::UnknownFunction { ident, span } => {
+                Report::build(ReportKind::Error, id, span.start)
+                    .with_message("Unknown Function")
+                    .with_code(format!("R-{:0>3}", self.code()))
+                    .with_label(
+                        Label::new((id, span.clone()))
+                            .with_color(Color::Red)
+                            .with_message(format!("unknown function '{ident}'")),
                     )
             }
             RunError::InvalidUnary { op, vtype, span } => {
