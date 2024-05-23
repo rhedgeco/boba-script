@@ -1,15 +1,19 @@
 use ariadne::{Color, Label, Report, ReportKind};
 
-use crate::{
-    ast::{Ident, Spanned},
-    token::Span,
-};
+use crate::parser::Span;
 
 use super::{BinaryOpType, UnaryOpType};
 
+#[derive(Debug, Clone)]
+#[repr(u8)]
 pub enum RunError {
     UnknownVariable {
-        ident: Ident,
+        ident: String,
+        span: Span,
+    },
+    UnknownFunction {
+        ident: String,
+        span: Span,
     },
     InvalidUnary {
         op: UnaryOpType,
@@ -27,26 +31,48 @@ pub enum RunError {
         found: String,
         span: Span,
     },
+    ParameterCount {
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
 }
 
 impl RunError {
-    pub fn as_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Span)> {
+    pub fn code(&self) -> usize {
+        // From the docs for discriminants
+        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
+        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
+        // field, so we can read the discriminant without offsetting the pointer.
+        unsafe { *<*const _>::from(self).cast::<u8>() as usize + 1 }
+    }
+
+    pub fn to_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Span)> {
         match self {
-            RunError::UnknownVariable { ident } => {
-                let span = ident.span();
+            RunError::UnknownVariable { ident, span } => {
                 Report::build(ReportKind::Error, id, span.start)
                     .with_message("Unknown Variable")
-                    .with_code("R-001")
+                    .with_code(format!("R-{:0>3}", self.code()))
                     .with_label(
-                        Label::new((id, span))
+                        Label::new((id, span.clone()))
                             .with_color(Color::Red)
                             .with_message(format!("unknown variable '{ident}'")),
+                    )
+            }
+            RunError::UnknownFunction { ident, span } => {
+                Report::build(ReportKind::Error, id, span.start)
+                    .with_message("Unknown Function")
+                    .with_code(format!("R-{:0>3}", self.code()))
+                    .with_label(
+                        Label::new((id, span.clone()))
+                            .with_color(Color::Red)
+                            .with_message(format!("unknown function '{ident}'")),
                     )
             }
             RunError::InvalidUnary { op, vtype, span } => {
                 Report::build(ReportKind::Error, id, span.start)
                     .with_message("Invalid Unary Operator")
-                    .with_code("R-002")
+                    .with_code(format!("C-{:0>3}", self.code()))
                     .with_label(
                         Label::new((id, span.clone()))
                             .with_color(Color::Red)
@@ -60,7 +86,7 @@ impl RunError {
                 span,
             } => Report::build(ReportKind::Error, id, span.start)
                 .with_message("Invalid Binary Operator")
-                .with_code("R-003")
+                .with_code(format!("C-{:0>3}", self.code()))
                 .with_label(
                     Label::new((id, span.clone()))
                         .with_color(Color::Red)
@@ -75,11 +101,25 @@ impl RunError {
                 span,
             } => Report::build(ReportKind::Error, id, span.start)
                 .with_message("Type Mismatch")
-                .with_code("R-004")
+                .with_code(format!("C-{:0>3}", self.code()))
                 .with_label(
                     Label::new((id, span.clone()))
                         .with_color(Color::Red)
                         .with_message(format!("expected {expected}, found {found}")),
+                ),
+            RunError::ParameterCount {
+                expected,
+                found,
+                span,
+            } => Report::build(ReportKind::Error, id, span.start)
+                .with_message("Wrong Parameter Count")
+                .with_code(format!("C-{:0>3}", self.code()))
+                .with_label(
+                    Label::new((id, span.clone()))
+                        .with_color(Color::Red)
+                        .with_message(format!(
+                            "function expects {expected} parameters, found {found}"
+                        )),
                 ),
         }
         .finish()

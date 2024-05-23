@@ -2,8 +2,8 @@ use derive_more::Display;
 
 #[derive(Debug, Display, Clone)]
 pub enum Value {
-    #[display(fmt = "unit")]
-    Unit,
+    #[display(fmt = "none")]
+    None,
     #[display(fmt = "{}", _0)]
     Bool(bool),
     #[display(fmt = "{}", _0)]
@@ -17,7 +17,7 @@ pub enum Value {
 impl Value {
     pub fn type_name(&self) -> String {
         match self {
-            Value::Unit => format!("unit"),
+            Value::None => format!("none"),
             Value::Bool(_) => format!("bool"),
             Value::Int(_) => format!("int"),
             Value::Float(_) => format!("float"),

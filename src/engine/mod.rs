@@ -2,8 +2,9 @@ mod engine;
 
 pub mod error;
 pub mod scope;
-pub mod types;
+pub mod value;
 
 pub use engine::*;
-pub use error::RunError;
+
 pub use scope::Scope;
+pub use value::Value;
