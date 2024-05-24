@@ -1,6 +1,6 @@
 use crate::parser::{PError, PResult, Token, TokenLine};
 
-use super::{Expr, Node, Statement};
+use super::{Node, Statement};
 
 #[derive(Debug, Clone)]
 pub struct Func {
@@ -103,10 +103,9 @@ impl Func {
             return Ok(output);
         }
 
-        // capture single expression
-        let expr = Expr::parse(tokens)?;
+        // capture single statement
+        let statement = Statement::parse(tokens)?;
         tokens.expect_end()?;
-        let statement = Node::new(expr.span().clone(), Statement::Expr(expr));
         output.body.push(statement);
         Ok(output)
     }
