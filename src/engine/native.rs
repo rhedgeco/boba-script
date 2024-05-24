@@ -1,24 +1,28 @@
-use crate::Engine;
-
 use super::Value;
+
+pub type NativeFuncImpl = fn(Vec<Value>) -> Result<Value, String>;
 
 #[derive(Debug, Clone)]
 pub struct NativeFunc {
-    pub ident: String,
-    pub params: Vec<String>,
-    pub native: fn(&mut Engine) -> Result<Value, String>,
+    pub name: String,
+    pub param_count: usize,
+    pub native: NativeFuncImpl,
+}
+
+impl NativeFunc {
+    pub fn new(name: impl Into<String>, param_count: usize, native: NativeFuncImpl) -> Self {
+        Self {
+            name: name.into(),
+            param_count,
+            native,
+        }
+    }
 }
 
 pub fn native_print() -> NativeFunc {
-    NativeFunc {
-        ident: format!("print"),
-        params: vec![format!("message")],
-        native: |engine| match engine.get_var("message") {
-            None => panic!("message not found in function scope"),
-            Some(value) => {
-                println!("{value}");
-                Ok(Value::None)
-            }
-        },
-    }
+    NativeFunc::new("print", 1, |values| {
+        let message = &values[0];
+        println!("{message}");
+        Ok(Value::None)
+    })
 }

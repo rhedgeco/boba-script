@@ -14,7 +14,7 @@ impl FuncType {
     pub fn param_count(&self) -> usize {
         match self {
             FuncType::Custom(func) => func.params.len(),
-            FuncType::Native(func) => func.params.len(),
+            FuncType::Native(func) => func.param_count,
         }
     }
 }
@@ -48,8 +48,7 @@ impl Scope {
     }
 
     pub fn init_native_func(&mut self, func: NativeFunc) {
-        self.funcs
-            .insert(func.ident.clone(), FuncType::Native(func));
+        self.funcs.insert(func.name.clone(), FuncType::Native(func));
     }
 
     pub fn get_var(&self, ident: impl AsRef<str>) -> Option<&Value> {

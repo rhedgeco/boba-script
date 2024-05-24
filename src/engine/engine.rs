@@ -146,12 +146,7 @@ impl Engine {
         self.push_scope(); // create scope for function
         match func.clone() {
             FuncType::Native(func) => {
-                for (param, value) in func.params.iter().zip(values) {
-                    // init all variables with their values
-                    self.set_var(param.deref(), value);
-                }
-
-                match (func.native)(self) {
+                match (func.native)(values) {
                     Ok(value) => output = value,
                     Err(message) => {
                         self.pop_scope(); // ensure scope is popped before error
