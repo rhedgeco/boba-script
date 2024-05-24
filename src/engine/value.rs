@@ -10,7 +10,7 @@ pub enum Value {
     Int(i64),
     #[display(fmt = "{}", _0)]
     Float(f64),
-    #[display(fmt = "'{}'", _0)]
+    #[display(fmt = "{}", _0)]
     String(String),
 }
 

@@ -7,7 +7,11 @@ use crate::parser::{
     Span,
 };
 
-use super::{error::RunError, Scope, Value};
+use super::{
+    error::RunError,
+    scope::{FuncType, NativeFunc},
+    Scope, Value,
+};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UnaryOpType {
@@ -50,10 +54,32 @@ pub enum BinaryOpType {
     Or,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Engine {
     global_scope: Scope,
     nested_scopes: Vec<Scope>,
+}
+
+impl Default for Engine {
+    fn default() -> Self {
+        let mut global_scope = Scope::new();
+        global_scope.init_native_func(NativeFunc {
+            ident: format!("print"),
+            params: vec![format!("message")],
+            native: |engine| match engine.get_var("message") {
+                None => panic!("message not found in function scope"),
+                Some(value) => {
+                    println!("{value}");
+                    Ok(Value::None)
+                }
+            },
+        });
+
+        Self {
+            global_scope,
+            nested_scopes: Vec::new(),
+        }
+    }
 }
 
 impl Engine {
@@ -73,55 +99,31 @@ impl Engine {
         self.nested_scopes.pop().is_some()
     }
 
-    pub fn init_var(&mut self, ident: impl Into<String>, value: Value) {
+    pub fn set_var(&mut self, ident: impl Into<String>, value: Value) {
         match self.nested_scopes.last_mut() {
             None => self.global_scope.init_var(ident, value),
             Some(scope) => scope.init_var(ident, value),
         }
     }
 
-    pub fn insert_func(&mut self, func: Func) {
+    pub fn set_func(&mut self, func: Func) {
         match self.nested_scopes.last_mut() {
             None => self.global_scope.init_func(func),
             Some(scope) => scope.init_func(func),
         }
     }
 
-    pub fn get_var(&self, ident: &Node<String>) -> Result<&Value, RunError> {
-        // try all nested scopes first
+    pub fn get_var(&self, ident: impl AsRef<str>) -> Option<&Value> {
         for scope in self.nested_scopes.iter().rev() {
-            if let Some(value) = scope.get_var(ident.deref()) {
-                return Ok(value);
+            if let Some(value) = scope.get_var(ident.as_ref()) {
+                return Some(value);
             }
         }
 
-        // then pull from global scope
-        self.global_scope
-            .get_var(ident.deref())
-            .ok_or_else(|| RunError::UnknownVariable {
-                ident: ident.deref().into(),
-                span: ident.span().clone(),
-            })
+        self.global_scope.get_var(ident)
     }
 
-    fn get_var_mut(&mut self, ident: &Node<String>) -> Result<&mut Value, RunError> {
-        // try all nested scopes first
-        for scope in self.nested_scopes.iter_mut().rev() {
-            if let Some(value) = scope.get_var_mut(ident.deref()) {
-                return Ok(value);
-            }
-        }
-
-        // then pull from global scope
-        self.global_scope
-            .get_var_mut(ident.deref())
-            .ok_or_else(|| RunError::UnknownVariable {
-                ident: ident.deref().into(),
-                span: ident.span().clone(),
-            })
-    }
-
-    pub fn get_func(&self, ident: &Node<String>) -> Result<&Func, RunError> {
+    pub fn get_func(&self, ident: &Node<String>) -> Result<&FuncType, RunError> {
         // try all nested scopes first
         for scope in self.nested_scopes.iter().rev() {
             if let Some(func) = scope.get_func(ident.deref()) {
@@ -145,31 +147,53 @@ impl Engine {
     ) -> Result<Value, RunError> {
         // get and validate function
         let func = self.get_func(ident)?;
-        if func.params.len() < values.len() {
+        if func.param_count() < values.len() {
             return Err(RunError::ParameterCount {
-                expected: func.params.len(),
+                expected: func.param_count(),
                 found: values.len(),
                 span: ident.span().clone(),
             });
         }
 
+        let mut output = Value::None;
         let func = func.clone();
         self.push_scope(); // create scope for function
-        for (param, value) in func.params.iter().zip(values) {
-            // init all variables with their values
-            self.init_var(param.deref(), value);
-        }
+        match func.clone() {
+            FuncType::Native(func) => {
+                for (param, value) in func.params.iter().zip(values) {
+                    // init all variables with their values
+                    self.set_var(param.deref(), value);
+                }
 
-        let mut output = Value::None;
-        for statement in func.body.clone() {
-            match self.eval_statement(&statement) {
-                Ok(value) => output = value,
-                Err(e) => {
-                    self.pop_scope(); // ensure scope is popped before error
-                    return Err(e);
+                match (func.native)(self) {
+                    Ok(value) => output = value,
+                    Err(message) => {
+                        self.pop_scope(); // ensure scope is popped before error
+                        return Err(RunError::NativeCallError {
+                            span: ident.span().clone(),
+                            message,
+                        });
+                    }
+                }
+            }
+            FuncType::Custom(func) => {
+                for (param, value) in func.params.iter().zip(values) {
+                    // init all variables with their values
+                    self.set_var(param.deref(), value);
+                }
+
+                for statement in func.body.clone() {
+                    match self.eval_statement(&statement) {
+                        Ok(value) => output = value,
+                        Err(e) => {
+                            self.pop_scope(); // ensure scope is popped before error
+                            return Err(e);
+                        }
+                    }
                 }
             }
         }
+        self.pop_scope(); //pop scope when finished
 
         Ok(output)
     }
@@ -178,18 +202,17 @@ impl Engine {
         match statement.deref() {
             Statement::Expr(expr) => self.eval(expr),
             Statement::Func(func) => {
-                self.insert_func(func.deref().clone());
+                self.set_func(func.deref().clone());
                 Ok(Value::None)
             }
-            Statement::LetAssign(var, expr) => {
+            Statement::LetAssign(ident, expr) => {
                 let value = self.eval(expr)?;
-                self.init_var(var.deref(), value);
+                self.set_var(ident.deref(), value);
                 Ok(Value::None)
             }
-            Statement::Assign(var, expr) => {
-                let new_value = self.eval(expr)?;
-                let old_value = self.get_var_mut(var)?;
-                *old_value = new_value;
+            Statement::Assign(ident, expr) => {
+                let value = self.eval(expr)?;
+                self.set_var(ident.deref(), value);
                 Ok(Value::None)
             }
             Statement::While(w) => loop {
@@ -304,12 +327,17 @@ impl Engine {
                 let rhs = self.eval(rhs)?;
                 self.eval_binary(lhs, BinaryOpType::Or, rhs, expr.span())
             }
-            Expr::Var(ident) => self.get_var(ident).cloned(),
+            Expr::Var(ident) => match self.get_var(ident.deref()) {
+                Some(value) => Ok(value.clone()),
+                None => Err(RunError::UnknownVariable {
+                    ident: ident.deref().clone(),
+                    span: ident.span().clone(),
+                }),
+            },
             Expr::Walrus(ident, assign_expr) => {
-                let new_value = self.eval(&assign_expr)?;
-                let old_value = self.get_var_mut(ident)?;
-                *old_value = new_value.clone();
-                Ok(new_value)
+                let value = self.eval(assign_expr)?;
+                self.set_var(ident.deref(), value);
+                Ok(Value::None)
             }
             Expr::Ternary(lhs, cond, rhs) => {
                 // evaluate condition

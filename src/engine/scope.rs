@@ -1,13 +1,35 @@
 use std::{collections::HashMap, ops::Deref};
 
-use crate::parser::ast::Func;
+use crate::{parser::ast::Func, Engine};
 
 use super::Value;
+
+#[derive(Debug, Clone)]
+pub struct NativeFunc {
+    pub ident: String,
+    pub params: Vec<String>,
+    pub native: fn(&mut Engine) -> Result<Value, String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum FuncType {
+    Custom(Func),
+    Native(NativeFunc),
+}
+
+impl FuncType {
+    pub fn param_count(&self) -> usize {
+        match self {
+            FuncType::Custom(func) => func.params.len(),
+            FuncType::Native(func) => func.params.len(),
+        }
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct Scope {
     vars: HashMap<String, Value>,
-    funcs: HashMap<String, Func>,
+    funcs: HashMap<String, FuncType>,
 }
 
 impl Scope {
@@ -28,22 +50,24 @@ impl Scope {
     }
 
     pub fn init_func(&mut self, func: Func) {
-        self.funcs.insert(func.ident.deref().clone(), func);
+        self.funcs
+            .insert(func.ident.deref().clone(), FuncType::Custom(func));
+    }
+
+    pub fn init_native_func(&mut self, func: NativeFunc) {
+        self.funcs
+            .insert(func.ident.clone(), FuncType::Native(func));
     }
 
     pub fn get_var(&self, ident: impl AsRef<str>) -> Option<&Value> {
         self.vars.get(ident.as_ref())
     }
 
-    pub fn get_func(&self, ident: impl AsRef<str>) -> Option<&Func> {
+    pub fn get_func(&self, ident: impl AsRef<str>) -> Option<&FuncType> {
         self.funcs.get(ident.as_ref())
     }
 
     pub fn get_var_mut(&mut self, ident: impl AsRef<str>) -> Option<&mut Value> {
         self.vars.get_mut(ident.as_ref())
-    }
-
-    pub fn get_func_mut(&mut self, ident: impl AsRef<str>) -> Option<&mut Func> {
-        self.funcs.get_mut(ident.as_ref())
     }
 }

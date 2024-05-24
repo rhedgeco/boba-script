@@ -36,6 +36,10 @@ pub enum RunError {
         found: usize,
         span: Span,
     },
+    NativeCallError {
+        message: String,
+        span: Span,
+    },
 }
 
 impl RunError {
@@ -121,6 +125,16 @@ impl RunError {
                             "function expects {expected} parameters, found {found}"
                         )),
                 ),
+            RunError::NativeCallError { message, span } => {
+                Report::build(ReportKind::Error, id, span.start)
+                    .with_message("Native Call Error")
+                    .with_code(format!("C-{:0>3}", self.code()))
+                    .with_label(
+                        Label::new((id, span.clone()))
+                            .with_color(Color::Red)
+                            .with_message(message),
+                    )
+            }
         }
         .finish()
     }
