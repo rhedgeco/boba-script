@@ -7,11 +7,7 @@ use crate::parser::{
     Span,
 };
 
-use super::{
-    error::RunError,
-    scope::{FuncType, NativeFunc},
-    Scope, Value,
-};
+use super::{error::RunError, native::native_print, scope::FuncType, Scope, Value};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UnaryOpType {
@@ -63,17 +59,7 @@ pub struct Engine {
 impl Default for Engine {
     fn default() -> Self {
         let mut global_scope = Scope::new();
-        global_scope.init_native_func(NativeFunc {
-            ident: format!("print"),
-            params: vec![format!("message")],
-            native: |engine| match engine.get_var("message") {
-                None => panic!("message not found in function scope"),
-                Some(value) => {
-                    println!("{value}");
-                    Ok(Value::None)
-                }
-            },
-        });
+        global_scope.init_native_func(native_print());
 
         Self {
             global_scope,

@@ -1,15 +1,8 @@
 use std::{collections::HashMap, ops::Deref};
 
-use crate::{parser::ast::Func, Engine};
+use crate::parser::ast::Func;
 
-use super::Value;
-
-#[derive(Debug, Clone)]
-pub struct NativeFunc {
-    pub ident: String,
-    pub params: Vec<String>,
-    pub native: fn(&mut Engine) -> Result<Value, String>,
-}
+use super::{NativeFunc, Value};
 
 #[derive(Debug, Clone)]
 pub enum FuncType {
