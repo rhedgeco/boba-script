@@ -327,8 +327,8 @@ impl Engine {
             },
             Expr::Walrus(ident, assign_expr) => {
                 let value = self.eval(assign_expr)?;
-                self.set_var(ident.deref(), value);
-                Ok(Value::None)
+                self.set_var(ident.deref(), value.clone());
+                Ok(value)
             }
             Expr::Ternary(lhs, cond, rhs) => {
                 // evaluate condition
