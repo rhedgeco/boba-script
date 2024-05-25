@@ -1,4 +1,7 @@
-use crate::parser::{ast::Node, PError, PResult, Span, Token, TokenLine};
+use crate::{
+    cache::Span,
+    parser::{ast::Node, PError, PResult, Token, TokenLine},
+};
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -91,7 +94,7 @@ impl Expr {
 
                 // capture close paren
                 let end = match tokens.expect_next("')'")? {
-                    (Token::CloseParen, span) => span.end,
+                    (Token::CloseParen, span) => span.range().end,
                     (token, span) => {
                         return Err(PError::UnexpectedToken {
                             expected: format!("')'"),
@@ -101,8 +104,8 @@ impl Expr {
                     }
                 };
 
-                let start = lhs.span().start;
-                Ok(Node::new(start..end, Self::Call(lhs, params)))
+                let span = tokens.span(lhs.span().range().start..end);
+                Ok(Node::new(span, Self::Call(lhs, params)))
             }
             Some(_) | None => Ok(Node::new(lhs.span().clone(), Expr::Var(lhs))),
         }
@@ -132,14 +135,14 @@ impl Expr {
             (Token::Not, span) => {
                 let nested = Self::parse_atom(tokens)?;
                 let nested = Self::parse_powers(nested, tokens)?; // parse op with higher precedence
-                let span = span.start..nested.span().end;
-                Ok(Node::new(span, Expr::Not(Box::new(nested))))
+                let range = span.range().start..nested.span().range().end;
+                Ok(Node::new(tokens.span(range), Expr::Not(Box::new(nested))))
             }
             (Token::Sub, span) => {
                 let nested = Self::parse_atom(tokens)?;
                 let nested = Self::parse_powers(nested, tokens)?; // parse op with higher precedence
-                let span = span.start..nested.span().end;
-                Ok(Node::new(span, Expr::Neg(Box::new(nested))))
+                let range = span.range().start..nested.span().range().end;
+                Ok(Node::new(tokens.span(range), Expr::Neg(Box::new(nested))))
             }
 
             // braces
@@ -148,19 +151,10 @@ impl Expr {
                 match tokens.next() {
                     Some(Err(error)) => Err(error),
                     Some(Ok((Token::CloseParen, close_span))) => Ok(Node::new(
-                        open_span.start..close_span.end,
+                        tokens.span(open_span.range().start..close_span.range().end),
                         inner.into_item(),
                     )),
-                    Some(Ok((token, span))) => Err(PError::UnclosedBrace {
-                        found: format!("'{token}'"),
-                        open: open_span,
-                        close: span,
-                    }),
-                    None => Err(PError::UnclosedBrace {
-                        found: format!("end of line"),
-                        open: open_span,
-                        close: tokens.line_end()..tokens.line_end(),
-                    }),
+                    Some(Ok((_, _))) | None => Err(PError::UnclosedBrace { span: open_span }),
                 }
             }
 
@@ -184,8 +178,10 @@ impl Expr {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_powers(rhs, tokens)?; // parse right to left
 
-        let span = lhs.span().start..rhs.span().end;
-        Ok(Node::new(span, Expr::Pow(Box::new(lhs), Box::new(rhs))))
+        Ok(Node::new(
+            tokens.span(lhs.span().range().start..rhs.span().range().end),
+            Expr::Pow(Box::new(lhs), Box::new(rhs)),
+        ))
     }
 
     pub fn parse_products(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
@@ -201,8 +197,10 @@ impl Expr {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_powers(rhs, tokens)?; // parse higher precedence
 
-        let span = lhs.span().start..rhs.span().end;
-        let new_lhs = Node::new(span, op(Box::new(lhs), Box::new(rhs)));
+        let new_lhs = Node::new(
+            tokens.span(lhs.span().range().start..rhs.span().range().end),
+            op(Box::new(lhs), Box::new(rhs)),
+        );
         Self::parse_products(new_lhs, tokens) // keep parsing
     }
 
@@ -218,8 +216,10 @@ impl Expr {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_products(rhs, tokens)?; // parse higher precedence
 
-        let span = lhs.span().start..rhs.span().end;
-        let new_lhs = Node::new(span, op(Box::new(lhs), Box::new(rhs)));
+        let new_lhs = Node::new(
+            tokens.span(lhs.span().range().start..rhs.span().range().end),
+            op(Box::new(lhs), Box::new(rhs)),
+        );
         Self::parse_sums(new_lhs, tokens) // keep parsing
     }
 
@@ -239,8 +239,10 @@ impl Expr {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_sums(rhs, tokens)?; // parse higher precedence
 
-        let span = lhs.span().start..rhs.span().end;
-        let new_lhs = Node::new(span, op(Box::new(lhs), Box::new(rhs)));
+        let new_lhs = Node::new(
+            tokens.span(lhs.span().range().start..rhs.span().range().end),
+            op(Box::new(lhs), Box::new(rhs)),
+        );
         Self::parse_comparisons(new_lhs, tokens) // keep parsing
     }
 
@@ -255,8 +257,10 @@ impl Expr {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_comparisons(rhs, tokens)?; // parse higher precedence
 
-        let span = lhs.span().start..rhs.span().end;
-        let new_lhs = Node::new(span, Expr::And(Box::new(lhs), Box::new(rhs)));
+        let new_lhs = Node::new(
+            tokens.span(lhs.span().range().start..rhs.span().range().end),
+            Expr::And(Box::new(lhs), Box::new(rhs)),
+        );
         Self::parse_ands(new_lhs, tokens) // keep parsing
     }
 
@@ -271,8 +275,10 @@ impl Expr {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_ands(rhs, tokens)?; // parse higher precedence
 
-        let span = lhs.span().start..rhs.span().end;
-        let new_lhs = Node::new(span, Expr::And(Box::new(lhs), Box::new(rhs)));
+        let new_lhs = Node::new(
+            tokens.span(lhs.span().range().start..rhs.span().range().end),
+            Expr::And(Box::new(lhs), Box::new(rhs)),
+        );
         Self::parse_ors(new_lhs, tokens) // keep parsing
     }
 
@@ -307,7 +313,7 @@ impl Expr {
 
         // build node
         Ok(Node::new(
-            lhs.span().start..false_clause.span().end,
+            tokens.span(lhs.span().range().start..false_clause.span().range().end),
             Expr::Ternary(Box::new(lhs), Box::new(true_clause), Box::new(false_clause)),
         ))
     }
@@ -322,18 +328,15 @@ impl Expr {
 
         let lhs = match lhs.into_parts() {
             (_, Expr::Var(var)) => var,
-            (expr_span, _) => {
-                return Err(PError::InvalidWalrusAssignment {
-                    walrus_span,
-                    expr_span,
-                })
-            }
+            (_, _) => return Err(PError::InvalidWalrusAssignment { span: walrus_span }),
         };
 
         let rhs = Self::parse_atom(tokens)?;
         let rhs = Self::parse_walrus(rhs, tokens)?; // parse right to left
 
-        let span = lhs.span().start..rhs.span().end;
-        Ok(Node::new(span, Expr::Walrus(lhs, Box::new(rhs))))
+        Ok(Node::new(
+            tokens.span(lhs.span().range().start..rhs.span().range().end),
+            Expr::Walrus(lhs, Box::new(rhs)),
+        ))
     }
 }

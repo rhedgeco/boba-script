@@ -13,7 +13,7 @@ impl Func {
     pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
         // capture fn token
         let start = match tokens.expect_next("'fn'")? {
-            (Token::Fn, span) => span.start,
+            (Token::Fn, span) => span.range().start,
             (token, span) => {
                 return Err(PError::UnexpectedToken {
                     expected: format!("'fn'"),
@@ -78,7 +78,7 @@ impl Func {
 
         // capture colon token
         let end = match tokens.expect_next("':'")? {
-            (Token::Colon, span) => span.end,
+            (Token::Colon, span) => span.range().end,
             (token, span) => {
                 return Err(PError::UnexpectedToken {
                     expected: format!("':'"),
@@ -90,7 +90,7 @@ impl Func {
 
         // create output
         let mut output = Node::new(
-            start..end,
+            tokens.span(start..end),
             Self {
                 ident,
                 params,

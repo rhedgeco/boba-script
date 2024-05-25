@@ -2,9 +2,9 @@ use std::ops::Deref;
 
 use derive_more::Display;
 
-use crate::parser::{
-    ast::{Expr, Func, Node, Statement},
-    Span,
+use crate::{
+    cache::Span,
+    parser::ast::{Expr, Func, Node, Statement},
 };
 
 use super::{error::RunError, native::native_print, scope::FuncType, Scope, Value};
@@ -107,6 +107,16 @@ impl Engine {
         }
 
         self.global_scope.get_var(ident)
+    }
+
+    pub fn get_var_mut(&mut self, ident: impl AsRef<str>) -> Option<&mut Value> {
+        for scope in self.nested_scopes.iter_mut().rev() {
+            if let Some(value) = scope.get_var_mut(ident.as_ref()) {
+                return Some(value);
+            }
+        }
+
+        self.global_scope.get_var_mut(ident)
     }
 
     pub fn get_func(&self, ident: &Node<String>) -> Result<&FuncType, RunError> {

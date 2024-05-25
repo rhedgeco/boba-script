@@ -15,7 +15,7 @@ impl Statement {
     pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
         match tokens.expect_peek("assignment or expression")? {
             (Token::Let, span) => {
-                let start = span.start;
+                let start = span.range().start;
                 tokens.next(); // consume let
 
                 // capture lhs variable
@@ -44,7 +44,8 @@ impl Statement {
 
                 // capture rhs expression
                 let rhs = Expr::parse(tokens)?;
-                Ok(Node::new(start..rhs.span().end, Self::LetAssign(lhs, rhs)))
+                let span = tokens.span(start..rhs.span().range().end);
+                Ok(Node::new(span, Self::LetAssign(lhs, rhs)))
             }
             (Token::Ident(ident), span) => {
                 let ident = Node::new(span.clone(), ident.to_string());
@@ -60,10 +61,8 @@ impl Statement {
                         tokens.next(); // consume assign
                         let rhs = Expr::parse(tokens)?;
                         tokens.expect_end()?;
-                        Ok(Node::new(
-                            ident.span().start..rhs.span().end,
-                            Self::Assign(ident, rhs),
-                        ))
+                        let range = ident.span().range().start..rhs.span().range().end;
+                        Ok(Node::new(tokens.span(range), Self::Assign(ident, rhs)))
                     }
                     Some(Ok(_)) => {
                         let lhs = Expr::parse_ident(ident, tokens)?;

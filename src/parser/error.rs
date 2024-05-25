@@ -1,8 +1,11 @@
-use std::num::{IntErrorKind, ParseFloatError, ParseIntError};
+use std::{
+    fmt::Debug,
+    num::{IntErrorKind, ParseFloatError, ParseIntError},
+};
 
-use ariadne::{Color, Label, Report, ReportKind};
+use ariadne::{Color, Label, Report, ReportKind, Span as AriadneSpan};
 
-use crate::parser::Span;
+use crate::cache::Span;
 
 pub type PResult<T> = Result<T, PError>;
 
@@ -11,14 +14,13 @@ pub type PResult<T> = Result<T, PError>;
 pub enum PError {
     UnexpectedEndOfLine {
         expected: String,
-        pos: usize,
+        span: Span,
     },
     InvalidToken {
         part: String,
         span: Span,
     },
     UnclosedString {
-        quote: String,
         span: Span,
     },
     ParseIntError {
@@ -35,67 +37,59 @@ pub enum PError {
         span: Span,
     },
     UnclosedBrace {
-        found: String,
-        open: Span,
-        close: Span,
+        span: Span,
     },
     InvalidWalrusAssignment {
-        walrus_span: Span,
-        expr_span: Span,
+        span: Span,
+    },
+    MixedTabsAndSpaces {
+        span: Span,
+        tab: bool,
     },
 }
 
 impl PError {
-    pub fn code(&self) -> usize {
-        // From the docs for discriminants
-        // SAFETY: Because `Self` is marked `repr(u8)`, its layout is a `repr(C)` `union`
-        // between `repr(C)` structs, each of which has the `u8` discriminant as its first
-        // field, so we can read the discriminant without offsetting the pointer.
-        unsafe { *<*const _>::from(self).cast::<u8>() as usize + 1 }
-    }
-
-    pub fn to_ariadne<'a>(&self, id: &'a str) -> Report<(&'a str, Span)> {
+    pub fn report(&self) -> Report<Span> {
         match self {
-            PError::UnexpectedEndOfLine { expected, pos } => {
-                Report::build(ReportKind::Error, id, *pos)
-                    .with_code(format!("C-{:0>3}", self.code()))
+            PError::UnexpectedEndOfLine { expected, span } => {
+                Report::build(ReportKind::Error, span.source().clone(), span.start())
+                    .with_code(format!("C-001"))
                     .with_message("Unexpected Line End")
                     .with_label(
-                        Label::new((id, *pos..*pos))
+                        Label::new(span.clone())
                             .with_color(Color::Red)
                             .with_message(format!("expected {expected}, found end of line")),
                     )
                     .finish()
             }
-            PError::InvalidToken { part, span } => Report::build(ReportKind::Error, id, span.start)
-                .with_code(format!("C-{:0>3}", self.code()))
-                .with_message("Invalid Token")
-                .with_label(
-                    Label::new((id, span.clone()))
-                        .with_color(Color::Red)
-                        .with_message(format!("invalid token {part}")),
-                )
-                .finish(),
-            PError::UnclosedString { quote, span } => {
-                Report::build(ReportKind::Error, id, span.start)
-                    .with_code(format!("C-{:0>3}", self.code()))
+            PError::InvalidToken { part, span } => {
+                Report::build(ReportKind::Error, span.source().clone(), span.start())
+                    .with_code(format!("C-002"))
+                    .with_message("Invalid Token")
+                    .with_label(
+                        Label::new(span.clone())
+                            .with_color(Color::Red)
+                            .with_message(format!("invalid token {part}")),
+                    )
+                    .finish()
+            }
+            PError::UnclosedString { span } => {
+                Report::build(ReportKind::Error, span.source().clone(), span.start())
+                    .with_code(format!("C-003"))
                     .with_message("Unclosed String")
-                    .with_labels([
-                        Label::new((id, span.clone()))
+                    .with_label(
+                        Label::new(span.clone())
                             .with_color(Color::Red)
                             .with_message(format!("string has no closing quote")),
-                        Label::new((id, span.end..span.end))
-                            .with_color(Color::Cyan)
-                            .with_message(format!("expected {quote} at or before here")),
-                    ])
+                    )
                     .finish()
             }
             PError::ParseIntError { error, span } => {
-                Report::build(ReportKind::Error, id, span.start)
-                    .with_code(format!("C-{:0>3}", self.code()))
+                Report::build(ReportKind::Error, span.source().clone(), span.start())
+                    .with_code(format!("C-004"))
                     .with_message("Invalid Integer")
                     .with_label(
-                        Label::new((id, span.clone()))
+                        Label::new(span.clone())
                             .with_color(Color::Red)
                             .with_message(match error.kind() {
                                 IntErrorKind::PosOverflow => {
@@ -110,11 +104,11 @@ impl PError {
                     .finish()
             }
             PError::ParseFloatError { error, span } => {
-                Report::build(ReportKind::Error, id, span.start)
-                    .with_code(format!("C-{:0>3}", self.code()))
+                Report::build(ReportKind::Error, span.source().clone(), span.start())
+                    .with_code(format!("C-005"))
                     .with_message("Invalid Integer")
                     .with_label(
-                        Label::new((id, span.clone()))
+                        Label::new(span.clone())
                             .with_color(Color::Red)
                             .with_message(format!("{error}")),
                     )
@@ -124,44 +118,53 @@ impl PError {
                 expected,
                 found,
                 span,
-            } => Report::build(ReportKind::Error, id, span.start)
-                .with_code(format!("C-{:0>3}", self.code()))
+            } => Report::build(ReportKind::Error, span.source().clone(), span.start())
+                .with_code(format!("C-006"))
                 .with_message("Unexpected Token")
                 .with_label(
-                    Label::new((id, span.clone()))
+                    Label::new(span.clone())
                         .with_color(Color::Red)
                         .with_message(format!("expected {expected}, found {found}")),
                 )
                 .finish(),
-            PError::UnclosedBrace { found, open, close } => {
-                Report::build(ReportKind::Error, id, open.start)
-                    .with_code(format!("C-{:0>3}", self.code()))
+            PError::UnclosedBrace { span } => {
+                Report::build(ReportKind::Error, span.source().clone(), span.start())
+                    .with_code(format!("C-007"))
                     .with_message("Unclosed Brace")
-                    .with_labels([
-                        Label::new((id, open.clone()))
+                    .with_label(
+                        Label::new(span.clone())
                             .with_color(Color::Red)
                             .with_message(format!("opening brace has no closing brace")),
-                        Label::new((id, close.clone()))
-                            .with_color(Color::Cyan)
-                            .with_message(format!("expected closing brace here, found {found}")),
-                    ])
+                    )
                     .finish()
             }
-            PError::InvalidWalrusAssignment {
-                walrus_span,
-                expr_span,
-            } => Report::build(ReportKind::Error, id, expr_span.start)
-                .with_code(format!("C-{:0>3}", self.code()))
-                .with_message("Invalid Walrus Assignment")
-                .with_labels([
-                    Label::new((id, walrus_span.clone()))
-                        .with_color(Color::Red)
-                        .with_message(format!("cannot assign expression to another expression")),
-                    Label::new((id, expr_span.clone()))
-                        .with_color(Color::Cyan)
-                        .with_message(format!("expected variable, found expression")),
-                ])
-                .finish(),
+            PError::InvalidWalrusAssignment { span } => {
+                Report::build(ReportKind::Error, span.source().clone(), span.start())
+                    .with_code(format!("C-008"))
+                    .with_message("Invalid Walrus Assignment")
+                    .with_label(
+                        Label::new(span.clone())
+                            .with_color(Color::Red)
+                            .with_message(format!(
+                                "cannot assign expression to another expression"
+                            )),
+                    )
+                    .finish()
+            }
+            PError::MixedTabsAndSpaces { span, tab } => {
+                Report::build(ReportKind::Error, span.source().clone(), span.start())
+                    .with_code(format!("C-009"))
+                    .with_message("Mixed Tabs and Spaces")
+                    .with_label(
+                        Label::new(span.clone())
+                            .with_color(Color::Red)
+                            .with_message(match tab {
+                                true => format!("tab found here when a space was expected"),
+                                false => format!("space found here when a tab was expected"),
+                            }),
+                    )
+                    .finish()
+            }
         }
     }
 }

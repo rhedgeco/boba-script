@@ -1,9 +1,11 @@
+use std::env;
+
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 use crate::{
     engine::Value,
-    parser::{ast::Statement, TokenLines},
-    Engine,
+    parser::{ast::Statement, lexer::Lexer},
+    BobaCache, Engine,
 };
 
 pub struct Session {
@@ -29,14 +31,20 @@ impl Session {
     }
 
     pub fn start_console() {
-        let mut engine = Engine::new();
+        // create a cache for all items in the current directory
+        let mut cache = match env::current_dir() {
+            Ok(path) => BobaCache::new(path),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(-1);
+            }
+        };
+
         let mut shell = Session::new();
+        let mut engine = Engine::new();
         loop {
-            let buffer = match shell.line_editor.read_line(&shell.prompt) {
-                Ok(Signal::Success(buffer)) => match buffer.trim().len() {
-                    0 => continue,
-                    _ => ariadne::Source::from(buffer),
-                },
+            let data = match shell.line_editor.read_line(&shell.prompt) {
+                Ok(Signal::Success(buffer)) => cache.store("shell", buffer),
                 Ok(Signal::CtrlD) => {
                     println!("Closing Shell...");
                     return;
@@ -51,30 +59,26 @@ impl Session {
                 }
             };
 
-            let (_indent, mut line) = match TokenLines::new(buffer.text()).next() {
-                Some(line_data) => line_data,
+            let mut tokens = match Lexer::new(data).next() {
                 None => continue,
+                Some(Ok(tokens)) => tokens,
+                Some(Err(e)) => {
+                    e.report().eprint(&mut cache).unwrap();
+                    continue;
+                }
             };
 
-            match Statement::parse(&mut line) {
+            match Statement::parse(&mut tokens) {
                 Ok(statement) => match engine.eval_statement(&statement) {
-                    Ok(value) => match value {
-                        Value::None => continue,
-                        _ => println!("{value}"),
-                    },
-                    Err(error) => {
-                        error
-                            .to_ariadne("shell")
-                            .eprint(("shell", buffer.clone()))
-                            .unwrap();
+                    Ok(Value::None) => continue,
+                    Ok(value) => println!("{value}"),
+                    Err(e) => {
+                        e.report().eprint(&mut cache).unwrap();
                         continue;
                     }
                 },
-                Err(error) => {
-                    error
-                        .to_ariadne("shell")
-                        .eprint(("shell", buffer.clone()))
-                        .unwrap();
+                Err(e) => {
+                    e.report().eprint(&mut cache).unwrap();
                     continue;
                 }
             }

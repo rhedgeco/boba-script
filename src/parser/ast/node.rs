@@ -1,6 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::parser::Span;
+use crate::cache::Span;
 
 #[derive(Debug, Clone)]
 pub struct Node<T> {

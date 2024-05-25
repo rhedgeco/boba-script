@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-unic = "0.9.0"
 reedline = "0.32.0"
 once_cell = "1.19.0"
+hashbrown = "0.14.5"
 derive_more = "0.99.17"
 unicode-segmentation = "1.10.1"
 phf = { version = "0.11", features = ["macros"] }

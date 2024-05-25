@@ -12,7 +12,7 @@ impl While {
     pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
         // capture while token
         let start = match tokens.expect_next("'while'")? {
-            (Token::While, span) => span.start,
+            (Token::While, span) => span.range().start,
             (token, span) => {
                 return Err(PError::UnexpectedToken {
                     expected: format!("'while'"),
@@ -27,7 +27,7 @@ impl While {
 
         // capture colon token
         let end = match tokens.expect_next("':'")? {
-            (Token::Colon, span) => span.end,
+            (Token::Colon, span) => span.range().end,
             (token, span) => {
                 return Err(PError::UnexpectedToken {
                     expected: format!("':'"),
@@ -39,7 +39,7 @@ impl While {
 
         // create output
         let mut output = Node::new(
-            start..end,
+            tokens.span(start..end),
             Self {
                 cond,
                 body: Vec::new(),
