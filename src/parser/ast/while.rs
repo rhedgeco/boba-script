@@ -1,15 +1,18 @@
-use crate::parser::{Lexer, PError, PResult, Token};
+use crate::{
+    cache::CacheSpan,
+    parser::{Lexer, PError, PResult, Token},
+};
 
 use super::{Expr, Node, Statement};
 
 #[derive(Debug, Clone)]
-pub struct While {
-    pub cond: Node<Expr>,
-    pub body: Vec<Node<Statement>>,
+pub struct While<Data> {
+    pub cond: Node<Data, Expr<Data>>,
+    pub body: Vec<Node<Data, Statement<Data>>>,
 }
 
-impl While {
-    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self>> {
+impl While<CacheSpan> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
         // capture while token
         let start = match tokens.expect_next("'while'")? {
             (Token::While, span) => span.range().start,
@@ -17,7 +20,7 @@ impl While {
                 return Err(PError::UnexpectedToken {
                     expected: format!("'while'"),
                     found: format!("'{token}'"),
-                    span,
+                    data: span,
                 })
             }
         };
@@ -32,7 +35,7 @@ impl While {
                 return Err(PError::UnexpectedToken {
                     expected: format!("':'"),
                     found: format!("'{token}'"),
-                    span,
+                    data: span,
                 })
             }
         };
@@ -54,7 +57,7 @@ impl While {
         // capture single expression
         let expr = Expr::parse(tokens)?;
         tokens.expect_line_end()?;
-        let statement = Node::new(expr.span().clone(), Statement::Expr(expr));
+        let statement = Node::new(expr.data().clone(), Statement::Expr(expr));
         output.body.push(statement);
         Ok(output)
     }

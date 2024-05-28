@@ -5,12 +5,12 @@ use crate::parser::ast::Func;
 use super::{NativeFunc, Value};
 
 #[derive(Debug, Clone)]
-pub enum FuncType {
-    Custom(Func),
+pub enum FuncType<Data> {
+    Custom(Func<Data>),
     Native(NativeFunc),
 }
 
-impl FuncType {
+impl<Data> FuncType<Data> {
     pub fn param_count(&self) -> usize {
         match self {
             FuncType::Custom(func) => func.params.len(),
@@ -19,13 +19,22 @@ impl FuncType {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Scope {
+#[derive(Debug)]
+pub struct Scope<Data> {
     vars: HashMap<String, Value>,
-    funcs: HashMap<String, FuncType>,
+    funcs: HashMap<String, FuncType<Data>>,
 }
 
-impl Scope {
+impl<Data> Default for Scope<Data> {
+    fn default() -> Self {
+        Self {
+            vars: Default::default(),
+            funcs: Default::default(),
+        }
+    }
+}
+
+impl<Data> Scope<Data> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -42,7 +51,7 @@ impl Scope {
         self.vars.insert(ident.into(), value);
     }
 
-    pub fn init_func(&mut self, func: Func) {
+    pub fn init_func(&mut self, func: Func<Data>) {
         self.funcs
             .insert(func.ident.deref().clone(), FuncType::Custom(func));
     }
@@ -55,7 +64,7 @@ impl Scope {
         self.vars.get(ident.as_ref())
     }
 
-    pub fn get_func(&self, ident: impl AsRef<str>) -> Option<&FuncType> {
+    pub fn get_func(&self, ident: impl AsRef<str>) -> Option<&FuncType<Data>> {
         self.funcs.get(ident.as_ref())
     }
 

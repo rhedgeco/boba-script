@@ -2,10 +2,7 @@ use std::ops::Deref;
 
 use derive_more::Display;
 
-use crate::{
-    cache::CacheSpan,
-    parser::ast::{Expr, Func, Node, Statement},
-};
+use crate::parser::ast::{Expr, Func, Node, Statement};
 
 use super::{error::RunError, native::native_print, scope::FuncType, Scope, Value};
 
@@ -51,12 +48,12 @@ pub enum BinaryOpType {
 }
 
 #[derive(Debug)]
-pub struct Engine {
-    global_scope: Scope,
-    nested_scopes: Vec<Scope>,
+pub struct Engine<Data> {
+    global_scope: Scope<Data>,
+    nested_scopes: Vec<Scope<Data>>,
 }
 
-impl Default for Engine {
+impl<Data> Default for Engine<Data> {
     fn default() -> Self {
         let mut global_scope = Scope::new();
         global_scope.init_native_func(native_print());
@@ -68,12 +65,12 @@ impl Default for Engine {
     }
 }
 
-impl Engine {
+impl<Data: Clone> Engine<Data> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn scope(&self) -> &Scope {
+    pub fn scope(&self) -> &Scope<Data> {
         &self.global_scope
     }
 
@@ -92,7 +89,7 @@ impl Engine {
         }
     }
 
-    pub fn set_func(&mut self, func: Func) {
+    pub fn set_func(&mut self, func: Func<Data>) {
         match self.nested_scopes.last_mut() {
             None => self.global_scope.init_func(func),
             Some(scope) => scope.init_func(func),
@@ -119,7 +116,7 @@ impl Engine {
         self.global_scope.get_var_mut(ident)
     }
 
-    pub fn get_func(&self, ident: &Node<String>) -> Result<&FuncType, RunError> {
+    pub fn get_func(&self, ident: &Node<Data, String>) -> Result<&FuncType<Data>, RunError<Data>> {
         // try all nested scopes first
         for scope in self.nested_scopes.iter().rev() {
             if let Some(func) = scope.get_func(ident.deref()) {
@@ -132,22 +129,22 @@ impl Engine {
             .get_func(ident.deref())
             .ok_or_else(|| RunError::UnknownFunction {
                 ident: ident.deref().into(),
-                span: ident.span().clone(),
+                data: ident.data().clone(),
             })
     }
 
     pub fn eval_func(
         &mut self,
-        ident: &Node<String>,
+        ident: &Node<Data, String>,
         values: Vec<Value>,
-    ) -> Result<Value, RunError> {
+    ) -> Result<Value, RunError<Data>> {
         // get and validate function
         let func = self.get_func(ident)?;
         if func.param_count() < values.len() {
             return Err(RunError::ParameterCount {
                 expected: func.param_count(),
                 found: values.len(),
-                span: ident.span().clone(),
+                data: ident.data().clone(),
             });
         }
 
@@ -161,7 +158,7 @@ impl Engine {
                     Err(message) => {
                         self.pop_scope(); // ensure scope is popped before error
                         return Err(RunError::NativeCallError {
-                            span: ident.span().clone(),
+                            data: ident.data().clone(),
                             message,
                         });
                     }
@@ -189,7 +186,10 @@ impl Engine {
         Ok(output)
     }
 
-    pub fn eval_statement(&mut self, statement: &Node<Statement>) -> Result<Value, RunError> {
+    pub fn eval_statement(
+        &mut self,
+        statement: &Node<Data, Statement<Data>>,
+    ) -> Result<Value, RunError<Data>> {
         match statement.deref() {
             Statement::Expr(expr) => self.eval(expr),
             Statement::Func(func) => {
@@ -214,7 +214,7 @@ impl Engine {
                         return Err(RunError::TypeMismatch {
                             expected: format!("bool"),
                             found: format!("{}", value.type_name()),
-                            span: w.cond.span().clone(),
+                            data: w.cond.data().clone(),
                         })
                     }
                 }
@@ -226,7 +226,7 @@ impl Engine {
         }
     }
 
-    pub fn eval(&mut self, expr: &Node<Expr>) -> Result<Value, RunError> {
+    pub fn eval(&mut self, expr: &Node<Data, Expr<Data>>) -> Result<Value, RunError<Data>> {
         match expr.deref() {
             Expr::None => Ok(Value::None),
             Expr::Bool(v) => Ok(Value::Bool(*v.deref())),
@@ -242,87 +242,87 @@ impl Engine {
             }
             Expr::Neg(inner) => {
                 let inner = self.eval(inner)?;
-                self.eval_unary(UnaryOpType::Neg, inner, expr.span())
+                self.eval_unary(UnaryOpType::Neg, inner, expr.data())
             }
             Expr::Not(inner) => {
                 let inner = self.eval(inner)?;
-                self.eval_unary(UnaryOpType::Not, inner, expr.span())
+                self.eval_unary(UnaryOpType::Not, inner, expr.data())
             }
             Expr::Add(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Add, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Add, rhs, expr.data())
             }
             Expr::Sub(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Sub, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Sub, rhs, expr.data())
             }
             Expr::Mul(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Mul, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Mul, rhs, expr.data())
             }
             Expr::Div(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Div, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Div, rhs, expr.data())
             }
             Expr::Pow(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Pow, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Pow, rhs, expr.data())
             }
             Expr::Mod(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Mod, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Mod, rhs, expr.data())
             }
             Expr::Eq(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Eq, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Eq, rhs, expr.data())
             }
             Expr::Lt(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Lt, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Lt, rhs, expr.data())
             }
             Expr::Gt(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Gt, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Gt, rhs, expr.data())
             }
             Expr::NEq(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::NEq, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::NEq, rhs, expr.data())
             }
             Expr::LtEq(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::LtEq, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::LtEq, rhs, expr.data())
             }
             Expr::GtEq(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::GtEq, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::GtEq, rhs, expr.data())
             }
             Expr::And(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::And, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::And, rhs, expr.data())
             }
             Expr::Or(lhs, rhs) => {
                 let lhs = self.eval(lhs)?;
                 let rhs = self.eval(rhs)?;
-                self.eval_binary(lhs, BinaryOpType::Or, rhs, expr.span())
+                self.eval_binary(lhs, BinaryOpType::Or, rhs, expr.data())
             }
             Expr::Var(ident) => match self.get_var(ident.deref()) {
                 Some(value) => Ok(value.clone()),
                 None => Err(RunError::UnknownVariable {
                     ident: ident.deref().clone(),
-                    span: ident.span().clone(),
+                    data: ident.data().clone(),
                 }),
             },
             Expr::Walrus(ident, assign_expr) => {
@@ -338,7 +338,7 @@ impl Engine {
                         return Err(RunError::TypeMismatch {
                             expected: "'bool'".into(),
                             found: format!("'{}'", value.type_name()),
-                            span: cond.span().clone(),
+                            data: cond.data().clone(),
                         })
                     }
                 };
@@ -352,7 +352,12 @@ impl Engine {
         }
     }
 
-    fn eval_unary(&self, op: UnaryOpType, val: Value, span: &CacheSpan) -> Result<Value, RunError> {
+    fn eval_unary(
+        &self,
+        op: UnaryOpType,
+        val: Value,
+        data: &Data,
+    ) -> Result<Value, RunError<Data>> {
         let vtype = val.type_name();
         match (val, op) {
             (Value::Bool(v), UnaryOpType::Not) => Ok(Value::Bool(!v)),
@@ -361,7 +366,7 @@ impl Engine {
             _ => Err(RunError::InvalidUnary {
                 op,
                 vtype,
-                span: span.clone(),
+                data: data.clone(),
             }),
         }
     }
@@ -371,8 +376,8 @@ impl Engine {
         val1: Value,
         op: BinaryOpType,
         val2: Value,
-        span: &CacheSpan,
-    ) -> Result<Value, RunError> {
+        data: &Data,
+    ) -> Result<Value, RunError<Data>> {
         let vtype1 = val1.type_name();
         let vtype2 = val2.type_name();
 
@@ -585,7 +590,7 @@ impl Engine {
                 op,
                 vtype1,
                 vtype2,
-                span: span.clone(),
+                data: data.clone(),
             }),
         }
     }

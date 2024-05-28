@@ -1,16 +1,19 @@
-use crate::parser::{Lexer, PError, PResult, Token};
+use crate::{
+    cache::CacheSpan,
+    parser::{Lexer, PError, PResult, Token},
+};
 
 use super::{Node, Statement};
 
 #[derive(Debug, Clone)]
-pub struct Func {
-    pub ident: Node<String>,
-    pub params: Vec<Node<String>>,
-    pub body: Vec<Node<Statement>>,
+pub struct Func<Data> {
+    pub ident: Node<Data, String>,
+    pub params: Vec<Node<Data, String>>,
+    pub body: Vec<Node<Data, Statement<Data>>>,
 }
 
-impl Func {
-    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self>> {
+impl Func<CacheSpan> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
         // capture fn token
         let start = match tokens.expect_next("'fn'")? {
             (Token::Fn, span) => span.range().start,
@@ -18,7 +21,7 @@ impl Func {
                 return Err(PError::UnexpectedToken {
                     expected: format!("'fn'"),
                     found: format!("'{token}'"),
-                    span,
+                    data: span,
                 })
             }
         };
@@ -30,7 +33,7 @@ impl Func {
                 return Err(PError::UnexpectedToken {
                     expected: format!("function name"),
                     found: format!("'{token}'"),
-                    span,
+                    data: span,
                 })
             }
         };
@@ -42,7 +45,7 @@ impl Func {
                 return Err(PError::UnexpectedToken {
                     expected: format!("'('"),
                     found: format!("'{token}'"),
-                    span,
+                    data: span,
                 })
             }
         };
@@ -71,7 +74,7 @@ impl Func {
                 return Err(PError::UnexpectedToken {
                     expected: format!("')'"),
                     found: format!("'{token}'"),
-                    span,
+                    data: span,
                 })
             }
         };
@@ -83,7 +86,7 @@ impl Func {
                 return Err(PError::UnexpectedToken {
                     expected: format!("':'"),
                     found: format!("'{token}'"),
-                    span,
+                    data: span,
                 })
             }
         };

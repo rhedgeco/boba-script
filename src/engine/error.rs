@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use ariadne::{Color, Label, Report, ReportKind, Span as AriadneSpan};
+use ariadne::{Color, Label, Report, ReportKind, Span};
 
 use crate::cache::CacheSpan;
 
@@ -8,71 +8,71 @@ use super::{BinaryOpType, UnaryOpType};
 
 #[derive(Debug, Clone)]
 #[repr(u8)]
-pub enum RunError {
+pub enum RunError<Data> {
     UnknownVariable {
         ident: String,
-        span: CacheSpan,
+        data: Data,
     },
     UnknownFunction {
         ident: String,
-        span: CacheSpan,
+        data: Data,
     },
     InvalidUnary {
         op: UnaryOpType,
         vtype: String,
-        span: CacheSpan,
+        data: Data,
     },
     InvalidBinary {
         op: BinaryOpType,
         vtype1: String,
         vtype2: String,
-        span: CacheSpan,
+        data: Data,
     },
     TypeMismatch {
         expected: String,
         found: String,
-        span: CacheSpan,
+        data: Data,
     },
     ParameterCount {
         expected: usize,
         found: usize,
-        span: CacheSpan,
+        data: Data,
     },
     NativeCallError {
         message: String,
-        span: CacheSpan,
+        data: Data,
     },
 }
 
-impl RunError {
+impl RunError<CacheSpan> {
     pub fn report(&self) -> Report<CacheSpan> {
         match self {
-            RunError::UnknownVariable { ident, span } => {
-                Report::build(ReportKind::Error, span.source().clone(), span.start())
+            RunError::UnknownVariable { ident, data } => {
+                Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_message("Unknown Variable")
                     .with_code(format!("R-001"))
                     .with_label(
-                        Label::new(span.clone())
+                        Label::new(data.clone())
                             .with_color(Color::Red)
                             .with_message(format!("unknown variable '{ident}'")),
                     )
             }
-            RunError::UnknownFunction { ident, span } => {
-                Report::build(ReportKind::Error, span.source().clone(), span.start())
+            RunError::UnknownFunction { ident, data } => {
+                Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_message("Unknown Function")
                     .with_code(format!("R-002"))
                     .with_label(
-                        Label::new(span.clone())
+                        Label::new(data.clone())
                             .with_color(Color::Red)
                             .with_message(format!("unknown function '{ident}'")),
                     )
             }
-            RunError::InvalidUnary { op, vtype, span } => {
-                Report::build(ReportKind::Error, span.source().clone(), span.start())
+            RunError::InvalidUnary { op, vtype, data } => {
+                Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_message("Invalid Unary Operator")
                     .with_code(format!("R-003"))
                     .with_label(
-                        Label::new(span.clone())
+                        Label::new(data.clone())
                             .with_color(Color::Red)
                             .with_message(format!("cannot use unary '{op}' prefix with '{vtype}'")),
                     )
@@ -81,12 +81,12 @@ impl RunError {
                 op,
                 vtype1,
                 vtype2,
-                span,
-            } => Report::build(ReportKind::Error, span.source().clone(), span.start())
+                data,
+            } => Report::build(ReportKind::Error, data.source().clone(), data.start())
                 .with_message("Invalid Binary Operator")
                 .with_code(format!("R-004"))
                 .with_label(
-                    Label::new(span.clone())
+                    Label::new(data.clone())
                         .with_color(Color::Red)
                         .with_message(format!(
                             "'{vtype1}' does not have a valid '{op}' operator for '{vtype2}'"
@@ -96,35 +96,35 @@ impl RunError {
             RunError::TypeMismatch {
                 expected,
                 found,
-                span,
-            } => Report::build(ReportKind::Error, span.source().clone(), span.start())
+                data,
+            } => Report::build(ReportKind::Error, data.source().clone(), data.start())
                 .with_message("Type Mismatch")
                 .with_code(format!("R-005"))
                 .with_label(
-                    Label::new(span.clone())
+                    Label::new(data.clone())
                         .with_color(Color::Red)
                         .with_message(format!("expected {expected}, found {found}")),
                 ),
             RunError::ParameterCount {
                 expected,
                 found,
-                span,
-            } => Report::build(ReportKind::Error, span.source().clone(), span.start())
+                data,
+            } => Report::build(ReportKind::Error, data.source().clone(), data.start())
                 .with_message("Wrong Parameter Count")
                 .with_code(format!("R-006"))
                 .with_label(
-                    Label::new(span.clone())
+                    Label::new(data.clone())
                         .with_color(Color::Red)
                         .with_message(format!(
                             "function expects {expected} parameters, found {found}"
                         )),
                 ),
-            RunError::NativeCallError { message, span } => {
-                Report::build(ReportKind::Error, span.source().clone(), span.start())
+            RunError::NativeCallError { message, data } => {
+                Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_message("Native Call Error")
                     .with_code(format!("R-007"))
                     .with_label(
-                        Label::new(span.clone())
+                        Label::new(data.clone())
                             .with_color(Color::Red)
                             .with_message(message),
                     )
