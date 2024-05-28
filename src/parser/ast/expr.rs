@@ -1,6 +1,6 @@
 use crate::{
-    cache::Span,
-    parser::{ast::Node, PError, PResult, Token, TokenLine},
+    cache::CacheSpan,
+    parser::{ast::Node, Lexer, PError, PResult, Token},
 };
 
 #[derive(Debug, Clone)]
@@ -44,30 +44,30 @@ pub enum Expr {
 }
 
 impl Expr {
-    fn parse_int(span: Span, str: impl AsRef<str>) -> PResult<Node<Expr>> {
+    fn parse_int(span: CacheSpan, str: impl AsRef<str>) -> PResult<Node<Expr>> {
         match str.as_ref().parse() {
             Err(error) => Err(PError::ParseIntError { error, span }),
             Ok(value) => Ok(Node::new(span.clone(), Expr::Int(Node::new(span, value)))),
         }
     }
 
-    fn parse_float(span: Span, str: impl AsRef<str>) -> PResult<Node<Expr>> {
+    fn parse_float(span: CacheSpan, str: impl AsRef<str>) -> PResult<Node<Expr>> {
         match str.as_ref().parse() {
             Err(error) => Err(PError::ParseFloatError { error, span }),
             Ok(value) => Ok(Node::new(span.clone(), Expr::Float(Node::new(span, value)))),
         }
     }
 
-    pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self>> {
         let lhs = Self::parse_atom(tokens)?;
         Self::parse_with_lhs(lhs, tokens)
     }
 
-    pub fn parse_with_lhs(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Self>> {
+    pub fn parse_with_lhs(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Self>> {
         Self::parse_walrus(lhs, tokens) // start parsing at lowest precedence operator
     }
 
-    pub fn parse_ident(lhs: Node<String>, tokens: &mut TokenLine) -> PResult<Node<Self>> {
+    pub fn parse_ident(lhs: Node<String>, tokens: &mut Lexer) -> PResult<Node<Self>> {
         match tokens.peek() {
             Some(Err(error)) => Err(error),
             Some(Ok((Token::OpenParen, _))) => {
@@ -111,7 +111,7 @@ impl Expr {
         }
     }
 
-    pub fn parse_atom(tokens: &mut TokenLine) -> PResult<Node<Self>> {
+    pub fn parse_atom(tokens: &mut Lexer) -> PResult<Node<Self>> {
         match tokens.expect_next("expression")? {
             // values
             (Token::None, span) => Ok(Node::new(span, Expr::None)),
@@ -167,7 +167,7 @@ impl Expr {
         }
     }
 
-    pub fn parse_powers(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
+    pub fn parse_powers(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Expr>> {
         match tokens.peek() {
             Some(Ok((Token::Pow, _))) => (),
             Some(Err(error)) => return Err(error),
@@ -184,7 +184,7 @@ impl Expr {
         ))
     }
 
-    pub fn parse_products(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
+    pub fn parse_products(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Expr>> {
         let op = match tokens.peek() {
             Some(Ok((Token::Mul, _))) => Expr::Mul,
             Some(Ok((Token::Div, _))) => Expr::Div,
@@ -204,7 +204,7 @@ impl Expr {
         Self::parse_products(new_lhs, tokens) // keep parsing
     }
 
-    pub fn parse_sums(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
+    pub fn parse_sums(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Expr>> {
         let op = match tokens.peek() {
             Some(Ok((Token::Add, _))) => Expr::Add,
             Some(Ok((Token::Sub, _))) => Expr::Sub,
@@ -223,7 +223,7 @@ impl Expr {
         Self::parse_sums(new_lhs, tokens) // keep parsing
     }
 
-    pub fn parse_comparisons(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
+    pub fn parse_comparisons(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Expr>> {
         let op = match tokens.peek() {
             Some(Ok((Token::Eq, _))) => Expr::Eq,
             Some(Ok((Token::Lt, _))) => Expr::Lt,
@@ -246,7 +246,7 @@ impl Expr {
         Self::parse_comparisons(new_lhs, tokens) // keep parsing
     }
 
-    pub fn parse_ands(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
+    pub fn parse_ands(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Expr>> {
         match tokens.peek() {
             Some(Ok((Token::And, _))) => (),
             Some(Err(error)) => return Err(error),
@@ -264,7 +264,7 @@ impl Expr {
         Self::parse_ands(new_lhs, tokens) // keep parsing
     }
 
-    pub fn parse_ors(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
+    pub fn parse_ors(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Expr>> {
         match tokens.peek() {
             Some(Ok((Token::And, _))) => (),
             Some(Err(error)) => return Err(error),
@@ -282,7 +282,7 @@ impl Expr {
         Self::parse_ors(new_lhs, tokens) // keep parsing
     }
 
-    pub fn parse_ternaries(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
+    pub fn parse_ternaries(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Expr>> {
         // check for question delimiter
         match tokens.peek() {
             Some(Ok((Token::Question, _))) => (),
@@ -318,7 +318,7 @@ impl Expr {
         ))
     }
 
-    pub fn parse_walrus(lhs: Node<Expr>, tokens: &mut TokenLine) -> PResult<Node<Expr>> {
+    pub fn parse_walrus(lhs: Node<Expr>, tokens: &mut Lexer) -> PResult<Node<Expr>> {
         let walrus_span = match tokens.peek() {
             Some(Ok((Token::Walrus, span))) => span.clone(),
             Some(Err(error)) => return Err(error),

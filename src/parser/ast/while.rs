@@ -1,4 +1,4 @@
-use crate::parser::{PError, PResult, Token, TokenLine};
+use crate::parser::{Lexer, PError, PResult, Token};
 
 use super::{Expr, Node, Statement};
 
@@ -9,7 +9,7 @@ pub struct While {
 }
 
 impl While {
-    pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self>> {
         // capture while token
         let start = match tokens.expect_next("'while'")? {
             (Token::While, span) => span.range().start,
@@ -53,7 +53,7 @@ impl While {
 
         // capture single expression
         let expr = Expr::parse(tokens)?;
-        tokens.expect_end()?;
+        tokens.expect_line_end()?;
         let statement = Node::new(expr.span().clone(), Statement::Expr(expr));
         output.body.push(statement);
         Ok(output)

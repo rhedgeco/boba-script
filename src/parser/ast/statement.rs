@@ -1,4 +1,4 @@
-use crate::parser::{PError, PResult, Token, TokenLine};
+use crate::parser::{Lexer, PError, PResult, Token};
 
 use super::{Expr, Func, Node, While};
 
@@ -12,7 +12,7 @@ pub enum Statement {
 }
 
 impl Statement {
-    pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self>> {
         match tokens.expect_peek("assignment or expression")? {
             (Token::Let, span) => {
                 let start = span.range().start;
@@ -60,14 +60,14 @@ impl Statement {
                     Some(Ok((Token::Assign, _))) => {
                         tokens.next(); // consume assign
                         let rhs = Expr::parse(tokens)?;
-                        tokens.expect_end()?;
+                        tokens.expect_line_end()?;
                         let range = ident.span().range().start..rhs.span().range().end;
                         Ok(Node::new(tokens.span(range), Self::Assign(ident, rhs)))
                     }
                     Some(Ok(_)) => {
                         let lhs = Expr::parse_ident(ident, tokens)?;
                         let expr = Expr::parse_with_lhs(lhs, tokens)?;
-                        tokens.expect_end()?;
+                        tokens.expect_line_end()?;
                         Ok(Node::new(expr.span().clone(), Self::Expr(expr)))
                     }
                 }
@@ -82,7 +82,7 @@ impl Statement {
             }
             _ => {
                 let expr = Expr::parse(tokens)?;
-                tokens.expect_end()?;
+                tokens.expect_line_end()?;
                 Ok(Node::new(expr.span().clone(), Self::Expr(expr)))
             }
         }

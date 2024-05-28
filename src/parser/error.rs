@@ -5,60 +5,60 @@ use std::{
 
 use ariadne::{Color, Label, Report, ReportKind, Span as AriadneSpan};
 
-use crate::cache::Span;
+use crate::cache::CacheSpan;
 
 pub type PResult<T> = Result<T, PError>;
 
 #[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum PError {
-    UnexpectedEndOfLine {
+    UnexpectedEnd {
         expected: String,
-        span: Span,
+        span: CacheSpan,
     },
     InvalidToken {
         part: String,
-        span: Span,
+        span: CacheSpan,
     },
     UnclosedString {
-        span: Span,
+        span: CacheSpan,
     },
     ParseIntError {
         error: ParseIntError,
-        span: Span,
+        span: CacheSpan,
     },
     ParseFloatError {
         error: ParseFloatError,
-        span: Span,
+        span: CacheSpan,
     },
     UnexpectedToken {
         expected: String,
         found: String,
-        span: Span,
+        span: CacheSpan,
     },
     UnclosedBrace {
-        span: Span,
+        span: CacheSpan,
     },
     InvalidWalrusAssignment {
-        span: Span,
+        span: CacheSpan,
     },
     MixedTabsAndSpaces {
-        span: Span,
+        span: CacheSpan,
         tab: bool,
     },
 }
 
 impl PError {
-    pub fn report(&self) -> Report<Span> {
+    pub fn report(&self) -> Report<CacheSpan> {
         match self {
-            PError::UnexpectedEndOfLine { expected, span } => {
+            PError::UnexpectedEnd { expected, span } => {
                 Report::build(ReportKind::Error, span.source().clone(), span.start())
                     .with_code(format!("C-001"))
-                    .with_message("Unexpected Line End")
+                    .with_message("Unexpected End of Input")
                     .with_label(
                         Label::new(span.clone())
                             .with_color(Color::Red)
-                            .with_message(format!("expected {expected}, found end of line")),
+                            .with_message(format!("expected {expected}, found end of input")),
                     )
                     .finish()
             }

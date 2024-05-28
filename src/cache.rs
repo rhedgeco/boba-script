@@ -10,12 +10,12 @@ use ariadne::{Cache, Source};
 
 /// Represents a range of bytes from a file stored in [`BobaCache`]
 #[derive(Debug, Clone)]
-pub struct Span {
+pub struct CacheSpan {
     range: Range<usize>,
     id: CacheId,
 }
 
-impl ariadne::Span for Span {
+impl ariadne::Span for CacheSpan {
     type SourceId = CacheId;
 
     fn source(&self) -> &Self::SourceId {
@@ -31,7 +31,7 @@ impl ariadne::Span for Span {
     }
 }
 
-impl Span {
+impl CacheSpan {
     pub fn new(id: CacheId, range: Range<usize>) -> Self {
         Self { range, id }
     }
@@ -90,8 +90,8 @@ impl CacheData {
         self.source.text()
     }
 
-    pub fn span(&self, range: Range<usize>) -> Span {
-        Span { range, id: self.id }
+    pub fn span(&self, range: Range<usize>) -> CacheSpan {
+        CacheSpan { range, id: self.id }
     }
 }
 

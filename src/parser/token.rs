@@ -2,6 +2,9 @@ use derive_more::Display;
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Token<'source> {
+    #[display(fmt = "newline")]
+    Newline,
+
     #[display(fmt = "{}", _0)]
     Ident(&'source str),
 

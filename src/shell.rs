@@ -59,16 +59,12 @@ impl Session {
                 }
             };
 
-            let mut tokens = match Lexer::new(data).next() {
-                None => continue,
-                Some(Ok(tokens)) => tokens,
-                Some(Err(e)) => {
-                    e.report().eprint(&mut cache).unwrap();
-                    continue;
-                }
-            };
+            let mut lexer = Lexer::new(data);
+            if lexer.peek().is_none() {
+                continue; // if there are no tokens, do nothing
+            }
 
-            match Statement::parse(&mut tokens) {
+            match Statement::parse(&mut lexer) {
                 Ok(statement) => match engine.eval_statement(&statement) {
                     Ok(Value::None) => continue,
                     Ok(value) => println!("{value}"),

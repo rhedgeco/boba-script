@@ -1,4 +1,4 @@
-use crate::parser::{PError, PResult, Token, TokenLine};
+use crate::parser::{Lexer, PError, PResult, Token};
 
 use super::{Node, Statement};
 
@@ -10,7 +10,7 @@ pub struct Func {
 }
 
 impl Func {
-    pub fn parse(tokens: &mut TokenLine) -> PResult<Node<Self>> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self>> {
         // capture fn token
         let start = match tokens.expect_next("'fn'")? {
             (Token::Fn, span) => span.range().start,
@@ -99,13 +99,18 @@ impl Func {
         );
 
         // return early if end of line is found
-        if let None = tokens.peek() {
-            return Ok(output);
+        match tokens.peek() {
+            None => return Ok(output),
+            Some(Err(err)) => return Err(err),
+            Some(Ok((token, _))) => match token {
+                Token::Newline => return Ok(output),
+                _ => (),
+            },
         }
 
         // capture single statement
         let statement = Statement::parse(tokens)?;
-        tokens.expect_end()?;
+        tokens.expect_line_end()?;
         output.body.push(statement);
         Ok(output)
     }

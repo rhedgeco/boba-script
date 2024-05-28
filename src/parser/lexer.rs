@@ -1,202 +1,159 @@
-use std::{iter::Peekable, ops::Range, str::SplitInclusive};
+use std::{iter::Peekable, ops::Range};
 
 use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
 
 use crate::{
-    cache::{CacheData, Span},
+    cache::{CacheData, CacheSpan},
     parser::{PError, PResult, Token},
 };
 
-pub enum TokenItem {}
-
 pub struct Lexer<'source> {
+    peeked: Option<(Token<'source>, CacheSpan)>,
+    symbols: Peekable<GraphemeIndices<'source>>,
     data: &'source CacheData,
-    lines: SplitInclusive<'source, char>,
-    tabs: Option<bool>,
-    offset: usize,
+    pos: usize,
 }
 
 impl<'source> Lexer<'source> {
     pub fn new(data: &'source CacheData) -> Self {
         Self {
+            peeked: None,
+            symbols: data.text().grapheme_indices(true).peekable(),
             data,
-            lines: data.text().split_inclusive('\n'),
-            tabs: None,
-            offset: 0,
+            pos: 0,
         }
+    }
+
+    pub fn pos(&self) -> usize {
+        self.pos
+    }
+
+    pub fn pos_span(&self) -> CacheSpan {
+        self.data.span(self.pos..self.pos)
+    }
+
+    pub fn span(&self, range: Range<usize>) -> CacheSpan {
+        self.data.span(range)
+    }
+
+    pub fn peek(&mut self) -> Option<PResult<(Token<'source>, CacheSpan)>> {
+        match &self.peeked {
+            Some(items) => Some(Ok(items.clone())),
+            None => match self.next()? {
+                Err(err) => Some(Err(err)),
+                Ok(items) => {
+                    self.peeked = Some(items.clone());
+                    Some(Ok(items))
+                }
+            },
+        }
+    }
+
+    pub fn expect_peek(
+        &mut self,
+        expect: impl Into<String>,
+    ) -> PResult<(Token<'source>, CacheSpan)> {
+        match self.peek() {
+            Some(result) => result,
+            None => Err(PError::UnexpectedEnd {
+                expected: expect.into(),
+                span: self.pos_span(),
+            }),
+        }
+    }
+
+    pub fn expect_next(
+        &mut self,
+        expect: impl Into<String>,
+    ) -> PResult<(Token<'source>, CacheSpan)> {
+        match self.next() {
+            Some(result) => result,
+            None => Err(PError::UnexpectedEnd {
+                expected: expect.into(),
+                span: self.pos_span(),
+            }),
+        }
+    }
+
+    pub fn expect_line_end(&mut self) -> PResult<()> {
+        match self.next() {
+            None => Ok(()),
+            Some(Err(err)) => Err(err),
+            Some(Ok((token, span))) => match token {
+                Token::Newline => Ok(()),
+                _ => Err(PError::UnexpectedToken {
+                    expected: format!("end of line"),
+                    found: format!("'{token}'"),
+                    span,
+                }),
+            },
+        }
+    }
+
+    fn peek_symbol(&mut self) -> Option<(usize, &'source str)> {
+        let (index, symbol) = self.symbols.peek()?;
+        Some((*index, *symbol))
+    }
+
+    fn take_symbol(&mut self) -> Option<(usize, &'source str)> {
+        let (index, symbol) = self.symbols.next()?;
+        self.pos = index + symbol.len();
+        Some((index, symbol))
     }
 }
 
 impl<'source> Iterator for Lexer<'source> {
-    type Item = PResult<TokenLine<'source>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            // get line and ensure it is not empty
-            let line = self.lines.next()?;
-            if line.trim().is_empty() {
-                continue;
-            }
-
-            // count indentation and validate tabs and spaces
-            let mut indent = 0;
-            for (byte, char) in line.chars().enumerate() {
-                match char {
-                    ' ' => match self.tabs {
-                        Some(false) => indent += 1,
-                        None => {
-                            self.tabs = Some(false);
-                            indent += 1;
-                        }
-                        Some(true) => {
-                            let range = self.offset + byte..self.offset + byte + char.len_utf8();
-                            let span = self.data.span(range);
-                            return Some(Err(PError::MixedTabsAndSpaces { span, tab: false }));
-                        }
-                    },
-                    '\t' => match self.tabs {
-                        Some(true) => indent += 1,
-                        None => {
-                            self.tabs = Some(true);
-                            indent += 1;
-                        }
-                        Some(false) => {
-                            let range = self.offset + byte..self.offset + byte + char.len_utf8();
-                            let span = self.data.span(range);
-                            return Some(Err(PError::MixedTabsAndSpaces { span, tab: true }));
-                        }
-                    },
-                    _ => break,
-                }
-            }
-
-            // calculate data range and increment internal offset
-            let range = self.offset..self.offset + line.len();
-            self.offset += line.len();
-
-            // build and return token line
-            return Some(Ok(TokenLine {
-                peeked: None,
-                symbols: line.grapheme_indices(true).peekable(),
-                data: self.data,
-                range,
-                indent,
-            }));
-        }
-    }
-}
-
-pub struct TokenLine<'source> {
-    peeked: Option<(Token<'source>, Span)>,
-    symbols: Peekable<GraphemeIndices<'source>>,
-    data: &'source CacheData,
-    range: Range<usize>,
-    indent: usize,
-}
-
-impl<'source> TokenLine<'source> {
-    pub fn indent(&self) -> usize {
-        self.indent
-    }
-
-    pub fn line(&self) -> &'source str {
-        &self.data.text()[self.range.clone()]
-    }
-
-    pub fn span(&self, range: Range<usize>) -> Span {
-        self.data.span(range)
-    }
-
-    pub fn peek(&mut self) -> Option<PResult<&(Token<'source>, Span)>> {
-        if self.peeked.is_some() {
-            return self.peeked.as_ref().map(|p| Ok(p));
-        }
-
-        self.peeked = match self.next()? {
-            Err(e) => return Some(Err(e)),
-            Ok(peek) => Some(peek),
-        };
-
-        self.peeked.as_ref().map(|p| Ok(p))
-    }
-
-    pub fn expect_end(&mut self) -> PResult<()> {
-        match self.next() {
-            None => Ok(()),
-            Some(Err(e)) => Err(e),
-            Some(Ok((token, span))) => Err(PError::UnexpectedToken {
-                expected: format!("end of line"),
-                found: format!("'{token}'"),
-                span,
-            }),
-        }
-    }
-
-    pub fn expect_next(&mut self, expect: impl Into<String>) -> PResult<(Token<'source>, Span)> {
-        match self.next() {
-            Some(next) => next,
-            None => Err(PError::UnexpectedEndOfLine {
-                expected: expect.into(),
-                span: self.data.span(self.range.end..self.range.end),
-            }),
-        }
-    }
-
-    pub fn expect_peek(&mut self, expect: impl Into<String>) -> PResult<&(Token<'source>, Span)> {
-        let span = self.data.span(self.range.end..self.range.end);
-        match self.peek() {
-            Some(peek) => peek,
-            None => Err(PError::UnexpectedEndOfLine {
-                expected: expect.into(),
-                span,
-            }),
-        }
-    }
-}
-
-impl<'source> Iterator for TokenLine<'source> {
-    type Item = PResult<(Token<'source>, Span)>;
+    type Item = PResult<(Token<'source>, CacheSpan)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(peeked) = self.peeked.take() {
+            self.pos = peeked.1.range().end;
             return Some(Ok(peeked));
         }
 
-        // --------------
-        // HELPER METHODS
-        fn is_whitespace(str: &str) -> bool {
-            str.chars().all(|c| c.is_whitespace())
-        }
-
-        fn valid_digits(str: &str) -> bool {
-            str.chars().all(|c| c.is_ascii_digit())
-        }
-
-        fn valid_ident_start(str: &str) -> bool {
-            str.chars().all(|c| c == '_' || c.is_ascii_alphabetic())
-        }
-
-        fn valid_ident_end(str: &str) -> bool {
-            str.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
-        }
-
-        // ---------
-        // MAIN LOOP
         loop {
-            let (offset, symbol) = self.symbols.next()?;
-            let offset = self.range.start + offset;
-            let symbol_span = self.data.span(offset..offset + symbol.len());
+            let (start, symbol) = self.take_symbol()?;
+            let symbol_span = self.data.span(start..start + symbol.len());
+            self.pos = start + symbol.len(); // update scan pos
+
+            // --------------
+            // HELPER METHODS
+            fn is_newline(str: &str) -> bool {
+                str == "\n" || str == "\r\n" || str == "\r"
+            }
+
+            fn is_digits(str: &str) -> bool {
+                str.chars().all(|c| c.is_ascii_digit())
+            }
+
+            fn is_ident_start(str: &str) -> bool {
+                str.chars().all(|c| c == '_' || c.is_ascii_alphabetic())
+            }
+
+            fn is_ident_end(str: &str) -> bool {
+                str.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
+            }
+
             return match symbol {
                 // ----------
                 // WHITESPACE
-                symbol if is_whitespace(symbol) => continue,
+                " " | "\t" => continue,
+
+                // --------
+                // NEWLINES
+                symbol if is_newline(symbol) => Some(Ok((Token::Newline, symbol_span))),
 
                 // --------
                 // COMMENTS
                 "#" => {
-                    // consume the rest of the line and return nothing
-                    while let Some(_) = self.symbols.next() {}
-                    None
+                    // check if token is some and not a newline
+                    while self.peek_symbol().is_some_and(|(_, s)| !is_newline(s)) {
+                        // consume the tokens until end of line is reached
+                        self.take_symbol();
+                    }
+
+                    // continue so that entire comment is skipped by lexer
+                    continue;
                 }
 
                 // -------------
@@ -212,59 +169,59 @@ impl<'source> Iterator for TokenLine<'source> {
 
                 // ------------
                 // MULTI TOKENS
-                "-" => match self.symbols.peek() {
-                    Some((i, part @ ">")) => {
-                        let end = offset + i + part.len();
-                        self.symbols.next(); // consume peeked token
-                        Some(Ok((Token::Arrow, self.data.span(offset..end))))
+                "-" => match self.peek_symbol() {
+                    Some((index, part @ ">")) => {
+                        let end = index + part.len();
+                        self.take_symbol(); // consume peeked token
+                        Some(Ok((Token::Arrow, self.data.span(start..end))))
                     }
                     _ => Some(Ok((Token::Sub, symbol_span))),
                 },
-                "*" => match self.symbols.peek() {
-                    Some((i, part @ "*")) => {
-                        let end = offset + i + part.len();
-                        self.symbols.next(); // consume peeked token
-                        Some(Ok((Token::Pow, self.data.span(offset..end))))
+                "*" => match self.peek_symbol() {
+                    Some((index, part @ "*")) => {
+                        let end = index + part.len();
+                        self.take_symbol(); // consume peeked token
+                        Some(Ok((Token::Pow, self.data.span(start..end))))
                     }
                     _ => Some(Ok((Token::Mul, symbol_span))),
                 },
-                "!" => match self.symbols.peek() {
-                    Some((i, part @ "=")) => {
-                        let end = offset + i + part.len();
-                        self.symbols.next(); // consume peeked token
-                        Some(Ok((Token::NEq, self.data.span(offset..end))))
+                "!" => match self.peek_symbol() {
+                    Some((index, part @ "=")) => {
+                        let end = index + part.len();
+                        self.take_symbol(); // consume peeked token
+                        Some(Ok((Token::NEq, self.data.span(start..end))))
                     }
                     _ => Some(Ok((Token::Not, symbol_span))),
                 },
-                "<" => match self.symbols.peek() {
-                    Some((i, part @ "=")) => {
-                        let end = offset + i + part.len();
-                        self.symbols.next(); // consume peeked token
-                        Some(Ok((Token::LtEq, self.data.span(offset..end))))
+                "<" => match self.peek_symbol() {
+                    Some((index, part @ "=")) => {
+                        let end = index + part.len();
+                        self.take_symbol(); // consume peeked token
+                        Some(Ok((Token::LtEq, self.data.span(start..end))))
                     }
                     _ => Some(Ok((Token::Lt, symbol_span))),
                 },
-                ">" => match self.symbols.peek() {
-                    Some((i, part @ "=")) => {
-                        let end = offset + i + part.len();
-                        self.symbols.next(); // consume peeked token
-                        Some(Ok((Token::GtEq, self.data.span(offset..end))))
+                ">" => match self.peek_symbol() {
+                    Some((index, part @ "=")) => {
+                        let end = index + part.len();
+                        self.take_symbol(); // consume peeked token
+                        Some(Ok((Token::GtEq, self.data.span(start..end))))
                     }
                     _ => Some(Ok((Token::Gt, symbol_span))),
                 },
-                "=" => match self.symbols.peek() {
-                    Some((i, part @ "=")) => {
-                        let end = offset + i + part.len();
-                        self.symbols.next(); // consume peeked token
-                        Some(Ok((Token::Eq, self.data.span(offset..end))))
+                "=" => match self.peek_symbol() {
+                    Some((index, part @ "=")) => {
+                        let end = index + part.len();
+                        self.take_symbol(); // consume peeked token
+                        Some(Ok((Token::Eq, self.data.span(start..end))))
                     }
                     _ => Some(Ok((Token::Assign, symbol_span))),
                 },
-                ":" => match self.symbols.peek() {
-                    Some((i, part @ "=")) => {
-                        let end = offset + i + part.len();
-                        self.symbols.next(); // consume peeked token
-                        Some(Ok((Token::Walrus, self.data.span(offset..end))))
+                ":" => match self.peek_symbol() {
+                    Some((index, part @ "=")) => {
+                        let end = index + part.len();
+                        self.take_symbol(); // consume peeked token
+                        Some(Ok((Token::Walrus, self.data.span(start..end))))
                     }
                     _ => Some(Ok((Token::Colon, symbol_span))),
                 },
@@ -272,24 +229,24 @@ impl<'source> Iterator for TokenLine<'source> {
                 // -------
                 // STRINGS
                 quote @ "'" | quote @ "\"" => loop {
-                    match self.symbols.peek() {
-                        Some((quote_index, symbol)) if *symbol == quote => {
-                            let str_range = offset + quote.len()..*quote_index;
-                            let data_range = offset..self.range.start + quote_index + quote.len();
+                    match self.peek_symbol() {
+                        Some((index, symbol)) if symbol == quote => {
+                            let str_range = start + quote.len()..index;
+                            let data_range = start..index + quote.len();
                             let span = self.data.span(data_range);
-                            self.symbols.next(); // consume token
+                            self.take_symbol(); // consume token
 
                             let str = &self.data.text()[str_range];
                             return Some(Ok((Token::String(str), span)));
                         }
                         None => {
-                            let span = offset..self.range.end;
+                            let span = start..self.data.text().len();
                             return Some(Err(PError::UnclosedString {
                                 span: self.data.span(span),
                             }));
                         }
                         Some(_) => {
-                            self.symbols.next(); // consume token
+                            self.take_symbol(); // consume token
                             continue;
                         }
                     }
@@ -297,14 +254,14 @@ impl<'source> Iterator for TokenLine<'source> {
 
                 // --------------------
                 // IDENTIFIERS/KEYWORDS
-                symbol if valid_ident_start(symbol) => loop {
-                    match self.symbols.peek() {
-                        Some((_, symbol)) if valid_ident_end(symbol) => {
-                            self.symbols.next(); // consume token
+                symbol if is_ident_start(symbol) => loop {
+                    match self.peek_symbol() {
+                        Some((_, symbol)) if is_ident_end(symbol) => {
+                            self.take_symbol(); // consume token
                             continue;
                         }
-                        Some((ident_end, _)) => {
-                            let span = self.data.span(offset..self.range.start + ident_end);
+                        Some((end, _)) => {
+                            let span = self.data.span(start..end);
                             let str = &self.data.text()[span.range().clone()];
 
                             // check for keywords
@@ -314,7 +271,7 @@ impl<'source> Iterator for TokenLine<'source> {
                             };
                         }
                         None => {
-                            let span = self.data.span(offset..self.range.end);
+                            let span = self.data.span(start..self.data.text().len());
                             let str = &self.data.text()[span.range().clone()];
 
                             // check for keywords
@@ -328,24 +285,24 @@ impl<'source> Iterator for TokenLine<'source> {
 
                 // -------
                 // NUMBERS
-                symbol if valid_digits(symbol) => {
+                symbol if is_digits(symbol) => {
                     loop {
-                        match self.symbols.peek() {
-                            Some((_, symbol)) if valid_digits(symbol) => {
-                                self.symbols.next(); // consume number
+                        match self.peek_symbol() {
+                            Some((_, symbol)) if is_digits(symbol) => {
+                                self.take_symbol(); // consume number
                                 continue;
                             }
                             Some((_, ".")) => {
-                                self.symbols.next();
+                                self.take_symbol();
                                 break; // break and continue parsing float
                             }
-                            Some((int_end, _)) => {
-                                let span = self.data.span(offset..self.range.start + int_end);
+                            Some((end, _)) => {
+                                let span = self.data.span(start..end);
                                 let str = &self.data.text()[span.range().clone()];
                                 return Some(Ok((Token::UInt(str), span)));
                             }
                             None => {
-                                let span = self.data.span(offset..self.range.end);
+                                let span = self.data.span(start..self.data.text().len());
                                 let str = &self.data.text()[span.range().clone()];
                                 return Some(Ok((Token::UInt(str), span)));
                             }
@@ -354,18 +311,18 @@ impl<'source> Iterator for TokenLine<'source> {
 
                     // after here we are parsing floats
                     loop {
-                        match self.symbols.peek() {
-                            Some((_, symbol)) if valid_digits(symbol) => {
-                                self.symbols.next(); // consume number
+                        match self.peek_symbol() {
+                            Some((_, symbol)) if is_digits(symbol) => {
+                                self.take_symbol(); // consume number
                                 continue;
                             }
-                            Some((float_end, _)) => {
-                                let span = self.data.span(offset..self.range.start + float_end);
+                            Some((end, _)) => {
+                                let span = self.data.span(start..end);
                                 let str = &self.data.text()[span.range().clone()];
                                 return Some(Ok((Token::UFloat(str), span)));
                             }
                             None => {
-                                let span = self.data.span(offset..self.range.end);
+                                let span = self.data.span(start..self.data.text().len());
                                 let str = &self.data.text()[span.range().clone()];
                                 return Some(Ok((Token::UFloat(str), span)));
                             }
@@ -375,13 +332,10 @@ impl<'source> Iterator for TokenLine<'source> {
 
                 // --------------
                 // INVALID TOKENS
-                symbol => {
-                    let span = offset..offset + symbol.len();
-                    Some(Err(PError::InvalidToken {
-                        part: symbol.into(),
-                        span: self.data.span(span),
-                    }))
-                }
+                symbol => Some(Err(PError::InvalidToken {
+                    part: symbol.into(),
+                    span: symbol_span,
+                })),
             };
         }
     }

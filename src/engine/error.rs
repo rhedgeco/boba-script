@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use ariadne::{Color, Label, Report, ReportKind, Span as AriadneSpan};
 
-use crate::cache::Span;
+use crate::cache::CacheSpan;
 
 use super::{BinaryOpType, UnaryOpType};
 
@@ -11,41 +11,41 @@ use super::{BinaryOpType, UnaryOpType};
 pub enum RunError {
     UnknownVariable {
         ident: String,
-        span: Span,
+        span: CacheSpan,
     },
     UnknownFunction {
         ident: String,
-        span: Span,
+        span: CacheSpan,
     },
     InvalidUnary {
         op: UnaryOpType,
         vtype: String,
-        span: Span,
+        span: CacheSpan,
     },
     InvalidBinary {
         op: BinaryOpType,
         vtype1: String,
         vtype2: String,
-        span: Span,
+        span: CacheSpan,
     },
     TypeMismatch {
         expected: String,
         found: String,
-        span: Span,
+        span: CacheSpan,
     },
     ParameterCount {
         expected: usize,
         found: usize,
-        span: Span,
+        span: CacheSpan,
     },
     NativeCallError {
         message: String,
-        span: Span,
+        span: CacheSpan,
     },
 }
 
 impl RunError {
-    pub fn report(&self) -> Report<Span> {
+    pub fn report(&self) -> Report<CacheSpan> {
         match self {
             RunError::UnknownVariable { ident, span } => {
                 Report::build(ReportKind::Error, span.source().clone(), span.start())

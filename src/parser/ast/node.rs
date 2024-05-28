@@ -1,10 +1,10 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::cache::Span;
+use crate::cache::CacheSpan;
 
 #[derive(Debug, Clone)]
 pub struct Node<T> {
-    span: Span,
+    span: CacheSpan,
     item: T,
 }
 
@@ -23,11 +23,11 @@ impl<T> Deref for Node<T> {
 }
 
 impl<T> Node<T> {
-    pub fn new(span: Span, item: T) -> Self {
+    pub fn new(span: CacheSpan, item: T) -> Self {
         Self { span, item }
     }
 
-    pub fn span(&self) -> &Span {
+    pub fn span(&self) -> &CacheSpan {
         &self.span
     }
 
@@ -35,11 +35,11 @@ impl<T> Node<T> {
         self.item
     }
 
-    pub fn into_span(self) -> Span {
+    pub fn into_span(self) -> CacheSpan {
         self.span
     }
 
-    pub fn into_parts(self) -> (Span, T) {
+    pub fn into_parts(self) -> (CacheSpan, T) {
         (self.span, self.item)
     }
 }

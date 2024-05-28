@@ -3,7 +3,7 @@ use std::ops::Deref;
 use derive_more::Display;
 
 use crate::{
-    cache::Span,
+    cache::CacheSpan,
     parser::ast::{Expr, Func, Node, Statement},
 };
 
@@ -352,7 +352,7 @@ impl Engine {
         }
     }
 
-    fn eval_unary(&self, op: UnaryOpType, val: Value, span: &Span) -> Result<Value, RunError> {
+    fn eval_unary(&self, op: UnaryOpType, val: Value, span: &CacheSpan) -> Result<Value, RunError> {
         let vtype = val.type_name();
         match (val, op) {
             (Value::Bool(v), UnaryOpType::Not) => Ok(Value::Bool(!v)),
@@ -371,7 +371,7 @@ impl Engine {
         val1: Value,
         op: BinaryOpType,
         val2: Value,
-        span: &Span,
+        span: &CacheSpan,
     ) -> Result<Value, RunError> {
         let vtype1 = val1.type_name();
         let vtype2 = val2.type_name();
