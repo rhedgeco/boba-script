@@ -7,12 +7,12 @@ use super::{Expr, Node, Statement};
 
 #[derive(Debug, Clone)]
 pub struct While<Data> {
-    pub cond: Node<Expr<Data>, Data>,
-    pub body: Vec<Node<Statement<Data>, Data>>,
+    pub cond: Node<Data, Expr<Data>>,
+    pub body: Vec<Node<Data, Statement<Data>>>,
 }
 
 impl While<CacheSpan> {
-    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
         // capture while token
         let start = match tokens.expect_next("'while'")? {
             (Token::While, span) => span.range().start,
@@ -42,28 +42,22 @@ impl While<CacheSpan> {
 
         // create output
         let mut output = Node::new(
+            tokens.span(start..end),
             Self {
                 cond,
                 body: Vec::new(),
             },
-            tokens.span(start..end),
         );
 
         // return early if end of line is found
-        match tokens.peek() {
-            None => return Ok(output),
-            Some(Err(err)) => return Err(err),
-            Some(Ok((token, _))) => match token {
-                Token::Newline => return Ok(output),
-                _ => (),
-            },
+        if let None = tokens.peek() {
+            return Ok(output);
         }
 
         // capture single expression
         let expr = Expr::parse(tokens)?;
         tokens.expect_line_end()?;
-        let span = *expr.data();
-        let statement = Node::new(Statement::Expr(expr), span);
+        let statement = Node::new(expr.data().clone(), Statement::Expr(expr));
         output.body.push(statement);
         Ok(output)
     }

@@ -7,15 +7,15 @@ use super::{Expr, Func, Node, While};
 
 #[derive(Debug, Clone)]
 pub enum Statement<Data> {
-    Assign(Node<String, Data>, Node<Expr<Data>, Data>),
-    LetAssign(Node<String, Data>, Node<Expr<Data>, Data>),
-    Expr(Node<Expr<Data>, Data>),
-    Func(Node<Func<Data>, Data>),
-    While(Node<While<Data>, Data>),
+    Assign(Node<Data, String>, Node<Data, Expr<Data>>),
+    LetAssign(Node<Data, String>, Node<Data, Expr<Data>>),
+    Expr(Node<Data, Expr<Data>>),
+    Func(Node<Data, Func<Data>>),
+    While(Node<Data, While<Data>>),
 }
 
 impl Statement<CacheSpan> {
-    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
         match tokens.expect_peek("assignment or expression")? {
             (Token::Let, span) => {
                 let start = span.range().start;
@@ -23,7 +23,7 @@ impl Statement<CacheSpan> {
 
                 // capture lhs variable
                 let lhs = match tokens.expect_next("identifier")? {
-                    (Token::Ident(var), span) => Node::new(var.to_string(), span),
+                    (Token::Ident(var), span) => Node::new(span, var.to_string()),
                     (token, span) => {
                         return Err(PError::UnexpectedToken {
                             expected: format!("identifier"),
@@ -48,50 +48,45 @@ impl Statement<CacheSpan> {
                 // capture rhs expression
                 let rhs = Expr::parse(tokens)?;
                 let span = tokens.span(start..rhs.data().range().end);
-                Ok(Node::new(Self::LetAssign(lhs, rhs), span))
+                Ok(Node::new(span, Self::LetAssign(lhs, rhs)))
             }
             (Token::Ident(ident), span) => {
-                let ident = Node::new(ident.to_string(), span);
+                let ident = Node::new(span.clone(), ident.to_string());
                 tokens.next(); // consume ident
 
                 match tokens.peek() {
                     Some(Err(error)) => Err(error),
-                    None => {
-                        let span = *ident.data();
-                        let expr = Node::new(Expr::Var(ident), span);
-                        Ok(Node::new(Self::Expr(expr), span))
-                    }
+                    None => Ok(Node::new(
+                        ident.data().clone(),
+                        Self::Expr(Node::new(ident.data().clone(), Expr::Var(ident))),
+                    )),
                     Some(Ok((Token::Assign, _))) => {
                         tokens.next(); // consume assign
                         let rhs = Expr::parse(tokens)?;
                         tokens.expect_line_end()?;
                         let range = ident.data().range().start..rhs.data().range().end;
-                        Ok(Node::new(Self::Assign(ident, rhs), tokens.span(range)))
+                        Ok(Node::new(tokens.span(range), Self::Assign(ident, rhs)))
                     }
                     Some(Ok(_)) => {
                         let lhs = Expr::parse_ident(ident, tokens)?;
                         let expr = Expr::parse_with_lhs(lhs, tokens)?;
                         tokens.expect_line_end()?;
-                        let span = *expr.data();
-                        Ok(Node::new(Self::Expr(expr), span))
+                        Ok(Node::new(expr.data().clone(), Self::Expr(expr)))
                     }
                 }
             }
             (Token::Fn, _) => {
                 let func = Func::parse(tokens)?;
-                let span = *func.data();
-                Ok(Node::new(Self::Func(func), span))
+                Ok(Node::new(func.data().clone(), Self::Func(func)))
             }
             (Token::While, _) => {
                 let r#while = While::parse(tokens)?;
-                let span = *r#while.data();
-                Ok(Node::new(Self::While(r#while), span))
+                Ok(Node::new(r#while.data().clone(), Self::While(r#while)))
             }
             _ => {
                 let expr = Expr::parse(tokens)?;
-                let span = *expr.data();
                 tokens.expect_line_end()?;
-                Ok(Node::new(Self::Expr(expr), span))
+                Ok(Node::new(expr.data().clone(), Self::Expr(expr)))
             }
         }
     }

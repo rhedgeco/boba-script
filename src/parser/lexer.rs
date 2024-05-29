@@ -36,7 +36,7 @@ impl<'source> Lexer<'source> {
         self.data.span(range)
     }
 
-    pub fn peek(&mut self) -> Option<PResult<(Token<'source>, CacheSpan), CacheSpan>> {
+    pub fn peek(&mut self) -> Option<PResult<CacheSpan, (Token<'source>, CacheSpan)>> {
         match &self.peeked {
             Some(items) => Some(Ok(items.clone())),
             None => match self.next()? {
@@ -52,7 +52,7 @@ impl<'source> Lexer<'source> {
     pub fn expect_peek(
         &mut self,
         expect: impl Into<String>,
-    ) -> PResult<(Token<'source>, CacheSpan), CacheSpan> {
+    ) -> PResult<CacheSpan, (Token<'source>, CacheSpan)> {
         match self.peek() {
             Some(result) => result,
             None => Err(PError::UnexpectedEnd {
@@ -65,7 +65,7 @@ impl<'source> Lexer<'source> {
     pub fn expect_next(
         &mut self,
         expect: impl Into<String>,
-    ) -> PResult<(Token<'source>, CacheSpan), CacheSpan> {
+    ) -> PResult<CacheSpan, (Token<'source>, CacheSpan)> {
         match self.next() {
             Some(result) => result,
             None => Err(PError::UnexpectedEnd {
@@ -75,7 +75,7 @@ impl<'source> Lexer<'source> {
         }
     }
 
-    pub fn expect_line_end(&mut self) -> PResult<(), CacheSpan> {
+    pub fn expect_line_end(&mut self) -> PResult<CacheSpan, ()> {
         match self.next() {
             None => Ok(()),
             Some(Err(err)) => Err(err),
@@ -103,7 +103,7 @@ impl<'source> Lexer<'source> {
 }
 
 impl<'source> Iterator for Lexer<'source> {
-    type Item = PResult<(Token<'source>, CacheSpan), CacheSpan>;
+    type Item = PResult<CacheSpan, (Token<'source>, CacheSpan)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(peeked) = self.peeked.take() {
