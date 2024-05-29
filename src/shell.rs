@@ -1,5 +1,3 @@
-use std::env;
-
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 use crate::{
@@ -30,20 +28,11 @@ impl Session {
         Self::default()
     }
 
-    pub fn start_console() {
-        // create a cache for all items in the current directory
-        let mut cache = match env::current_dir() {
-            Ok(path) => BobaCache::new(path),
-            Err(e) => {
-                eprintln!("{e}");
-                std::process::exit(-1);
-            }
-        };
-
-        let mut shell = Session::new();
+    pub fn start_console(&mut self) {
         let mut engine = Engine::new();
+        let mut cache = BobaCache::new();
         loop {
-            let data = match shell.line_editor.read_line(&shell.prompt) {
+            let data = match self.line_editor.read_line(&self.prompt) {
                 Ok(Signal::Success(buffer)) => cache.store("shell", buffer),
                 Ok(Signal::CtrlD) => {
                     println!("Closing Shell...");

@@ -13,7 +13,7 @@ struct BobaCli {
 fn main() {
     let cli = BobaCli::parse();
     match cli.file {
-        None => shell::Session::start_console(),
+        None => shell::Session::new().start_console(),
         Some(path) => println!("TODO: run file {}", path.display()),
     }
 }

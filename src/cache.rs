@@ -1,8 +1,6 @@
 use std::{
     fmt::{Debug, Display},
-    fs, io,
     ops::{Index, Range},
-    path::PathBuf,
     sync::atomic::{AtomicU32, Ordering},
 };
 
@@ -100,7 +98,6 @@ impl CacheData {
 pub struct BobaCache {
     store: Vec<CacheData>,
     cache_id: u32,
-    root: PathBuf,
 }
 
 impl Index<CacheId> for BobaCache {
@@ -127,13 +124,12 @@ impl Cache<CacheId> for BobaCache {
 }
 
 impl BobaCache {
-    pub fn new(root: impl Into<PathBuf>) -> Self {
+    pub fn new() -> Self {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let cache_id = COUNTER.fetch_add(1, Ordering::Relaxed);
         Self {
             cache_id,
             store: vec![],
-            root: root.into(),
         }
     }
 
@@ -154,13 +150,5 @@ impl BobaCache {
         });
 
         &self.store[id.uindex()]
-    }
-
-    pub fn store_file(&mut self, path: impl Into<PathBuf>) -> io::Result<&CacheData> {
-        let path: PathBuf = path.into();
-        let label = path.to_string_lossy().to_string();
-        let abs_path = self.root.join(&path);
-        let data = fs::read_to_string(abs_path)?;
-        Ok(self.store(label, data))
     }
 }
