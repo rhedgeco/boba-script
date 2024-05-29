@@ -1,18 +1,18 @@
 use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Clone)]
-pub struct Node<Data, Item> {
+pub struct Node<Item, Data> {
     item: Item,
     data: Data,
 }
 
-impl<Data, Item> DerefMut for Node<Data, Item> {
+impl<Item, Data> DerefMut for Node<Item, Data> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.item
     }
 }
 
-impl<Data, Item> Deref for Node<Data, Item> {
+impl<Item, Data> Deref for Node<Item, Data> {
     type Target = Item;
 
     fn deref(&self) -> &Self::Target {
@@ -20,8 +20,8 @@ impl<Data, Item> Deref for Node<Data, Item> {
     }
 }
 
-impl<Data, Item> Node<Data, Item> {
-    pub fn new(data: Data, item: Item) -> Self {
+impl<Item, Data> Node<Item, Data> {
+    pub fn new(item: Item, data: Data) -> Self {
         Self { item, data }
     }
 
@@ -41,7 +41,7 @@ impl<Data, Item> Node<Data, Item> {
         self.data
     }
 
-    pub fn into_parts(self) -> (Data, Item) {
-        (self.data, self.item)
+    pub fn into_parts(self) -> (Item, Data) {
+        (self.item, self.data)
     }
 }

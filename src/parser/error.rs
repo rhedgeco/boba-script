@@ -7,7 +7,7 @@ use ariadne::{Color, Label, Report, ReportKind, Span};
 
 use crate::cache::CacheSpan;
 
-pub type PResult<Data, T> = Result<T, PError<Data>>;
+pub type PResult<T, Data> = Result<T, PError<Data>>;
 
 #[derive(Debug, Clone)]
 #[repr(u8)]

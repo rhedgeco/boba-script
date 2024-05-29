@@ -7,13 +7,13 @@ use super::{Node, Statement};
 
 #[derive(Debug, Clone)]
 pub struct Func<Data> {
-    pub ident: Node<Data, String>,
-    pub params: Vec<Node<Data, String>>,
-    pub body: Vec<Node<Data, Statement<Data>>>,
+    pub ident: Node<String, Data>,
+    pub params: Vec<Node<String, Data>>,
+    pub body: Vec<Node<Statement<Data>, Data>>,
 }
 
 impl Func<CacheSpan> {
-    pub fn parse(tokens: &mut Lexer) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         // capture fn token
         let start = match tokens.expect_next("'fn'")? {
             (Token::Fn, span) => span.range().start,
@@ -28,7 +28,7 @@ impl Func<CacheSpan> {
 
         // capture ident token
         let ident = match tokens.expect_next("function name")? {
-            (Token::Ident(name), span) => Node::new(span, name.to_string()),
+            (Token::Ident(name), span) => Node::new(name.to_string(), span),
             (token, span) => {
                 return Err(PError::UnexpectedToken {
                     expected: format!("function name"),
@@ -54,7 +54,7 @@ impl Func<CacheSpan> {
         let mut params = Vec::new();
         while let (Token::Ident(param), span) = tokens.expect_peek("parameter or ')'")? {
             // push parameter
-            params.push(Node::new(span.clone(), param.to_string()));
+            params.push(Node::new(param.to_string(), span));
             tokens.next(); // consume ident
 
             // capture comma
@@ -93,12 +93,12 @@ impl Func<CacheSpan> {
 
         // create output
         let mut output = Node::new(
-            tokens.span(start..end),
             Self {
                 ident,
                 params,
                 body: Vec::new(),
             },
+            tokens.span(start..end),
         );
 
         // return early if end of line is found

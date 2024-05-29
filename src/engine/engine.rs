@@ -116,7 +116,7 @@ impl<Data: Clone> Engine<Data> {
         self.global_scope.get_var_mut(ident)
     }
 
-    pub fn get_func(&self, ident: &Node<Data, String>) -> Result<&FuncType<Data>, RunError<Data>> {
+    pub fn get_func(&self, ident: &Node<String, Data>) -> Result<&FuncType<Data>, RunError<Data>> {
         // try all nested scopes first
         for scope in self.nested_scopes.iter().rev() {
             if let Some(func) = scope.get_func(ident.deref()) {
@@ -135,7 +135,7 @@ impl<Data: Clone> Engine<Data> {
 
     pub fn eval_func(
         &mut self,
-        ident: &Node<Data, String>,
+        ident: &Node<String, Data>,
         values: Vec<Value>,
     ) -> Result<Value, RunError<Data>> {
         // get and validate function
@@ -188,7 +188,7 @@ impl<Data: Clone> Engine<Data> {
 
     pub fn eval_statement(
         &mut self,
-        statement: &Node<Data, Statement<Data>>,
+        statement: &Node<Statement<Data>, Data>,
     ) -> Result<Value, RunError<Data>> {
         match statement.deref() {
             Statement::Expr(expr) => self.eval(expr),
@@ -226,7 +226,7 @@ impl<Data: Clone> Engine<Data> {
         }
     }
 
-    pub fn eval(&mut self, expr: &Node<Data, Expr<Data>>) -> Result<Value, RunError<Data>> {
+    pub fn eval(&mut self, expr: &Node<Expr<Data>, Data>) -> Result<Value, RunError<Data>> {
         match expr.deref() {
             Expr::None => Ok(Value::None),
             Expr::Bool(v) => Ok(Value::Bool(*v.deref())),

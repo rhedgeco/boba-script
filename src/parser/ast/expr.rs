@@ -7,83 +7,83 @@ use crate::{
 pub enum Expr<Data> {
     // values
     None,
-    Var(Node<Data, String>),
-    Bool(Node<Data, bool>),
-    Int(Node<Data, i64>),
-    Float(Node<Data, f64>),
-    String(Node<Data, String>),
+    Var(Node<String, Data>),
+    Bool(Node<bool, Data>),
+    Int(Node<i64, Data>),
+    Float(Node<f64, Data>),
+    String(Node<String, Data>),
 
     // function
-    Call(Node<Data, String>, Vec<Node<Data, Self>>),
+    Call(Node<String, Data>, Vec<Node<Self, Data>>),
 
     // math operations
-    Neg(Box<Node<Data, Self>>),
-    Add(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Sub(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Mul(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Div(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Mod(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Pow(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
+    Neg(Box<Node<Self, Data>>),
+    Add(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Sub(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Mul(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Div(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Mod(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Pow(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
 
     // boolean operations
-    Not(Box<Node<Data, Self>>),
-    And(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Or(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Eq(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Lt(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    Gt(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    NEq(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    LtEq(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
-    GtEq(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
+    Not(Box<Node<Self, Data>>),
+    And(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Or(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Eq(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Lt(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    Gt(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    NEq(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    LtEq(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
+    GtEq(Box<Node<Self, Data>>, Box<Node<Self, Data>>),
 
     // walrus
-    Walrus(Node<Data, String>, Box<Node<Data, Self>>),
+    Walrus(Node<String, Data>, Box<Node<Self, Data>>),
 
     // ternary
     Ternary(
-        Box<Node<Data, Self>>,
-        Box<Node<Data, Self>>,
-        Box<Node<Data, Self>>,
+        Box<Node<Self, Data>>,
+        Box<Node<Self, Data>>,
+        Box<Node<Self, Data>>,
     ),
 }
 
 impl Expr<CacheSpan> {
     fn parse_int(
-        span: CacheSpan,
         str: impl AsRef<str>,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+        span: CacheSpan,
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         match str.as_ref().parse() {
             Err(error) => Err(PError::ParseIntError { error, data: span }),
-            Ok(value) => Ok(Node::new(span.clone(), Expr::Int(Node::new(span, value)))),
+            Ok(value) => Ok(Node::new(Expr::Int(Node::new(value, span)), span)),
         }
     }
 
     fn parse_float(
-        span: CacheSpan,
         str: impl AsRef<str>,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+        span: CacheSpan,
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         match str.as_ref().parse() {
             Err(error) => Err(PError::ParseFloatError { error, data: span }),
-            Ok(value) => Ok(Node::new(span.clone(), Expr::Float(Node::new(span, value)))),
+            Ok(value) => Ok(Node::new(Expr::Float(Node::new(value, span)), span)),
         }
     }
 
-    pub fn parse(tokens: &mut Lexer) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    pub fn parse(tokens: &mut Lexer) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         let lhs = Self::parse_atom(tokens)?;
         Self::parse_with_lhs(lhs, tokens)
     }
 
     pub fn parse_with_lhs(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         Self::parse_walrus(lhs, tokens) // start parsing at lowest precedence operator
     }
 
     pub fn parse_ident(
-        lhs: Node<CacheSpan, String>,
+        lhs: Node<String, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         match tokens.peek() {
             Some(Err(error)) => Err(error),
             Some(Ok((Token::OpenParen, _))) => {
@@ -121,29 +121,29 @@ impl Expr<CacheSpan> {
                 };
 
                 let span = tokens.span(lhs.data().range().start..end);
-                Ok(Node::new(span, Self::Call(lhs, params)))
+                Ok(Node::new(Self::Call(lhs, params), span))
             }
-            Some(_) | None => Ok(Node::new(lhs.data().clone(), Expr::Var(lhs))),
+            Some(_) | None => {
+                let span = *lhs.data();
+                Ok(Node::new(Expr::Var(lhs), span))
+            }
         }
     }
 
-    pub fn parse_atom(tokens: &mut Lexer) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    pub fn parse_atom(tokens: &mut Lexer) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         match tokens.expect_next("expression")? {
             // values
-            (Token::None, span) => Ok(Node::new(span, Expr::None)),
-            (Token::UInt(str), span) => Ok(Self::parse_int(span, str)?),
-            (Token::UFloat(str), span) => Ok(Self::parse_float(span, str)?),
-            (Token::Bool(bool), span) => {
-                Ok(Node::new(span.clone(), Expr::Bool(Node::new(span, bool))))
+            (Token::None, span) => Ok(Node::new(Expr::None, span)),
+            (Token::UInt(str), span) => Ok(Self::parse_int(str, span)?),
+            (Token::UFloat(str), span) => Ok(Self::parse_float(str, span)?),
+            (Token::Bool(bool), span) => Ok(Node::new(Expr::Bool(Node::new(bool, span)), span)),
+            (Token::String(str), span) => {
+                Ok(Node::new(Expr::String(Node::new(str.into(), span)), span))
             }
-            (Token::String(str), span) => Ok(Node::new(
-                span.clone(),
-                Expr::String(Node::new(span, str.into())),
-            )),
 
             // variables and functions
             (Token::Ident(str), span) => {
-                let ident = Node::new(span, str.to_string());
+                let ident = Node::new(str.to_string(), span);
                 Self::parse_ident(ident, tokens)
             }
 
@@ -152,13 +152,13 @@ impl Expr<CacheSpan> {
                 let nested = Self::parse_atom(tokens)?;
                 let nested = Self::parse_powers(nested, tokens)?; // parse op with higher precedence
                 let range = span.range().start..nested.data().range().end;
-                Ok(Node::new(tokens.span(range), Expr::Not(Box::new(nested))))
+                Ok(Node::new(Expr::Not(Box::new(nested)), tokens.span(range)))
             }
             (Token::Sub, span) => {
                 let nested = Self::parse_atom(tokens)?;
                 let nested = Self::parse_powers(nested, tokens)?; // parse op with higher precedence
                 let range = span.range().start..nested.data().range().end;
-                Ok(Node::new(tokens.span(range), Expr::Neg(Box::new(nested))))
+                Ok(Node::new(Expr::Neg(Box::new(nested)), tokens.span(range)))
             }
 
             // braces
@@ -167,8 +167,8 @@ impl Expr<CacheSpan> {
                 match tokens.next() {
                     Some(Err(error)) => Err(error),
                     Some(Ok((Token::CloseParen, close_span))) => Ok(Node::new(
-                        tokens.span(open_span.range().start..close_span.range().end),
                         inner.into_item(),
+                        tokens.span(open_span.range().start..close_span.range().end),
                     )),
                     Some(Ok((_, _))) | None => Err(PError::UnclosedBrace { data: open_span }),
                 }
@@ -184,9 +184,9 @@ impl Expr<CacheSpan> {
     }
 
     pub fn parse_powers(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         match tokens.peek() {
             Some(Ok((Token::Pow, _))) => (),
             Some(Err(error)) => return Err(error),
@@ -197,16 +197,14 @@ impl Expr<CacheSpan> {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_powers(rhs, tokens)?; // parse right to left
 
-        Ok(Node::new(
-            tokens.span(lhs.data().range().start..rhs.data().range().end),
-            Expr::Pow(Box::new(lhs), Box::new(rhs)),
-        ))
+        let span = tokens.span(lhs.data().range().start..rhs.data().range().end);
+        Ok(Node::new(Expr::Pow(Box::new(lhs), Box::new(rhs)), span))
     }
 
     pub fn parse_products(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         let op = match tokens.peek() {
             Some(Ok((Token::Mul, _))) => Expr::Mul,
             Some(Ok((Token::Div, _))) => Expr::Div,
@@ -219,17 +217,15 @@ impl Expr<CacheSpan> {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_powers(rhs, tokens)?; // parse higher precedence
 
-        let new_lhs = Node::new(
-            tokens.span(lhs.data().range().start..rhs.data().range().end),
-            op(Box::new(lhs), Box::new(rhs)),
-        );
+        let span = tokens.span(lhs.data().range().start..rhs.data().range().end);
+        let new_lhs = Node::new(op(Box::new(lhs), Box::new(rhs)), span);
         Self::parse_products(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_sums(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         let op = match tokens.peek() {
             Some(Ok((Token::Add, _))) => Expr::Add,
             Some(Ok((Token::Sub, _))) => Expr::Sub,
@@ -241,17 +237,15 @@ impl Expr<CacheSpan> {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_products(rhs, tokens)?; // parse higher precedence
 
-        let new_lhs = Node::new(
-            tokens.span(lhs.data().range().start..rhs.data().range().end),
-            op(Box::new(lhs), Box::new(rhs)),
-        );
+        let span = tokens.span(lhs.data().range().start..rhs.data().range().end);
+        let new_lhs = Node::new(op(Box::new(lhs), Box::new(rhs)), span);
         Self::parse_sums(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_comparisons(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         let op = match tokens.peek() {
             Some(Ok((Token::Eq, _))) => Expr::Eq,
             Some(Ok((Token::Lt, _))) => Expr::Lt,
@@ -267,17 +261,15 @@ impl Expr<CacheSpan> {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_sums(rhs, tokens)?; // parse higher precedence
 
-        let new_lhs = Node::new(
-            tokens.span(lhs.data().range().start..rhs.data().range().end),
-            op(Box::new(lhs), Box::new(rhs)),
-        );
+        let span = tokens.span(lhs.data().range().start..rhs.data().range().end);
+        let new_lhs = Node::new(op(Box::new(lhs), Box::new(rhs)), span);
         Self::parse_comparisons(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_ands(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         match tokens.peek() {
             Some(Ok((Token::And, _))) => (),
             Some(Err(error)) => return Err(error),
@@ -288,17 +280,15 @@ impl Expr<CacheSpan> {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_comparisons(rhs, tokens)?; // parse higher precedence
 
-        let new_lhs = Node::new(
-            tokens.span(lhs.data().range().start..rhs.data().range().end),
-            Expr::And(Box::new(lhs), Box::new(rhs)),
-        );
+        let span = tokens.span(lhs.data().range().start..rhs.data().range().end);
+        let new_lhs = Node::new(Expr::And(Box::new(lhs), Box::new(rhs)), span);
         Self::parse_ands(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_ors(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         match tokens.peek() {
             Some(Ok((Token::And, _))) => (),
             Some(Err(error)) => return Err(error),
@@ -309,17 +299,15 @@ impl Expr<CacheSpan> {
         let rhs = Expr::parse_atom(tokens)?;
         let rhs = Self::parse_ands(rhs, tokens)?; // parse higher precedence
 
-        let new_lhs = Node::new(
-            tokens.span(lhs.data().range().start..rhs.data().range().end),
-            Expr::And(Box::new(lhs), Box::new(rhs)),
-        );
+        let span = tokens.span(lhs.data().range().start..rhs.data().range().end);
+        let new_lhs = Node::new(Expr::And(Box::new(lhs), Box::new(rhs)), span);
         Self::parse_ors(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_ternaries(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         // check for question delimiter
         match tokens.peek() {
             Some(Ok((Token::Question, _))) => (),
@@ -349,16 +337,17 @@ impl Expr<CacheSpan> {
         let false_clause = Self::parse_ternaries(false_clause, tokens)?; // parse right to left
 
         // build node
+        let span = tokens.span(lhs.data().range().start..false_clause.data().range().end);
         Ok(Node::new(
-            tokens.span(lhs.data().range().start..false_clause.data().range().end),
             Expr::Ternary(Box::new(lhs), Box::new(true_clause), Box::new(false_clause)),
+            span,
         ))
     }
 
     pub fn parse_walrus(
-        lhs: Node<CacheSpan, Self>,
+        lhs: Node<Self, CacheSpan>,
         tokens: &mut Lexer,
-    ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
+    ) -> PResult<Node<Self, CacheSpan>, CacheSpan> {
         let walrus_span = match tokens.peek() {
             Some(Ok((Token::Walrus, span))) => span.clone(),
             Some(Err(error)) => return Err(error),
@@ -367,16 +356,14 @@ impl Expr<CacheSpan> {
         tokens.next();
 
         let lhs = match lhs.into_parts() {
-            (_, Expr::Var(var)) => var,
+            (Expr::Var(var), _) => var,
             (_, _) => return Err(PError::InvalidWalrusAssignment { data: walrus_span }),
         };
 
         let rhs = Self::parse_atom(tokens)?;
         let rhs = Self::parse_walrus(rhs, tokens)?; // parse right to left
 
-        Ok(Node::new(
-            tokens.span(lhs.data().range().start..rhs.data().range().end),
-            Expr::Walrus(lhs, Box::new(rhs)),
-        ))
+        let span = tokens.span(lhs.data().range().start..rhs.data().range().end);
+        Ok(Node::new(Expr::Walrus(lhs, Box::new(rhs)), span))
     }
 }
