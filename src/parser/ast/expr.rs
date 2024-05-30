@@ -1,3 +1,5 @@
+use dashu::{float::DBig, integer::IBig};
+
 use crate::{
     cache::CacheSpan,
     parser::{ast::Node, Lexer, PError, PResult, Token},
@@ -7,11 +9,11 @@ use crate::{
 pub enum Expr<Data> {
     // values
     None,
-    Var(Node<Data, String>),
-    Bool(Node<Data, bool>),
-    Int(Node<Data, i64>),
-    Float(Node<Data, f64>),
-    String(Node<Data, String>),
+    Var(String),
+    Bool(bool),
+    Int(IBig),
+    Float(DBig),
+    String(String),
 
     // function
     Call(Node<Data, String>, Vec<Node<Data, Self>>),
@@ -53,8 +55,8 @@ impl Expr<CacheSpan> {
         str: impl AsRef<str>,
     ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
         match str.as_ref().parse() {
-            Err(error) => Err(PError::ParseIntError { error, data: span }),
-            Ok(value) => Ok(Node::new(span.clone(), Expr::Int(Node::new(span, value)))),
+            Ok(value) => Ok(Node::new(span, Expr::Int(value))),
+            Err(error) => Err(PError::ParseNumError { error, data: span }),
         }
     }
 
@@ -63,8 +65,8 @@ impl Expr<CacheSpan> {
         str: impl AsRef<str>,
     ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
         match str.as_ref().parse() {
-            Err(error) => Err(PError::ParseFloatError { error, data: span }),
-            Ok(value) => Ok(Node::new(span.clone(), Expr::Float(Node::new(span, value)))),
+            Ok(value) => Ok(Node::new(span, Expr::Float(value))),
+            Err(error) => Err(PError::ParseNumError { error, data: span }),
         }
     }
 
@@ -80,7 +82,7 @@ impl Expr<CacheSpan> {
         Self::parse_walrus(lhs, tokens) // start parsing at lowest precedence operator
     }
 
-    pub fn parse_ident(
+    pub fn parse_var_or_fn(
         lhs: Node<CacheSpan, String>,
         tokens: &mut Lexer,
     ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
@@ -123,7 +125,7 @@ impl Expr<CacheSpan> {
                 let span = tokens.span(lhs.data().range().start..end);
                 Ok(Node::new(span, Self::Call(lhs, params)))
             }
-            Some(_) | None => Ok(Node::new(lhs.data().clone(), Expr::Var(lhs))),
+            Some(_) | None => Ok(Node::new(lhs.data().clone(), Expr::Var(lhs.into_item()))),
         }
     }
 
@@ -131,20 +133,15 @@ impl Expr<CacheSpan> {
         match tokens.expect_next("expression")? {
             // values
             (Token::None, span) => Ok(Node::new(span, Expr::None)),
-            (Token::UInt(str), span) => Ok(Self::parse_int(span, str)?),
+            (Token::Int(str), span) => Ok(Self::parse_int(span, str)?),
             (Token::UFloat(str), span) => Ok(Self::parse_float(span, str)?),
-            (Token::Bool(bool), span) => {
-                Ok(Node::new(span.clone(), Expr::Bool(Node::new(span, bool))))
-            }
-            (Token::String(str), span) => Ok(Node::new(
-                span.clone(),
-                Expr::String(Node::new(span, str.into())),
-            )),
+            (Token::Bool(bool), span) => Ok(Node::new(span.clone(), Expr::Bool(bool))),
+            (Token::String(str), span) => Ok(Node::new(span.clone(), Expr::String(str.into()))),
 
             // variables and functions
             (Token::Ident(str), span) => {
                 let ident = Node::new(span, str.to_string());
-                Self::parse_ident(ident, tokens)
+                Self::parse_var_or_fn(ident, tokens)
             }
 
             // prefix expressions
@@ -367,7 +364,7 @@ impl Expr<CacheSpan> {
         tokens.next();
 
         let lhs = match lhs.into_parts() {
-            (_, Expr::Var(var)) => var,
+            (span, Expr::Var(var)) => Node::new(span, var),
             (_, _) => return Err(PError::InvalidWalrusAssignment { data: walrus_span }),
         };
 

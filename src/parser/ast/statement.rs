@@ -51,15 +51,18 @@ impl Statement<CacheSpan> {
                 Ok(Node::new(span, Self::LetAssign(lhs, rhs)))
             }
             (Token::Ident(ident), span) => {
-                let ident = Node::new(span.clone(), ident.to_string());
+                let ident = Node::new(span, ident.to_string());
                 tokens.next(); // consume ident
 
                 match tokens.peek() {
                     Some(Err(error)) => Err(error),
-                    None => Ok(Node::new(
-                        ident.data().clone(),
-                        Self::Expr(Node::new(ident.data().clone(), Expr::Var(ident))),
-                    )),
+                    None => {
+                        let (span, ident) = ident.into_parts();
+                        Ok(Node::new(
+                            span.clone(),
+                            Self::Expr(Node::new(span, Expr::Var(ident))),
+                        ))
+                    }
                     Some(Ok((Token::Assign, _))) => {
                         tokens.next(); // consume assign
                         let rhs = Expr::parse(tokens)?;
@@ -68,7 +71,7 @@ impl Statement<CacheSpan> {
                         Ok(Node::new(tokens.span(range), Self::Assign(ident, rhs)))
                     }
                     Some(Ok(_)) => {
-                        let lhs = Expr::parse_ident(ident, tokens)?;
+                        let lhs = Expr::parse_var_or_fn(ident, tokens)?;
                         let expr = Expr::parse_with_lhs(lhs, tokens)?;
                         tokens.expect_line_end()?;
                         Ok(Node::new(expr.data().clone(), Self::Expr(expr)))

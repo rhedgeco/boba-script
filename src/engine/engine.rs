@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+use dashu::{base::RemEuclid, float::DBig};
 use derive_more::Display;
 
 use crate::parser::ast::{Expr, Func, Node, Statement};
@@ -229,10 +230,10 @@ impl<Data: Clone> Engine<Data> {
     pub fn eval(&mut self, expr: &Node<Data, Expr<Data>>) -> Result<Value, RunError<Data>> {
         match expr.deref() {
             Expr::None => Ok(Value::None),
-            Expr::Bool(v) => Ok(Value::Bool(*v.deref())),
-            Expr::Int(v) => Ok(Value::Int(*v.deref())),
-            Expr::Float(v) => Ok(Value::Float(*v.deref())),
-            Expr::String(v) => Ok(Value::String(v.deref().clone())),
+            Expr::Bool(v) => Ok(Value::Bool(*v)),
+            Expr::Int(v) => Ok(Value::Int(v.clone())),
+            Expr::Float(v) => Ok(Value::Float(v.clone())),
+            Expr::String(v) => Ok(Value::String(v.clone())),
             Expr::Call(ident, params) => {
                 let mut values = Vec::new();
                 for expr in params {
@@ -321,8 +322,8 @@ impl<Data: Clone> Engine<Data> {
             Expr::Var(ident) => match self.get_var(ident.deref()) {
                 Some(value) => Ok(value.clone()),
                 None => Err(RunError::UnknownVariable {
-                    ident: ident.deref().clone(),
-                    data: ident.data().clone(),
+                    ident: ident.clone(),
+                    data: expr.data().clone(),
                 }),
             },
             Expr::Walrus(ident, assign_expr) => {
@@ -387,146 +388,131 @@ impl<Data: Clone> Engine<Data> {
             // int add
             (Value::Int(v1), BinaryOpType::Add, Value::Bool(v2)) => Ok(Value::Int(v1 + v2 as i64)),
             (Value::Int(v1), BinaryOpType::Add, Value::Int(v2)) => Ok(Value::Int(v1 + v2)),
-            (Value::Int(v1), BinaryOpType::Add, Value::Float(v2)) => {
-                Ok(Value::Float(v1 as f64 + v2))
-            }
+            (Value::Int(v1), BinaryOpType::Add, Value::Float(v2)) => Ok(Value::Float(v1 + v2)),
             // int sub
             (Value::Int(v1), BinaryOpType::Sub, Value::Bool(v2)) => Ok(Value::Int(v1 - v2 as i64)),
             (Value::Int(v1), BinaryOpType::Sub, Value::Int(v2)) => Ok(Value::Int(v1 - v2)),
-            (Value::Int(v1), BinaryOpType::Sub, Value::Float(v2)) => {
-                Ok(Value::Float(v1 as f64 - v2))
-            }
+            (Value::Int(v1), BinaryOpType::Sub, Value::Float(v2)) => Ok(Value::Float(v1 - v2)),
             // int mul
             (Value::Int(v1), BinaryOpType::Mul, Value::Bool(v2)) => Ok(Value::Int(v1 * v2 as i64)),
             (Value::Int(v1), BinaryOpType::Mul, Value::Int(v2)) => Ok(Value::Int(v1 * v2)),
-            (Value::Int(v1), BinaryOpType::Mul, Value::Float(v2)) => {
-                Ok(Value::Float(v1 as f64 * v2))
-            }
+            (Value::Int(v1), BinaryOpType::Mul, Value::Float(v2)) => Ok(Value::Float(v1 * v2)),
             // int div
             (Value::Int(v1), BinaryOpType::Div, Value::Int(v2)) => {
-                Ok(Value::Float(v1 as f64 / v2 as f64))
+                Ok(Value::Float(DBig::from(v1) / v2))
             }
-            (Value::Int(v1), BinaryOpType::Div, Value::Float(v2)) => {
-                Ok(Value::Float(v1 as f64 / v2))
-            }
+            (Value::Int(v1), BinaryOpType::Div, Value::Float(v2)) => Ok(Value::Float(v1 / v2)),
             // int mod
             (Value::Int(v1), BinaryOpType::Mod, Value::Int(v2)) => {
-                Ok(Value::Int(v1.rem_euclid(v2)))
+                Ok(Value::Int(v1.rem_euclid(v2).into()))
             }
             (Value::Int(v1), BinaryOpType::Mod, Value::Float(v2)) => {
-                Ok(Value::Float((v1 as f64).rem_euclid(v2)))
+                Ok(Value::Float((DBig::from(v1)).rem_euclid(v2)))
             }
             // int pow
             (Value::Int(v1), BinaryOpType::Pow, Value::Int(v2)) => {
-                Ok(Value::Float((v1 as f64).powf(v2 as f64)))
+                Ok(Value::Float((DBig::from(v1)).powf(&DBig::from(v2))))
             }
             (Value::Int(v1), BinaryOpType::Pow, Value::Float(v2)) => {
-                Ok(Value::Float((v1 as f64).powf(v2)))
+                Ok(Value::Float((DBig::from(v1)).powf(&v2)))
             }
+
             // int equality
             (Value::Int(v1), BinaryOpType::Eq, Value::Int(v2)) => Ok(Value::Bool(v1 == v2)),
             (Value::Int(v1), BinaryOpType::Eq, Value::Float(v2)) => {
-                Ok(Value::Bool((v1 as f64) == v2))
+                Ok(Value::Bool(DBig::from(v1) == v2))
             }
             // int less than
             (Value::Int(v1), BinaryOpType::Lt, Value::Int(v2)) => Ok(Value::Bool(v1 < v2)),
             (Value::Int(v1), BinaryOpType::Lt, Value::Float(v2)) => {
-                Ok(Value::Bool((v1 as f64) < v2))
+                Ok(Value::Bool(DBig::from(v1) < v2))
             }
             // int greater than
             (Value::Int(v1), BinaryOpType::Gt, Value::Int(v2)) => Ok(Value::Bool(v1 > v2)),
             (Value::Int(v1), BinaryOpType::Gt, Value::Float(v2)) => {
-                Ok(Value::Bool((v1 as f64) > v2))
+                Ok(Value::Bool(DBig::from(v1) > v2))
             }
             // int not equal
             (Value::Int(v1), BinaryOpType::NEq, Value::Int(v2)) => Ok(Value::Bool(v1 != v2)),
             (Value::Int(v1), BinaryOpType::NEq, Value::Float(v2)) => {
-                Ok(Value::Bool((v1 as f64) != v2))
+                Ok(Value::Bool(DBig::from(v1) != v2))
             }
             // int less than equal
             (Value::Int(v1), BinaryOpType::LtEq, Value::Int(v2)) => Ok(Value::Bool(v1 <= v2)),
             (Value::Int(v1), BinaryOpType::LtEq, Value::Float(v2)) => {
-                Ok(Value::Bool((v1 as f64) <= v2))
+                Ok(Value::Bool(DBig::from(v1) <= v2))
             }
             // int greater than equal
             (Value::Int(v1), BinaryOpType::GtEq, Value::Int(v2)) => Ok(Value::Bool(v1 >= v2)),
             (Value::Int(v1), BinaryOpType::GtEq, Value::Float(v2)) => {
-                Ok(Value::Bool((v1 as f64) >= v2))
+                Ok(Value::Bool(DBig::from(v1) >= v2))
             }
 
             // -----------------
             // --- FLOAT OPS ---
             // float add
             (Value::Float(v1), BinaryOpType::Add, Value::Bool(v2)) => {
-                Ok(Value::Float(v1 + v2 as i64 as f64))
+                Ok(Value::Float(v1 + v2 as u8))
             }
-            (Value::Float(v1), BinaryOpType::Add, Value::Int(v2)) => {
-                Ok(Value::Float(v1 + v2 as f64))
-            }
+            (Value::Float(v1), BinaryOpType::Add, Value::Int(v2)) => Ok(Value::Float(v1 + v2)),
             (Value::Float(v1), BinaryOpType::Add, Value::Float(v2)) => Ok(Value::Float(v1 + v2)),
             // float sub
             (Value::Float(v1), BinaryOpType::Sub, Value::Bool(v2)) => {
-                Ok(Value::Float(v1 - v2 as i64 as f64))
+                Ok(Value::Float(v1 - v2 as u8))
             }
-            (Value::Float(v1), BinaryOpType::Sub, Value::Int(v2)) => {
-                Ok(Value::Float(v1 - v2 as f64))
-            }
+            (Value::Float(v1), BinaryOpType::Sub, Value::Int(v2)) => Ok(Value::Float(v1 - v2)),
             (Value::Float(v1), BinaryOpType::Sub, Value::Float(v2)) => Ok(Value::Float(v1 - v2)),
             // float mul
             (Value::Float(v1), BinaryOpType::Mul, Value::Bool(v2)) => {
-                Ok(Value::Float(v1 * v2 as i64 as f64))
+                Ok(Value::Float(v1 * v2 as u8))
             }
-            (Value::Float(v1), BinaryOpType::Mul, Value::Int(v2)) => {
-                Ok(Value::Float(v1 * v2 as f64))
-            }
+            (Value::Float(v1), BinaryOpType::Mul, Value::Int(v2)) => Ok(Value::Float(v1 * v2)),
             (Value::Float(v1), BinaryOpType::Mul, Value::Float(v2)) => Ok(Value::Float(v1 * v2)),
             // float div
-            (Value::Float(v1), BinaryOpType::Div, Value::Int(v2)) => {
-                Ok(Value::Float(v1 / v2 as f64))
-            }
+            (Value::Float(v1), BinaryOpType::Div, Value::Int(v2)) => Ok(Value::Float(v1 / v2)),
             (Value::Float(v1), BinaryOpType::Div, Value::Float(v2)) => Ok(Value::Float(v1 / v2)),
             // float mod
             (Value::Float(v1), BinaryOpType::Mod, Value::Int(v2)) => {
-                Ok(Value::Float(v1.rem_euclid(v2 as f64)))
+                Ok(Value::Float(v1.rem_euclid(DBig::from(v2))))
             }
             (Value::Float(v1), BinaryOpType::Mod, Value::Float(v2)) => {
                 Ok(Value::Float(v1.rem_euclid(v2)))
             }
             // float pow
             (Value::Float(v1), BinaryOpType::Pow, Value::Int(v2)) => {
-                Ok(Value::Float(v1.powf(v2 as f64)))
+                Ok(Value::Float(v1.powf(&DBig::from(v2))))
             }
             (Value::Float(v1), BinaryOpType::Pow, Value::Float(v2)) => {
-                Ok(Value::Float(v1.powf(v2)))
+                Ok(Value::Float(v1.powf(&v2)))
             }
             // float equality
             (Value::Float(v1), BinaryOpType::Eq, Value::Int(v2)) => {
-                Ok(Value::Bool(v1 == (v2 as f64)))
+                Ok(Value::Bool(v1 == DBig::from(v2)))
             }
             (Value::Float(v1), BinaryOpType::Eq, Value::Float(v2)) => Ok(Value::Bool(v1 == v2)),
             // float less than
             (Value::Float(v1), BinaryOpType::Lt, Value::Int(v2)) => {
-                Ok(Value::Bool(v1 < (v2 as f64)))
+                Ok(Value::Bool(v1 < DBig::from(v2)))
             }
             (Value::Float(v1), BinaryOpType::Lt, Value::Float(v2)) => Ok(Value::Bool(v1 < v2)),
             // float greater than
             (Value::Float(v1), BinaryOpType::Gt, Value::Int(v2)) => {
-                Ok(Value::Bool(v1 > (v2 as f64)))
+                Ok(Value::Bool(v1 > DBig::from(v2)))
             }
             (Value::Float(v1), BinaryOpType::Gt, Value::Float(v2)) => Ok(Value::Bool(v1 > v2)),
             // float not equal
             (Value::Float(v1), BinaryOpType::NEq, Value::Int(v2)) => {
-                Ok(Value::Bool(v1 != (v2 as f64)))
+                Ok(Value::Bool(v1 != DBig::from(v2)))
             }
             (Value::Float(v1), BinaryOpType::NEq, Value::Float(v2)) => Ok(Value::Bool(v1 != v2)),
             // float less than equal
             (Value::Float(v1), BinaryOpType::LtEq, Value::Int(v2)) => {
-                Ok(Value::Bool(v1 <= (v2 as f64)))
+                Ok(Value::Bool(v1 <= DBig::from(v2)))
             }
             (Value::Float(v1), BinaryOpType::LtEq, Value::Float(v2)) => Ok(Value::Bool(v1 <= v2)),
             // float greater than equal
             (Value::Float(v1), BinaryOpType::GtEq, Value::Int(v2)) => {
-                Ok(Value::Bool(v1 >= (v2 as f64)))
+                Ok(Value::Bool(v1 >= DBig::from(v2)))
             }
             (Value::Float(v1), BinaryOpType::GtEq, Value::Float(v2)) => Ok(Value::Bool(v1 >= v2)),
 
@@ -550,7 +536,16 @@ impl<Data: Clone> Engine<Data> {
                 Ok(Value::String(v1.repeat(v2 as usize)))
             }
             (Value::String(v1), BinaryOpType::Mul, Value::Int(v2)) => {
-                Ok(Value::String(v1.repeat(v2 as usize)))
+                let (sign, ubig) = v2.into_parts();
+                match sign {
+                    dashu::base::Sign::Negative => return Ok(Value::String("".into())),
+                    _ => (),
+                }
+
+                match TryInto::<usize>::try_into(ubig) {
+                    Ok(count) => Ok(Value::String(v1.repeat(count))),
+                    Err(_) => Ok(Value::String(v1.repeat(usize::MAX))),
+                }
             }
             // string equality
             (Value::String(v1), BinaryOpType::Eq, Value::String(v2)) => Ok(Value::Bool(v1 == v2)),

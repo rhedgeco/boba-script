@@ -14,7 +14,7 @@ pub enum Token<'source> {
     #[display(fmt = "{}", _0)]
     Bool(bool),
     #[display(fmt = "int")]
-    UInt(&'source str),
+    Int(&'source str),
     #[display(fmt = "float")]
     UFloat(&'source str),
     #[display(fmt = "string")]

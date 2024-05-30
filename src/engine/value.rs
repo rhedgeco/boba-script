@@ -1,3 +1,4 @@
+use dashu::{float::DBig, integer::IBig};
 use derive_more::Display;
 
 #[derive(Debug, Display, Clone)]
@@ -7,9 +8,9 @@ pub enum Value {
     #[display(fmt = "{}", _0)]
     Bool(bool),
     #[display(fmt = "{}", _0)]
-    Int(i64),
+    Int(IBig),
     #[display(fmt = "{}", _0)]
-    Float(f64),
+    Float(DBig),
     #[display(fmt = "{}", _0)]
     String(String),
 }

@@ -1,9 +1,7 @@
-use std::{
-    fmt::Debug,
-    num::{IntErrorKind, ParseFloatError, ParseIntError},
-};
+use std::fmt::Debug;
 
 use ariadne::{Color, Label, Report, ReportKind, Span};
+use dashu::base::ParseError;
 
 use crate::cache::CacheSpan;
 
@@ -23,12 +21,8 @@ pub enum PError<Data> {
     UnclosedString {
         data: Data,
     },
-    ParseIntError {
-        error: ParseIntError,
-        data: Data,
-    },
-    ParseFloatError {
-        error: ParseFloatError,
+    ParseNumError {
+        error: ParseError,
         data: Data,
     },
     UnexpectedToken {
@@ -84,33 +78,14 @@ impl PError<CacheSpan> {
                     )
                     .finish()
             }
-            PError::ParseIntError { error, data } => {
+            PError::ParseNumError { error, data } => {
                 Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_code(format!("C-004"))
                     .with_message("Invalid Integer")
                     .with_label(
                         Label::new(data.clone())
                             .with_color(Color::Red)
-                            .with_message(match error.kind() {
-                                IntErrorKind::PosOverflow => {
-                                    format!("too large. must be at max 9,223,372,036,854,775,807")
-                                }
-                                IntErrorKind::NegOverflow => {
-                                    format!("too small. must be at min -9,223,372,036,854,775,808")
-                                }
-                                _ => format!("{error}"),
-                            }),
-                    )
-                    .finish()
-            }
-            PError::ParseFloatError { error, data } => {
-                Report::build(ReportKind::Error, data.source().clone(), data.start())
-                    .with_code(format!("C-005"))
-                    .with_message("Invalid Integer")
-                    .with_label(
-                        Label::new(data.clone())
-                            .with_color(Color::Red)
-                            .with_message(format!("{error}")),
+                            .with_message(format!("error parsing number: {error}")),
                     )
                     .finish()
             }

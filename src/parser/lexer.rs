@@ -299,12 +299,12 @@ impl<'source> Iterator for Lexer<'source> {
                             Some((end, _)) => {
                                 let span = self.data.span(start..end);
                                 let str = &self.data.text()[span.range().clone()];
-                                return Some(Ok((Token::UInt(str), span)));
+                                return Some(Ok((Token::Int(str), span)));
                             }
                             None => {
                                 let span = self.data.span(start..self.data.text().len());
                                 let str = &self.data.text()[span.range().clone()];
-                                return Some(Ok((Token::UInt(str), span)));
+                                return Some(Ok((Token::Int(str), span)));
                             }
                         }
                     }
