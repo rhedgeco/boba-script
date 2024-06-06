@@ -42,6 +42,17 @@ pub enum RunError<Data> {
         message: String,
         data: Data,
     },
+    StringAllocError {
+        data: Data,
+    },
+    InvalidCall {
+        ident: String,
+        found: String,
+        data: Data,
+    },
+    ConstAssign {
+        data: Data,
+    },
 }
 
 impl RunError<CacheSpan> {
@@ -50,7 +61,7 @@ impl RunError<CacheSpan> {
             RunError::UnknownVariable { ident, data } => {
                 Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_message("Unknown Variable")
-                    .with_code(format!("R-001"))
+                    .with_code("R-001")
                     .with_label(
                         Label::new(data.clone())
                             .with_color(Color::Red)
@@ -60,7 +71,7 @@ impl RunError<CacheSpan> {
             RunError::UnknownFunction { ident, data } => {
                 Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_message("Unknown Function")
-                    .with_code(format!("R-002"))
+                    .with_code("R-002")
                     .with_label(
                         Label::new(data.clone())
                             .with_color(Color::Red)
@@ -92,14 +103,13 @@ impl RunError<CacheSpan> {
                             "'{vtype1}' does not have a valid '{op}' operator for '{vtype2}'"
                         )),
                 ),
-
             RunError::TypeMismatch {
                 expected,
                 found,
                 data,
             } => Report::build(ReportKind::Error, data.source().clone(), data.start())
                 .with_message("Type Mismatch")
-                .with_code(format!("R-005"))
+                .with_code("R-005")
                 .with_label(
                     Label::new(data.clone())
                         .with_color(Color::Red)
@@ -111,7 +121,7 @@ impl RunError<CacheSpan> {
                 data,
             } => Report::build(ReportKind::Error, data.source().clone(), data.start())
                 .with_message("Wrong Parameter Count")
-                .with_code(format!("R-006"))
+                .with_code("R-006")
                 .with_label(
                     Label::new(data.clone())
                         .with_color(Color::Red)
@@ -122,11 +132,43 @@ impl RunError<CacheSpan> {
             RunError::NativeCallError { message, data } => {
                 Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_message("Native Call Error")
-                    .with_code(format!("R-007"))
+                    .with_code("R-007")
                     .with_label(
                         Label::new(data.clone())
                             .with_color(Color::Red)
                             .with_message(message),
+                    )
+            }
+            RunError::StringAllocError { data } => {
+                Report::build(ReportKind::Error, data.source().clone(), data.start())
+                    .with_message("String Alloc Error")
+                    .with_code("R-008")
+                    .with_label(
+                        Label::new(data.clone())
+                            .with_color(Color::Red)
+                            .with_message(
+                            "tried to create string longer than 9,223,372,036,854,775,807 chars",
+                        ),
+                    )
+            }
+            RunError::InvalidCall { ident, found, data } => {
+                Report::build(ReportKind::Error, data.source().clone(), data.start())
+                    .with_message("Invalid Call")
+                    .with_code("R-009")
+                    .with_label(
+                        Label::new(data.clone())
+                            .with_color(Color::Red)
+                            .with_message(format!("cannot call {ident}, found type {found}")),
+                    )
+            }
+            RunError::ConstAssign { data } => {
+                Report::build(ReportKind::Error, data.source().clone(), data.start())
+                    .with_message("Const Assign")
+                    .with_code("R-010")
+                    .with_label(
+                        Label::new(data.clone())
+                            .with_color(Color::Red)
+                            .with_message("cannot assign value to a constant"),
                     )
             }
         }

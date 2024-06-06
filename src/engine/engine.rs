@@ -1,11 +1,14 @@
-use std::ops::Deref;
+use std::{mem::replace, ops::Deref};
 
-use dashu::{base::RemEuclid, float::DBig};
+use dashu::{
+    base::{RemEuclid, Sign},
+    float::DBig,
+};
 use derive_more::Display;
 
-use crate::parser::ast::{Expr, Func, Node, Statement};
+use crate::parser::ast::{Expr, Node, Statement};
 
-use super::{error::RunError, native::native_print, scope::FuncType, Scope, Value};
+use super::{error::RunError, value::FuncValue, Value};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UnaryOpType {
@@ -48,199 +51,288 @@ pub enum BinaryOpType {
     Or,
 }
 
-#[derive(Debug)]
+enum GlobalValue<Data> {
+    Static(Value<Data>),
+    Const(Value<Data>),
+}
+
+pub enum SetError {
+    Const,
+    None,
+}
+
 pub struct Engine<Data> {
-    global_scope: Scope<Data>,
-    nested_scopes: Vec<Scope<Data>>,
+    globals: Vec<Vec<(String, GlobalValue<Data>)>>,
+    locals: Vec<Vec<(String, Value<Data>)>>,
+    stash: Vec<Vec<Vec<(String, Value<Data>)>>>,
 }
 
 impl<Data> Default for Engine<Data> {
     fn default() -> Self {
-        let mut global_scope = Scope::new();
-        global_scope.init_native_func(native_print());
-
         Self {
-            global_scope,
-            nested_scopes: Vec::new(),
+            globals: Default::default(),
+            locals: Default::default(),
+            stash: Default::default(),
         }
     }
 }
 
-impl<Data: Clone> Engine<Data> {
+impl<Data> Engine<Data> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn scope(&self) -> &Scope<Data> {
-        &self.global_scope
-    }
-
     pub fn push_scope(&mut self) {
-        self.nested_scopes.push(Scope::new());
+        self.globals.push(Vec::new());
+        self.locals.push(Vec::new());
     }
 
-    pub fn pop_scope(&mut self) -> bool {
-        self.nested_scopes.pop().is_some()
+    pub fn pop_scope(&mut self) {
+        self.globals.pop();
+        self.locals.pop();
     }
 
-    pub fn set_var(&mut self, ident: impl Into<String>, value: Value) {
-        match self.nested_scopes.last_mut() {
-            None => self.global_scope.init_var(ident, value),
-            Some(scope) => scope.init_var(ident, value),
+    pub fn stash_scope(&mut self) {
+        self.globals.push(Vec::new());
+        let old_local = replace(&mut self.locals, Vec::new());
+        self.stash.push(old_local);
+    }
+
+    pub fn unstash_scope(&mut self) {
+        self.globals.pop();
+        match self.stash.pop() {
+            Some(stash) => self.locals = stash,
+            None => self.locals = Vec::new(),
         }
     }
 
-    pub fn set_func(&mut self, func: Func<Data>) {
-        match self.nested_scopes.last_mut() {
-            None => self.global_scope.init_func(func),
-            Some(scope) => scope.init_func(func),
-        }
+    pub fn init(&mut self, ident: impl Into<String>, value: Value<Data>) {
+        let Some(locals) = self.locals.last_mut() else {
+            self.locals.push(vec![(ident.into(), value)]);
+            return;
+        };
+
+        locals.push((ident.into(), value));
     }
 
-    pub fn get_var(&self, ident: impl AsRef<str>) -> Option<&Value> {
-        for scope in self.nested_scopes.iter().rev() {
-            if let Some(value) = scope.get_var(ident.as_ref()) {
-                return Some(value);
-            }
-        }
-
-        self.global_scope.get_var(ident)
+    pub fn init_const(&mut self, ident: impl Into<String>, value: Value<Data>) {
+        self.init_global(ident.into(), GlobalValue::Const(value))
     }
 
-    pub fn get_var_mut(&mut self, ident: impl AsRef<str>) -> Option<&mut Value> {
-        for scope in self.nested_scopes.iter_mut().rev() {
-            if let Some(value) = scope.get_var_mut(ident.as_ref()) {
-                return Some(value);
-            }
-        }
-
-        self.global_scope.get_var_mut(ident)
+    pub fn init_static(&mut self, ident: impl Into<String>, value: Value<Data>) {
+        self.init_global(ident.into(), GlobalValue::Static(value))
     }
 
-    pub fn get_func(&self, ident: &Node<Data, String>) -> Result<&FuncType<Data>, RunError<Data>> {
-        // try all nested scopes first
-        for scope in self.nested_scopes.iter().rev() {
-            if let Some(func) = scope.get_func(ident.deref()) {
-                return Ok(func);
-            }
-        }
+    fn init_global(&mut self, ident: String, value: GlobalValue<Data>) {
+        let Some(globals) = self.globals.last_mut() else {
+            self.globals.push(vec![(ident.into(), value)]);
+            return;
+        };
 
-        // then pull from global scope
-        self.global_scope
-            .get_func(ident.deref())
-            .ok_or_else(|| RunError::UnknownFunction {
-                ident: ident.deref().into(),
-                data: ident.data().clone(),
-            })
+        globals.push((ident.into(), value));
     }
 
-    pub fn eval_func(
+    pub fn set(
         &mut self,
-        ident: &Node<Data, String>,
-        values: Vec<Value>,
-    ) -> Result<Value, RunError<Data>> {
-        // get and validate function
-        let func = self.get_func(ident)?;
-        if func.param_count() < values.len() {
-            return Err(RunError::ParameterCount {
-                expected: func.param_count(),
-                found: values.len(),
-                data: ident.data().clone(),
-            });
+        ident: impl AsRef<str>,
+        value: Value<Data>,
+    ) -> Result<Value<Data>, SetError> {
+        let ident = ident.as_ref();
+        for locals in self.locals.iter_mut().rev() {
+            for (name, old_value) in locals.iter_mut().rev() {
+                if name == ident {
+                    return Ok(replace(old_value, value));
+                }
+            }
         }
 
-        let mut output = Value::None;
-        let func = func.clone();
-        self.push_scope(); // create scope for function
-        match func.clone() {
-            FuncType::Native(func) => {
-                match (func.native)(values) {
-                    Ok(value) => output = value,
-                    Err(message) => {
-                        self.pop_scope(); // ensure scope is popped before error
-                        return Err(RunError::NativeCallError {
-                            data: ident.data().clone(),
-                            message,
-                        });
+        for globals in self.globals.iter_mut().rev() {
+            for (name, old_value) in globals.iter_mut().rev() {
+                if name == ident {
+                    match old_value {
+                        GlobalValue::Static(old_value) => return Ok(replace(old_value, value)),
+                        GlobalValue::Const(_) => return Err(SetError::Const),
                     }
                 }
             }
-            FuncType::Custom(func) => {
-                for (param, value) in func.params.iter().zip(values) {
-                    // init all variables with their values
-                    self.set_var(param.deref(), value);
-                }
+        }
 
-                for statement in func.body.clone() {
-                    match self.eval_statement(&statement) {
-                        Ok(value) => output = value,
-                        Err(e) => {
-                            self.pop_scope(); // ensure scope is popped before error
-                            return Err(e);
+        Err(SetError::None)
+    }
+
+    pub fn get(&self, ident: impl AsRef<str>) -> Option<&Value<Data>> {
+        let ident = ident.as_ref();
+        for locals in self.locals.iter().rev() {
+            for (name, value) in locals.iter().rev() {
+                if name == ident {
+                    return Some(value);
+                }
+            }
+        }
+
+        for globals in self.globals.iter().rev() {
+            for (name, value) in globals.iter().rev() {
+                if name == ident {
+                    match value {
+                        GlobalValue::Static(value) | GlobalValue::Const(value) => {
+                            return Some(value);
                         }
                     }
                 }
             }
         }
-        self.pop_scope(); //pop scope when finished
 
-        Ok(output)
+        None
+    }
+}
+
+impl<Data: Clone> Engine<Data> {
+    pub fn call_fn(
+        &mut self,
+        ident: &Node<Data, String>,
+        params: &Vec<Node<Data, Expr<Data>>>,
+    ) -> Result<Value<Data>, RunError<Data>> {
+        // get the function
+        let func = match self.get(ident.deref()) {
+            Some(Value::Func(func)) => func,
+            Some(value) => {
+                return Err(RunError::InvalidCall {
+                    ident: ident.deref().clone(),
+                    found: format!("'{}'", value.type_name()),
+                    data: ident.data().clone(),
+                })
+            }
+            None => {
+                return Err(RunError::UnknownFunction {
+                    ident: ident.deref().clone(),
+                    data: ident.data().clone(),
+                })
+            }
+        };
+
+        // ensure parameter count matches
+        if func.param_count() != params.len() {
+            return Err(RunError::ParameterCount {
+                expected: func.param_count(),
+                found: params.len(),
+                data: ident.data().clone(),
+            });
+        }
+
+        // clone func
+        let func = func.clone();
+
+        // calculate all the values
+        let mut values = Vec::with_capacity(params.len());
+        for expr in params.iter() {
+            values.push(self.eval(expr)?);
+        }
+
+        // calculate function
+        let value = match func {
+            FuncValue::Native(func) => match (func.native)(values) {
+                Ok(value) => value,
+                Err(message) => {
+                    return Err(RunError::NativeCallError {
+                        message,
+                        data: ident.data().clone(),
+                    });
+                }
+            },
+            FuncValue::Custom(func) => {
+                // stash scope
+                self.stash_scope();
+
+                // load all values into new scope
+                for (ident, value) in func.params.iter().zip(values) {
+                    self.init(ident.deref(), value);
+                }
+
+                // calculate all function statements
+                let mut value = Value::None;
+                for statement in func.body.iter() {
+                    match self.eval_statement(statement) {
+                        Ok(new_value) => value = new_value,
+                        Err(e) => {
+                            // ensure scope is unstashed
+                            self.unstash_scope();
+                            return Err(e);
+                        }
+                    }
+                }
+
+                // unstash scope
+                self.unstash_scope();
+
+                // return final value
+                return Ok(value);
+            }
+        };
+
+        // return final value
+        Ok(value)
     }
 
     pub fn eval_statement(
         &mut self,
         statement: &Node<Data, Statement<Data>>,
-    ) -> Result<Value, RunError<Data>> {
+    ) -> Result<Value<Data>, RunError<Data>> {
         match statement.deref() {
             Statement::Expr(expr) => self.eval(expr),
-            Statement::Func(func) => {
-                self.set_func(func.deref().clone());
-                Ok(Value::None)
-            }
             Statement::LetAssign(ident, expr) => {
                 let value = self.eval(expr)?;
-                self.set_var(ident.deref(), value);
+                self.init(ident.deref(), value);
                 Ok(Value::None)
             }
             Statement::Assign(ident, expr) => {
                 let value = self.eval(expr)?;
-                self.set_var(ident.deref(), value);
+                match self.set(ident.deref(), value.clone()) {
+                    Ok(_) => Ok(Value::None),
+                    Err(SetError::None) => Err(RunError::UnknownVariable {
+                        ident: ident.deref().clone(),
+                        data: ident.data().clone(),
+                    }),
+                    Err(SetError::Const) => Err(RunError::ConstAssign {
+                        data: ident.data().clone(),
+                    }),
+                }
+            }
+            Statement::Func(func) => {
+                self.init_const(
+                    func.ident.deref(),
+                    Value::Func(FuncValue::Custom(func.deref().clone())),
+                );
                 Ok(Value::None)
             }
-            Statement::While(w) => loop {
-                match self.eval(&w.cond)? {
-                    Value::Bool(true) => (),
-                    Value::Bool(false) => return Ok(Value::None),
+            Statement::While(w) => {
+                while match self.eval(&w.cond)? {
+                    Value::Bool(true) => true,
+                    Value::Bool(false) => false,
                     value => {
                         return Err(RunError::TypeMismatch {
-                            expected: format!("bool"),
-                            found: format!("{}", value.type_name()),
+                            expected: format!("boolean condition"),
+                            found: format!("'{}'", value.type_name()),
                             data: w.cond.data().clone(),
                         })
                     }
+                } {
+                    for statement in w.body.iter() {
+                        self.eval_statement(statement)?;
+                    }
                 }
-
-                for statement in w.body.iter() {
-                    self.eval_statement(&statement)?;
-                }
-            },
+                Ok(Value::None)
+            }
         }
     }
 
-    pub fn eval(&mut self, expr: &Node<Data, Expr<Data>>) -> Result<Value, RunError<Data>> {
+    pub fn eval(&mut self, expr: &Node<Data, Expr<Data>>) -> Result<Value<Data>, RunError<Data>> {
         match expr.deref() {
             Expr::None => Ok(Value::None),
-            Expr::Bool(v) => Ok(Value::Bool(*v)),
+            Expr::Bool(v) => Ok(Value::Bool(v.clone())),
             Expr::Int(v) => Ok(Value::Int(v.clone())),
             Expr::Float(v) => Ok(Value::Float(v.clone())),
             Expr::String(v) => Ok(Value::String(v.clone())),
-            Expr::Call(ident, params) => {
-                let mut values = Vec::new();
-                for expr in params {
-                    values.push(self.eval(expr)?);
-                }
-                self.eval_func(ident, values)
-            }
+            Expr::Call(ident, params) => self.call_fn(ident, params),
             Expr::Neg(inner) => {
                 let inner = self.eval(inner)?;
                 self.eval_unary(UnaryOpType::Neg, inner, expr.data())
@@ -319,35 +411,33 @@ impl<Data: Clone> Engine<Data> {
                 let rhs = self.eval(rhs)?;
                 self.eval_binary(lhs, BinaryOpType::Or, rhs, expr.data())
             }
-            Expr::Var(ident) => match self.get_var(ident.deref()) {
+            Expr::Var(ident) => match self.get(ident.deref()) {
                 Some(value) => Ok(value.clone()),
                 None => Err(RunError::UnknownVariable {
                     ident: ident.clone(),
                     data: expr.data().clone(),
                 }),
             },
-            Expr::Walrus(ident, assign_expr) => {
-                let value = self.eval(assign_expr)?;
-                self.set_var(ident.deref(), value.clone());
-                Ok(value)
-            }
-            Expr::Ternary(lhs, cond, rhs) => {
-                // evaluate condition
-                let cond = match self.eval(&cond)? {
-                    Value::Bool(cond) => cond,
-                    value => {
-                        return Err(RunError::TypeMismatch {
-                            expected: "'bool'".into(),
-                            found: format!("'{}'", value.type_name()),
-                            data: cond.data().clone(),
-                        })
-                    }
-                };
-
-                // then evaluate the correct expression
-                match cond {
-                    true => self.eval(&lhs),
-                    false => self.eval(&rhs),
+            Expr::Ternary(cond, lhs, rhs) => match self.eval(cond)? {
+                Value::Bool(true) => self.eval(lhs),
+                Value::Bool(false) => self.eval(rhs),
+                value => Err(RunError::TypeMismatch {
+                    expected: format!("boolean condition"),
+                    found: format!("'{}'", value.type_name()),
+                    data: cond.data().clone(),
+                }),
+            },
+            Expr::Walrus(ident, expr) => {
+                let value = self.eval(expr)?;
+                match self.set(ident.deref(), value.clone()) {
+                    Ok(_) => Ok(value), // return the new value
+                    Err(SetError::None) => Err(RunError::UnknownVariable {
+                        ident: ident.deref().clone(),
+                        data: ident.data().clone(),
+                    }),
+                    Err(SetError::Const) => Err(RunError::ConstAssign {
+                        data: ident.data().clone(),
+                    }),
                 }
             }
         }
@@ -356,9 +446,9 @@ impl<Data: Clone> Engine<Data> {
     fn eval_unary(
         &self,
         op: UnaryOpType,
-        val: Value,
+        val: Value<Data>,
         data: &Data,
-    ) -> Result<Value, RunError<Data>> {
+    ) -> Result<Value<Data>, RunError<Data>> {
         let vtype = val.type_name();
         match (val, op) {
             (Value::Bool(v), UnaryOpType::Not) => Ok(Value::Bool(!v)),
@@ -371,17 +461,15 @@ impl<Data: Clone> Engine<Data> {
             }),
         }
     }
-
     fn eval_binary(
         &self,
-        val1: Value,
+        val1: Value<Data>,
         op: BinaryOpType,
-        val2: Value,
+        val2: Value<Data>,
         data: &Data,
-    ) -> Result<Value, RunError<Data>> {
+    ) -> Result<Value<Data>, RunError<Data>> {
         let vtype1 = val1.type_name();
         let vtype2 = val2.type_name();
-
         match (val1, op, val2) {
             // ---------------
             // --- INT OPS ---
@@ -416,7 +504,6 @@ impl<Data: Clone> Engine<Data> {
             (Value::Int(v1), BinaryOpType::Pow, Value::Float(v2)) => {
                 Ok(Value::Float((DBig::from(v1)).powf(&v2)))
             }
-
             // int equality
             (Value::Int(v1), BinaryOpType::Eq, Value::Int(v2)) => Ok(Value::Bool(v1 == v2)),
             (Value::Int(v1), BinaryOpType::Eq, Value::Float(v2)) => {
@@ -447,7 +534,6 @@ impl<Data: Clone> Engine<Data> {
             (Value::Int(v1), BinaryOpType::GtEq, Value::Float(v2)) => {
                 Ok(Value::Bool(DBig::from(v1) >= v2))
             }
-
             // -----------------
             // --- FLOAT OPS ---
             // float add
@@ -515,7 +601,6 @@ impl<Data: Clone> Engine<Data> {
                 Ok(Value::Bool(v1 >= DBig::from(v2)))
             }
             (Value::Float(v1), BinaryOpType::GtEq, Value::Float(v2)) => Ok(Value::Bool(v1 >= v2)),
-
             // ------------------
             // --- STRING OPS ---
             // string add
@@ -532,19 +617,18 @@ impl<Data: Clone> Engine<Data> {
                 Ok(Value::String(format!("{v1}{v2}")))
             }
             // string mul
-            (Value::String(v1), BinaryOpType::Mul, Value::Bool(v2)) => {
-                Ok(Value::String(v1.repeat(v2 as usize)))
-            }
+            (Value::String(v1), BinaryOpType::Mul, Value::Bool(v2)) => match v2 {
+                false => Ok(Value::String("".into())),
+                true => Ok(Value::String(v1)),
+            },
             (Value::String(v1), BinaryOpType::Mul, Value::Int(v2)) => {
                 let (sign, ubig) = v2.into_parts();
-                match sign {
-                    dashu::base::Sign::Negative => return Ok(Value::String("".into())),
-                    _ => (),
+                if let Sign::Negative = sign {
+                    return Ok(Value::String("".into()));
                 }
-
-                match TryInto::<usize>::try_into(ubig) {
+                match TryInto::<isize>::try_into(ubig).map(|i| i as usize) {
                     Ok(count) => Ok(Value::String(v1.repeat(count))),
-                    Err(_) => Ok(Value::String(v1.repeat(usize::MAX))),
+                    Err(_) => Err(RunError::StringAllocError { data: data.clone() }),
                 }
             }
             // string equality
@@ -559,7 +643,6 @@ impl<Data: Clone> Engine<Data> {
             (Value::String(v1), BinaryOpType::LtEq, Value::String(v2)) => Ok(Value::Bool(v1 <= v2)),
             // string greater than equal
             (Value::String(v1), BinaryOpType::GtEq, Value::String(v2)) => Ok(Value::Bool(v1 >= v2)),
-
             // -------------------
             // --- BOOLEAN OPS ---
             // boolean equality
@@ -578,7 +661,6 @@ impl<Data: Clone> Engine<Data> {
             (Value::Bool(v1), BinaryOpType::And, Value::Bool(v2)) => Ok(Value::Bool(v1 && v2)),
             // boolean or
             (Value::Bool(v1), BinaryOpType::Or, Value::Bool(v2)) => Ok(Value::Bool(v1 || v2)),
-
             // --------------------
             // --- FAILURE CASE ---
             _ => Err(RunError::InvalidBinary {

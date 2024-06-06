@@ -1,7 +1,7 @@
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 use crate::{
-    engine::Value,
+    engine::{boba::load_boba_lib, Value},
     parser::{ast::Statement, lexer::Lexer},
     BobaCache, Engine,
 };
@@ -30,6 +30,8 @@ impl Session {
 
     pub fn start_console(&mut self) {
         let mut engine = Engine::new();
+        load_boba_lib(&mut engine);
+
         let mut cache = BobaCache::new();
         loop {
             let data = match self.line_editor.read_line(&self.prompt) {

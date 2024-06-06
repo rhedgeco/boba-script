@@ -1,28 +1,20 @@
 use super::Value;
 
-pub type NativeFuncImpl = fn(Vec<Value>) -> Result<Value, String>;
+pub type NativeFuncImpl<Data> = fn(Vec<Value<Data>>) -> Result<Value<Data>, String>;
 
 #[derive(Debug, Clone)]
-pub struct NativeFunc {
+pub struct NativeFunc<Data> {
     pub name: String,
     pub param_count: usize,
-    pub native: NativeFuncImpl,
+    pub native: NativeFuncImpl<Data>,
 }
 
-impl NativeFunc {
-    pub fn new(name: impl Into<String>, param_count: usize, native: NativeFuncImpl) -> Self {
+impl<Data> NativeFunc<Data> {
+    pub fn new(name: impl Into<String>, param_count: usize, native: NativeFuncImpl<Data>) -> Self {
         Self {
             name: name.into(),
             param_count,
             native,
         }
     }
-}
-
-pub fn native_print() -> NativeFunc {
-    NativeFunc::new("print", 1, |values| {
-        let message = &values[0];
-        println!("{message}");
-        Ok(Value::None)
-    })
 }
