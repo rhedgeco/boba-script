@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use crate::parser::ast::{Expr, Node, Statement};
 
-use super::{core::load_core_tools, error::RunError, scope::Scope, FuncValue, OpManager, Value};
+use super::{error::RunError, load_builtins, scope::Scope, FuncValue, OpManager, Value};
 
 pub struct Engine<Data: Clone> {
     ops: OpManager<Data>,
@@ -19,7 +19,7 @@ impl<Data: Clone> Default for Engine<Data> {
 impl<Data: Clone> Engine<Data> {
     pub fn new() -> Self {
         let mut engine = Self::empty();
-        load_core_tools(&mut engine);
+        load_builtins(&mut engine);
         engine
     }
 

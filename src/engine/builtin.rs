@@ -2,7 +2,7 @@ use crate::{engine::Value, Engine};
 
 use super::{FuncValue, NativeFunc};
 
-pub fn load_core_tools<Data: Clone>(engine: &mut Engine<Data>) {
+pub fn load_builtins<Data: Clone>(engine: &mut Engine<Data>) {
     engine.init_func(FuncValue::native(native_print()))
 }
 
