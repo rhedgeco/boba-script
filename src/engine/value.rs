@@ -2,31 +2,7 @@ use std::fmt::Display;
 
 use dashu::{float::DBig, integer::IBig};
 
-use crate::parser::ast::Func;
-
-use super::NativeFunc;
-
-#[derive(Debug, Clone)]
-pub enum FuncValue<Data> {
-    Custom(Func<Data>),
-    Native(NativeFunc<Data>),
-}
-
-impl<Data> FuncValue<Data> {
-    pub fn name(&self) -> &str {
-        match self {
-            FuncValue::Custom(func) => &*func.ident,
-            FuncValue::Native(func) => &func.name,
-        }
-    }
-
-    pub fn param_count(&self) -> usize {
-        match self {
-            FuncValue::Custom(func) => func.params.len(),
-            FuncValue::Native(func) => func.param_count,
-        }
-    }
-}
+use super::FuncValue;
 
 #[derive(Debug, Clone)]
 pub enum Value<Data> {
@@ -46,7 +22,7 @@ impl<Data> Display for Value<Data> {
             Value::Int(v) => write!(f, "{v}"),
             Value::Float(v) => write!(f, "{v}"),
             Value::String(v) => write!(f, "{v}"),
-            Value::Func(v) => write!(f, "fn {}", v.name()),
+            Value::Func(v) => write!(f, "fn {}", v.ident()),
         }
     }
 }

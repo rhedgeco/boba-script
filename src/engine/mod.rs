@@ -1,11 +1,12 @@
 mod engine;
+mod scope;
 
 pub mod boba;
 pub mod error;
-pub mod native;
+pub mod func;
 pub mod value;
 
 pub use engine::*;
 
-pub use native::NativeFunc;
+pub use func::{FuncValue, NativeFunc};
 pub use value::Value;

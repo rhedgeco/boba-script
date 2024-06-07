@@ -1,4 +1,4 @@
-use std::{mem::replace, ops::Deref};
+use std::ops::Deref;
 
 use dashu::{
     base::{RemEuclid, Sign},
@@ -8,7 +8,11 @@ use derive_more::Display;
 
 use crate::parser::ast::{Expr, Node, Statement};
 
-use super::{error::RunError, value::FuncValue, Value};
+use super::{
+    error::RunError,
+    scope::{Handle, Scope},
+    FuncValue, Value,
+};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UnaryOpType {
@@ -51,28 +55,28 @@ pub enum BinaryOpType {
     Or,
 }
 
-enum GlobalValue<Data> {
-    Static(Value<Data>),
-    Const(Value<Data>),
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FuncRef {
+    ident: String,
+    handle: Handle,
 }
 
-pub enum SetError {
-    Const,
-    None,
+impl FuncRef {
+    pub fn ident(&self) -> &str {
+        &self.ident
+    }
 }
 
 pub struct Engine<Data> {
-    globals: Vec<Vec<(String, GlobalValue<Data>)>>,
-    locals: Vec<Vec<(String, Value<Data>)>>,
-    stash: Vec<Vec<Vec<(String, Value<Data>)>>>,
+    funcs: Scope<FuncValue<Data>>,
+    locals: Scope<Value<Data>>,
 }
 
 impl<Data> Default for Engine<Data> {
     fn default() -> Self {
         Self {
-            globals: Default::default(),
+            funcs: Default::default(),
             locals: Default::default(),
-            stash: Default::default(),
         }
     }
 }
@@ -83,106 +87,39 @@ impl<Data> Engine<Data> {
     }
 
     pub fn push_scope(&mut self) {
-        self.globals.push(Vec::new());
-        self.locals.push(Vec::new());
+        self.locals.push_scope();
+        self.funcs.push_scope();
     }
 
     pub fn pop_scope(&mut self) {
-        self.globals.pop();
-        self.locals.pop();
+        self.locals.pop_scope();
+        self.funcs.pop_scope();
     }
 
-    pub fn stash_scope(&mut self) {
-        self.globals.push(Vec::new());
-        let old_local = replace(&mut self.locals, Vec::new());
-        self.stash.push(old_local);
+    pub fn stash(&mut self) {
+        self.locals.stash();
+        self.funcs.push_scope();
     }
 
-    pub fn unstash_scope(&mut self) {
-        self.globals.pop();
-        match self.stash.pop() {
-            Some(stash) => self.locals = stash,
-            None => self.locals = Vec::new(),
-        }
+    pub fn unstash(&mut self) {
+        self.locals.unstash();
+        self.funcs.pop_scope();
     }
 
-    pub fn init(&mut self, ident: impl Into<String>, value: Value<Data>) {
-        let Some(locals) = self.locals.last_mut() else {
-            self.locals.push(vec![(ident.into(), value)]);
-            return;
-        };
-
-        locals.push((ident.into(), value));
+    pub fn get_value(&self, ident: impl AsRef<str>) -> Option<&Value<Data>> {
+        self.locals.get(ident)
     }
 
-    pub fn init_const(&mut self, ident: impl Into<String>, value: Value<Data>) {
-        self.init_global(ident.into(), GlobalValue::Const(value))
+    pub fn set_value(&mut self, ident: impl AsRef<str>, value: Value<Data>) -> Option<Value<Data>> {
+        self.locals.set(ident, value)
     }
 
-    pub fn init_static(&mut self, ident: impl Into<String>, value: Value<Data>) {
-        self.init_global(ident.into(), GlobalValue::Static(value))
+    pub fn init_value(&mut self, ident: impl Into<String>, value: Value<Data>) {
+        self.locals.init(ident, value)
     }
 
-    fn init_global(&mut self, ident: String, value: GlobalValue<Data>) {
-        let Some(globals) = self.globals.last_mut() else {
-            self.globals.push(vec![(ident.into(), value)]);
-            return;
-        };
-
-        globals.push((ident.into(), value));
-    }
-
-    pub fn set(
-        &mut self,
-        ident: impl AsRef<str>,
-        value: Value<Data>,
-    ) -> Result<Value<Data>, SetError> {
-        let ident = ident.as_ref();
-        for locals in self.locals.iter_mut().rev() {
-            for (name, old_value) in locals.iter_mut().rev() {
-                if name == ident {
-                    return Ok(replace(old_value, value));
-                }
-            }
-        }
-
-        for globals in self.globals.iter_mut().rev() {
-            for (name, old_value) in globals.iter_mut().rev() {
-                if name == ident {
-                    match old_value {
-                        GlobalValue::Static(old_value) => return Ok(replace(old_value, value)),
-                        GlobalValue::Const(_) => return Err(SetError::Const),
-                    }
-                }
-            }
-        }
-
-        Err(SetError::None)
-    }
-
-    pub fn get(&self, ident: impl AsRef<str>) -> Option<&Value<Data>> {
-        let ident = ident.as_ref();
-        for locals in self.locals.iter().rev() {
-            for (name, value) in locals.iter().rev() {
-                if name == ident {
-                    return Some(value);
-                }
-            }
-        }
-
-        for globals in self.globals.iter().rev() {
-            for (name, value) in globals.iter().rev() {
-                if name == ident {
-                    match value {
-                        GlobalValue::Static(value) | GlobalValue::Const(value) => {
-                            return Some(value);
-                        }
-                    }
-                }
-            }
-        }
-
-        None
+    pub fn init_func(&mut self, func: FuncValue<Data>) {
+        self.funcs.init(func.ident().to_string(), func)
     }
 }
 
@@ -193,15 +130,8 @@ impl<Data: Clone> Engine<Data> {
         params: &Vec<Node<Data, Expr<Data>>>,
     ) -> Result<Value<Data>, RunError<Data>> {
         // get the function
-        let func = match self.get(ident.deref()) {
-            Some(Value::Func(func)) => func,
-            Some(value) => {
-                return Err(RunError::InvalidCall {
-                    ident: ident.deref().clone(),
-                    found: format!("'{}'", value.type_name()),
-                    data: ident.data().clone(),
-                })
-            }
+        let func = match self.funcs.get(ident.deref()) {
+            Some(func) => func,
             None => {
                 return Err(RunError::UnknownFunction {
                     ident: ident.deref().clone(),
@@ -241,11 +171,11 @@ impl<Data: Clone> Engine<Data> {
             },
             FuncValue::Custom(func) => {
                 // stash scope
-                self.stash_scope();
+                self.stash();
 
                 // load all values into new scope
                 for (ident, value) in func.params.iter().zip(values) {
-                    self.init(ident.deref(), value);
+                    self.init_value(ident.deref(), value);
                 }
 
                 // calculate all function statements
@@ -255,14 +185,14 @@ impl<Data: Clone> Engine<Data> {
                         Ok(new_value) => value = new_value,
                         Err(e) => {
                             // ensure scope is unstashed
-                            self.unstash_scope();
+                            self.unstash();
                             return Err(e);
                         }
                     }
                 }
 
                 // unstash scope
-                self.unstash_scope();
+                self.unstash();
 
                 // return final value
                 return Ok(value);
@@ -281,27 +211,21 @@ impl<Data: Clone> Engine<Data> {
             Statement::Expr(expr) => self.eval(expr),
             Statement::LetAssign(ident, expr) => {
                 let value = self.eval(expr)?;
-                self.init(ident.deref(), value);
+                self.init_value(ident.deref(), value);
                 Ok(Value::None)
             }
             Statement::Assign(ident, expr) => {
                 let value = self.eval(expr)?;
-                match self.set(ident.deref(), value.clone()) {
-                    Ok(_) => Ok(Value::None),
-                    Err(SetError::None) => Err(RunError::UnknownVariable {
+                match self.set_value(ident.deref(), value.clone()) {
+                    Some(_old_value) => Ok(Value::None),
+                    None => Err(RunError::UnknownVariable {
                         ident: ident.deref().clone(),
-                        data: ident.data().clone(),
-                    }),
-                    Err(SetError::Const) => Err(RunError::ConstAssign {
                         data: ident.data().clone(),
                     }),
                 }
             }
             Statement::Func(func) => {
-                self.init_const(
-                    func.ident.deref(),
-                    Value::Func(FuncValue::Custom(func.deref().clone())),
-                );
+                self.init_func(FuncValue::custom(func.deref().clone()));
                 Ok(Value::None)
             }
             Statement::While(w) => {
@@ -411,7 +335,7 @@ impl<Data: Clone> Engine<Data> {
                 let rhs = self.eval(rhs)?;
                 self.eval_binary(lhs, BinaryOpType::Or, rhs, expr.data())
             }
-            Expr::Var(ident) => match self.get(ident.deref()) {
+            Expr::Var(ident) => match self.get_value(ident.deref()) {
                 Some(value) => Ok(value.clone()),
                 None => Err(RunError::UnknownVariable {
                     ident: ident.clone(),
@@ -428,14 +352,11 @@ impl<Data: Clone> Engine<Data> {
                 }),
             },
             Expr::Walrus(ident, expr) => {
-                let value = self.eval(expr)?;
-                match self.set(ident.deref(), value.clone()) {
-                    Ok(_) => Ok(value), // return the new value
-                    Err(SetError::None) => Err(RunError::UnknownVariable {
+                let new_value = self.eval(expr)?;
+                match self.set_value(ident.deref(), new_value.clone()) {
+                    Some(_old_value) => Ok(new_value), // return the new value
+                    None => Err(RunError::UnknownVariable {
                         ident: ident.deref().clone(),
-                        data: ident.data().clone(),
-                    }),
-                    Err(SetError::Const) => Err(RunError::ConstAssign {
                         data: ident.data().clone(),
                     }),
                 }
