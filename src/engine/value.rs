@@ -21,7 +21,7 @@ impl<Data> Display for Value<Data> {
             Value::Bool(v) => write!(f, "{v}"),
             Value::Int(v) => write!(f, "{v}"),
             Value::Float(v) => write!(f, "{v}"),
-            Value::String(v) => write!(f, "{v}"),
+            Value::String(v) => write!(f, "'{v}'"),
             Value::Func(v) => write!(f, "fn {}", v.ident()),
         }
     }
