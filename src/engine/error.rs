@@ -4,8 +4,6 @@ use ariadne::{Color, Label, Report, ReportKind, Span};
 
 use crate::cache::CacheSpan;
 
-use super::{BinaryOpType, UnaryOpType};
-
 #[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum RunError<Data> {
@@ -18,12 +16,12 @@ pub enum RunError<Data> {
         data: Data,
     },
     InvalidUnary {
-        op: UnaryOpType,
+        op: String,
         vtype: String,
         data: Data,
     },
     InvalidBinary {
-        op: BinaryOpType,
+        op: String,
         vtype1: String,
         vtype2: String,
         data: Data,
