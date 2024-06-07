@@ -9,6 +9,7 @@ use derive_more::Display;
 use crate::parser::ast::{Expr, Node, Statement};
 
 use super::{
+    core::load_core_tools,
     error::RunError,
     scope::{Handle, Scope},
     FuncValue, Value,
@@ -74,16 +75,22 @@ pub struct Engine<Data> {
 
 impl<Data> Default for Engine<Data> {
     fn default() -> Self {
-        Self {
-            funcs: Default::default(),
-            locals: Default::default(),
-        }
+        Self::new()
     }
 }
 
 impl<Data> Engine<Data> {
     pub fn new() -> Self {
-        Self::default()
+        let mut engine = Self::empty();
+        load_core_tools(&mut engine);
+        engine
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            funcs: Default::default(),
+            locals: Default::default(),
+        }
     }
 
     pub fn push_scope(&mut self) {

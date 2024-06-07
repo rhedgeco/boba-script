@@ -2,7 +2,7 @@ use crate::{engine::Value, Engine};
 
 use super::{FuncValue, NativeFunc};
 
-pub fn load_boba_lib<Data>(engine: &mut Engine<Data>) {
+pub fn load_core_tools<Data>(engine: &mut Engine<Data>) {
     engine.init_func(FuncValue::native(native_print()))
 }
 

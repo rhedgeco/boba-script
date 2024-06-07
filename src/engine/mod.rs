@@ -1,7 +1,7 @@
 mod engine;
 mod scope;
 
-pub mod boba;
+pub mod core;
 pub mod error;
 pub mod func;
 pub mod value;
