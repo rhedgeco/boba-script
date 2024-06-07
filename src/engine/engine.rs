@@ -41,12 +41,12 @@ impl<Data: Clone> Engine<Data> {
         self.funcs.pop_scope();
     }
 
-    pub fn stash(&mut self) {
+    pub fn stash_scope(&mut self) {
         self.locals.stash();
         self.funcs.push_scope();
     }
 
-    pub fn unstash(&mut self) {
+    pub fn unstash_scope(&mut self) {
         self.locals.unstash();
         self.funcs.pop_scope();
     }
@@ -114,7 +114,7 @@ impl<Data: Clone> Engine<Data> {
             },
             FuncValue::Custom(func) => {
                 // stash scope
-                self.stash();
+                self.stash_scope();
 
                 // load all values into new scope
                 for (ident, value) in func.params.iter().zip(values) {
@@ -128,14 +128,14 @@ impl<Data: Clone> Engine<Data> {
                         Ok(new_value) => value = new_value,
                         Err(e) => {
                             // ensure scope is unstashed
-                            self.unstash();
+                            self.unstash_scope();
                             return Err(e);
                         }
                     }
                 }
 
                 // unstash scope
-                self.unstash();
+                self.unstash_scope();
 
                 // return final value
                 return Ok(value);
