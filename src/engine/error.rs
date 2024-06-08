@@ -50,7 +50,7 @@ pub enum RunError<Data> {
         found: ValueType,
         data: Data,
     },
-    ConstAssign {
+    ConstAssignment {
         data: Data,
     },
 }
@@ -163,9 +163,9 @@ impl RunError<CacheSpan> {
                             )),
                     )
             }
-            RunError::ConstAssign { data } => {
+            RunError::ConstAssignment { data } => {
                 Report::build(ReportKind::Error, data.source().clone(), data.start())
-                    .with_message("Const Assign")
+                    .with_message("Const Assignment")
                     .with_code("R-010")
                     .with_label(
                         Label::new(data.clone())

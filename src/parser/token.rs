@@ -77,6 +77,10 @@ pub enum Token<'source> {
     Let,
     #[display(fmt = "fn")]
     Fn,
+    #[display(fmt = "const")]
+    Const,
+    #[display(fmt = "static")]
+    Static,
     #[display(fmt = "while")]
     While,
 }
@@ -85,6 +89,8 @@ impl<'source> Token<'source> {
     pub fn get_keyword(str: impl AsRef<str>) -> Option<Self> {
         static KEYWORDS: phf::Map<&str, Token> = phf::phf_map! {
             "let" => Token::Let,
+            "const" => Token::Const,
+            "static" => Token::Static,
             "fn" => Token::Fn,
             "true" => Token::Bool(true),
             "false" => Token::Bool(false),

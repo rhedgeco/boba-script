@@ -1,6 +1,6 @@
 use std::{mem::replace, ops::Deref};
 
-use crate::parser::ast::{Expr, Node, Statement};
+use crate::parser::ast::{init::InitStyle, Expr, Node, Statement};
 
 use super::{error::RunError, load_builtins, scope::Scope, value::ValueType, OpManager, Value};
 
@@ -113,9 +113,14 @@ impl<Data: Clone> Engine<Data> {
     ) -> Result<Value<Data>, RunError<Data>> {
         match statement.deref() {
             Statement::Expr(expr) => self.eval(expr),
-            Statement::LetAssign(ident, expr) => {
-                let value = self.eval(expr)?;
-                self.init_value(ident.deref(), value);
+            Statement::Init(init) => {
+                let value = self.eval(&init.expr)?;
+                let ident = init.ident.deref().clone();
+                match init.style.deref() {
+                    InitStyle::Let => self.init_value(ident, value),
+                    InitStyle::Static => self.init_static(ident, value),
+                    InitStyle::Const => self.init_const(ident, value),
+                }
                 Ok(Value::None)
             }
         }
@@ -227,7 +232,7 @@ impl<Data: Clone> Engine<Data> {
                 let new_value = self.eval(rhs)?;
                 match self.set_value(ident.deref(), new_value) {
                     Ok(_old_value) => Ok(Value::None), // return nothing
-                    Err(SetError::Const) => Err(RunError::ConstAssign {
+                    Err(SetError::Const) => Err(RunError::ConstAssignment {
                         data: expr.data().clone(),
                     }),
                     Err(SetError::DoesNotExist) => Err(RunError::UnknownVariable {
@@ -240,7 +245,7 @@ impl<Data: Clone> Engine<Data> {
                 let new_value = self.eval(rhs)?;
                 match self.set_value(ident.deref(), new_value.clone()) {
                     Ok(_old_value) => Ok(new_value), // return newly created value
-                    Err(SetError::Const) => Err(RunError::ConstAssign {
+                    Err(SetError::Const) => Err(RunError::ConstAssignment {
                         data: expr.data().clone(),
                     }),
                     Err(SetError::DoesNotExist) => Err(RunError::UnknownVariable {
