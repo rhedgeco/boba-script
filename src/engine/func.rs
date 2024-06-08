@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use crate::parser::ast::Func;
 
@@ -19,13 +19,6 @@ impl<Data> FuncValue<Data> {
         Self::Native(Arc::new(func))
     }
 
-    pub fn ident(&self) -> &str {
-        match self {
-            FuncValue::Custom(func) => func.ident.deref(),
-            FuncValue::Native(func) => &func.ident,
-        }
-    }
-
     pub fn param_count(&self) -> usize {
         match self {
             FuncValue::Custom(func) => func.params.len(),
@@ -38,15 +31,13 @@ pub type NativeFuncImpl<Data> = fn(Vec<Value<Data>>) -> Result<Value<Data>, Stri
 
 #[derive(Debug, Clone)]
 pub struct NativeFunc<Data> {
-    pub ident: String,
     pub param_count: usize,
     pub native: NativeFuncImpl<Data>,
 }
 
 impl<Data> NativeFunc<Data> {
-    pub fn new(ident: impl Into<String>, param_count: usize, native: NativeFuncImpl<Data>) -> Self {
+    pub fn new(param_count: usize, native: NativeFuncImpl<Data>) -> Self {
         Self {
-            ident: ident.into(),
             param_count,
             native,
         }

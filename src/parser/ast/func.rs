@@ -7,7 +7,6 @@ use super::{Node, Statement};
 
 #[derive(Debug, Clone)]
 pub struct Func<Data> {
-    pub ident: Node<Data, String>,
     pub params: Vec<Node<Data, String>>,
     pub body: Vec<Node<Data, Statement<Data>>>,
 }
@@ -20,18 +19,6 @@ impl Func<CacheSpan> {
             (token, span) => {
                 return Err(PError::UnexpectedToken {
                     expected: format!("'fn'"),
-                    found: format!("'{token}'"),
-                    data: span,
-                })
-            }
-        };
-
-        // capture ident token
-        let ident = match tokens.expect_next("function name")? {
-            (Token::Ident(name), span) => Node::new(span, name.to_string()),
-            (token, span) => {
-                return Err(PError::UnexpectedToken {
-                    expected: format!("function name"),
                     found: format!("'{token}'"),
                     data: span,
                 })
@@ -95,7 +82,6 @@ impl Func<CacheSpan> {
         let mut output = Node::new(
             tokens.span(start..end),
             Self {
-                ident,
                 params,
                 body: Vec::new(),
             },

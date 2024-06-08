@@ -26,7 +26,7 @@ impl<Data: Clone> OpManager<Data> {
             Value::Bool(v) => Ok(Value::Bool(!v)),
             _ => Err(RunError::InvalidUnary {
                 op: format!("!"),
-                vtype: v.type_name(),
+                vtype: v.get_type(),
                 data: data.clone(),
             }),
         }
@@ -38,7 +38,7 @@ impl<Data: Clone> OpManager<Data> {
             Value::Float(v) => Ok(Value::Float(-v)),
             _ => Err(RunError::InvalidUnary {
                 op: format!("-"),
-                vtype: v.type_name(),
+                vtype: v.get_type(),
                 data: data.clone(),
             }),
         }
@@ -68,8 +68,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("+"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -93,8 +93,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("-"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -134,8 +134,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("*"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -159,8 +159,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("/"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -184,8 +184,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("%"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -209,8 +209,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("**"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -240,8 +240,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("=="),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -271,8 +271,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("<"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -302,8 +302,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!(">"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -333,8 +333,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("!="),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -364,8 +364,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("<="),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -395,8 +395,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!(">="),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -415,8 +415,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("and"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }
@@ -435,8 +435,8 @@ impl<Data: Clone> OpManager<Data> {
             // FAIL
             (v1, v2) => Err(RunError::InvalidBinary {
                 op: format!("or"),
-                vtype1: v1.type_name(),
-                vtype2: v2.type_name(),
+                vtype1: v1.get_type(),
+                vtype2: v2.get_type(),
                 data: data.clone(),
             }),
         }

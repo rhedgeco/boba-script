@@ -4,6 +4,8 @@ use ariadne::{Color, Label, Report, ReportKind, Span};
 
 use crate::cache::CacheSpan;
 
+use super::value::ValueType;
+
 #[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum RunError<Data> {
@@ -17,18 +19,18 @@ pub enum RunError<Data> {
     },
     InvalidUnary {
         op: String,
-        vtype: String,
+        vtype: ValueType,
         data: Data,
     },
     InvalidBinary {
         op: String,
-        vtype1: String,
-        vtype2: String,
+        vtype1: ValueType,
+        vtype2: ValueType,
         data: Data,
     },
     TypeMismatch {
-        expected: String,
-        found: String,
+        expected: ValueType,
+        found: ValueType,
         data: Data,
     },
     ParameterCount {
@@ -45,7 +47,7 @@ pub enum RunError<Data> {
     },
     InvalidCall {
         ident: String,
-        found: String,
+        found: ValueType,
         data: Data,
     },
     ConstAssign {
@@ -111,7 +113,7 @@ impl RunError<CacheSpan> {
                 .with_label(
                     Label::new(data.clone())
                         .with_color(Color::Red)
-                        .with_message(format!("expected {expected}, found {found}")),
+                        .with_message(format!("expected '{expected}', found '{found}'")),
                 ),
             RunError::ParameterCount {
                 expected,
@@ -156,7 +158,9 @@ impl RunError<CacheSpan> {
                     .with_label(
                         Label::new(data.clone())
                             .with_color(Color::Red)
-                            .with_message(format!("cannot call {ident}, found type {found}")),
+                            .with_message(format!(
+                                "'{ident}' is not a function, found type '{found}'"
+                            )),
                     )
             }
             RunError::ConstAssign { data } => {

@@ -38,7 +38,8 @@ pub enum Expr<Data> {
     LtEq(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
     GtEq(Box<Node<Data, Self>>, Box<Node<Data, Self>>),
 
-    // walrus
+    // assign
+    Assign(Node<Data, String>, Box<Node<Data, Self>>),
     Walrus(Node<Data, String>, Box<Node<Data, Self>>),
 
     // ternary
@@ -79,7 +80,7 @@ impl Expr<CacheSpan> {
         lhs: Node<CacheSpan, Self>,
         tokens: &mut Lexer,
     ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
-        Self::parse_walrus(lhs, tokens) // start parsing at lowest precedence operator
+        Self::parse_assign(lhs, tokens) // start parsing at lowest precedence operator
     }
 
     pub fn parse_var_or_fn(
@@ -220,7 +221,7 @@ impl Expr<CacheSpan> {
             tokens.span(lhs.data().range().start..rhs.data().range().end),
             op(Box::new(lhs), Box::new(rhs)),
         );
-        Self::parse_products(new_lhs, tokens) // keep parsing
+        Self::parse_with_lhs(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_sums(
@@ -242,7 +243,7 @@ impl Expr<CacheSpan> {
             tokens.span(lhs.data().range().start..rhs.data().range().end),
             op(Box::new(lhs), Box::new(rhs)),
         );
-        Self::parse_sums(new_lhs, tokens) // keep parsing
+        Self::parse_with_lhs(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_comparisons(
@@ -289,7 +290,7 @@ impl Expr<CacheSpan> {
             tokens.span(lhs.data().range().start..rhs.data().range().end),
             Expr::And(Box::new(lhs), Box::new(rhs)),
         );
-        Self::parse_ands(new_lhs, tokens) // keep parsing
+        Self::parse_with_lhs(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_ors(
@@ -310,7 +311,7 @@ impl Expr<CacheSpan> {
             tokens.span(lhs.data().range().start..rhs.data().range().end),
             Expr::And(Box::new(lhs), Box::new(rhs)),
         );
-        Self::parse_ors(new_lhs, tokens) // keep parsing
+        Self::parse_with_lhs(new_lhs, tokens) // keep parsing
     }
 
     pub fn parse_ternaries(
@@ -352,12 +353,13 @@ impl Expr<CacheSpan> {
         ))
     }
 
-    pub fn parse_walrus(
+    pub fn parse_assign(
         lhs: Node<CacheSpan, Self>,
         tokens: &mut Lexer,
     ) -> PResult<CacheSpan, Node<CacheSpan, Self>> {
-        let walrus_span = match tokens.peek() {
-            Some(Ok((Token::Walrus, span))) => span.clone(),
+        let (op, assign_span) = match tokens.peek() {
+            Some(Ok((Token::Assign, span))) => (Expr::Assign as fn(_, _) -> _, span),
+            Some(Ok((Token::Walrus, span))) => (Expr::Walrus as fn(_, _) -> _, span),
             Some(Err(error)) => return Err(error),
             _ => return Self::parse_ternaries(lhs, tokens), // try next level
         };
@@ -365,15 +367,15 @@ impl Expr<CacheSpan> {
 
         let lhs = match lhs.into_parts() {
             (span, Expr::Var(var)) => Node::new(span, var),
-            (_, _) => return Err(PError::InvalidWalrusAssignment { data: walrus_span }),
+            (_, _) => return Err(PError::InvalidAssignment { data: assign_span }),
         };
 
         let rhs = Self::parse_atom(tokens)?;
-        let rhs = Self::parse_walrus(rhs, tokens)?; // parse right to left
+        let rhs = Self::parse_assign(rhs, tokens)?; // parse right to left
 
         Ok(Node::new(
             tokens.span(lhs.data().range().start..rhs.data().range().end),
-            Expr::Walrus(lhs, Box::new(rhs)),
+            op(lhs, Box::new(rhs)),
         ))
     }
 }

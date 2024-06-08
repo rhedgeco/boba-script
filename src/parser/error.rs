@@ -33,7 +33,7 @@ pub enum PError<Data> {
     UnclosedBrace {
         data: Data,
     },
-    InvalidWalrusAssignment {
+    InvalidAssignment {
         data: Data,
     },
     MixedTabsAndSpaces {
@@ -113,10 +113,10 @@ impl PError<CacheSpan> {
                     )
                     .finish()
             }
-            PError::InvalidWalrusAssignment { data } => {
+            PError::InvalidAssignment { data } => {
                 Report::build(ReportKind::Error, data.source().clone(), data.start())
                     .with_code(format!("C-008"))
-                    .with_message("Invalid Walrus Assignment")
+                    .with_message("Invalid Assignment")
                     .with_label(
                         Label::new(data.clone())
                             .with_color(Color::Red)

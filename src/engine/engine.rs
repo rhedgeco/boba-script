@@ -1,149 +1,110 @@
-use std::ops::Deref;
+use std::{mem::replace, ops::Deref};
 
 use crate::parser::ast::{Expr, Node, Statement};
 
-use super::{error::RunError, load_builtins, scope::Scope, FuncValue, OpManager, Value};
+use super::{error::RunError, load_builtins, scope::Scope, value::ValueType, OpManager, Value};
+
+enum GlobalValue<Data> {
+    Static(Value<Data>),
+    Const(Value<Data>),
+}
+
+impl<Data> GlobalValue<Data> {
+    pub fn value(&self) -> &Value<Data> {
+        match self {
+            Self::Const(value) | Self::Static(value) => value,
+        }
+    }
+}
+
+pub enum SetError {
+    DoesNotExist,
+    Const,
+}
 
 pub struct Engine<Data: Clone> {
     ops: OpManager<Data>,
-    funcs: Scope<FuncValue<Data>>,
+    globals: Scope<GlobalValue<Data>>,
     locals: Scope<Value<Data>>,
 }
 
 impl<Data: Clone> Default for Engine<Data> {
     fn default() -> Self {
-        Self::new()
+        let mut engine = Self::empty();
+        load_builtins(&mut engine);
+        engine
     }
 }
 
 impl<Data: Clone> Engine<Data> {
     pub fn new() -> Self {
-        let mut engine = Self::empty();
-        load_builtins(&mut engine);
-        engine
+        Self::default()
     }
 
     pub fn empty() -> Self {
         Self {
             ops: Default::default(),
-            funcs: Default::default(),
+            globals: Default::default(),
             locals: Default::default(),
         }
     }
 
     pub fn push_scope(&mut self) {
         self.locals.push_scope();
-        self.funcs.push_scope();
+        self.globals.push_scope();
     }
 
     pub fn pop_scope(&mut self) {
         self.locals.pop_scope();
-        self.funcs.pop_scope();
+        self.globals.pop_scope();
     }
 
     pub fn stash_scope(&mut self) {
         self.locals.stash();
-        self.funcs.push_scope();
+        self.globals.push_scope();
     }
 
     pub fn unstash_scope(&mut self) {
         self.locals.unstash();
-        self.funcs.pop_scope();
+        self.globals.pop_scope();
     }
 
     pub fn get_value(&self, ident: impl AsRef<str>) -> Option<&Value<Data>> {
-        self.locals.get(ident)
+        match self.locals.get(ident.as_ref()) {
+            None => Some(self.globals.get(ident)?.value()),
+            Some(value) => Some(value),
+        }
     }
 
-    pub fn set_value(&mut self, ident: impl AsRef<str>, value: Value<Data>) -> Option<Value<Data>> {
-        self.locals.set(ident, value)
+    pub fn set_value(
+        &mut self,
+        ident: impl AsRef<str>,
+        value: Value<Data>,
+    ) -> Result<Value<Data>, SetError> {
+        match self.locals.get_mut(ident.as_ref()) {
+            Some(old_value) => Ok(replace(old_value, value)),
+            None => match self.globals.get_mut(ident) {
+                Some(GlobalValue::Static(old_value)) => Ok(replace(old_value, value)),
+                Some(GlobalValue::Const(_)) => Err(SetError::Const),
+                None => Err(SetError::DoesNotExist),
+            },
+        }
     }
 
     pub fn init_value(&mut self, ident: impl Into<String>, value: Value<Data>) {
         self.locals.init(ident, value)
     }
 
-    pub fn init_func(&mut self, func: FuncValue<Data>) {
-        self.funcs.init(func.ident().to_string(), func)
+    pub fn init_static(&mut self, ident: impl Into<String>, value: Value<Data>) {
+        self.init_global(ident, GlobalValue::Static(value))
     }
 
-    pub fn call_fn(
-        &mut self,
-        ident: &Node<Data, String>,
-        params: &Vec<Node<Data, Expr<Data>>>,
-    ) -> Result<Value<Data>, RunError<Data>> {
-        // get the function
-        let func = match self.funcs.get(ident.deref()) {
-            Some(func) => func,
-            None => {
-                return Err(RunError::UnknownFunction {
-                    ident: ident.deref().clone(),
-                    data: ident.data().clone(),
-                })
-            }
-        };
+    pub fn init_const(&mut self, ident: impl Into<String>, value: Value<Data>) {
+        self.init_global(ident, GlobalValue::Const(value))
+    }
 
-        // ensure parameter count matches
-        if func.param_count() != params.len() {
-            return Err(RunError::ParameterCount {
-                expected: func.param_count(),
-                found: params.len(),
-                data: ident.data().clone(),
-            });
-        }
-
-        // clone func
-        let func = func.clone();
-
-        // calculate all the values
-        let mut values = Vec::with_capacity(params.len());
-        for expr in params.iter() {
-            values.push(self.eval(expr)?);
-        }
-
-        // calculate function
-        let value = match func {
-            FuncValue::Native(func) => match (func.native)(values) {
-                Ok(value) => value,
-                Err(message) => {
-                    return Err(RunError::NativeCallError {
-                        message,
-                        data: ident.data().clone(),
-                    });
-                }
-            },
-            FuncValue::Custom(func) => {
-                // stash scope
-                self.stash_scope();
-
-                // load all values into new scope
-                for (ident, value) in func.params.iter().zip(values) {
-                    self.init_value(ident.deref(), value);
-                }
-
-                // calculate all function statements
-                let mut value = Value::None;
-                for statement in func.body.iter() {
-                    match self.eval_statement(statement) {
-                        Ok(new_value) => value = new_value,
-                        Err(e) => {
-                            // ensure scope is unstashed
-                            self.unstash_scope();
-                            return Err(e);
-                        }
-                    }
-                }
-
-                // unstash scope
-                self.unstash_scope();
-
-                // return final value
-                return Ok(value);
-            }
-        };
-
-        // return final value
-        Ok(value)
+    fn init_global(&mut self, ident: impl Into<String>, value: GlobalValue<Data>) {
+        self.globals.init(ident, value)
     }
 
     pub fn eval_statement(
@@ -157,38 +118,6 @@ impl<Data: Clone> Engine<Data> {
                 self.init_value(ident.deref(), value);
                 Ok(Value::None)
             }
-            Statement::Assign(ident, expr) => {
-                let value = self.eval(expr)?;
-                match self.set_value(ident.deref(), value.clone()) {
-                    Some(_old_value) => Ok(Value::None),
-                    None => Err(RunError::UnknownVariable {
-                        ident: ident.deref().clone(),
-                        data: ident.data().clone(),
-                    }),
-                }
-            }
-            Statement::Func(func) => {
-                self.init_func(FuncValue::custom(func.deref().clone()));
-                Ok(Value::None)
-            }
-            Statement::While(w) => {
-                while match self.eval(&w.cond)? {
-                    Value::Bool(true) => true,
-                    Value::Bool(false) => false,
-                    value => {
-                        return Err(RunError::TypeMismatch {
-                            expected: format!("boolean condition"),
-                            found: format!("'{}'", value.type_name()),
-                            data: w.cond.data().clone(),
-                        })
-                    }
-                } {
-                    for statement in w.body.iter() {
-                        self.eval_statement(statement)?;
-                    }
-                }
-                Ok(Value::None)
-            }
         }
     }
 
@@ -199,7 +128,7 @@ impl<Data: Clone> Engine<Data> {
             Expr::Int(v) => Ok(Value::Int(v.clone())),
             Expr::Float(v) => Ok(Value::Float(v.clone())),
             Expr::String(v) => Ok(Value::String(v.clone())),
-            Expr::Call(ident, params) => self.call_fn(ident, params),
+            Expr::Call(_ident, _params) => todo!("implement function calls"),
             Expr::Neg(inner) => {
                 let inner = self.eval(inner)?;
                 self.ops.neg(inner, expr.data())
@@ -289,16 +218,32 @@ impl<Data: Clone> Engine<Data> {
                 Value::Bool(true) => self.eval(lhs),
                 Value::Bool(false) => self.eval(rhs),
                 value => Err(RunError::TypeMismatch {
-                    expected: format!("boolean condition"),
-                    found: format!("'{}'", value.type_name()),
+                    expected: ValueType::Bool,
+                    found: value.get_type(),
                     data: cond.data().clone(),
                 }),
             },
-            Expr::Walrus(ident, expr) => {
-                let new_value = self.eval(expr)?;
+            Expr::Assign(ident, rhs) => {
+                let new_value = self.eval(rhs)?;
+                match self.set_value(ident.deref(), new_value) {
+                    Ok(_old_value) => Ok(Value::None), // return nothing
+                    Err(SetError::Const) => Err(RunError::ConstAssign {
+                        data: expr.data().clone(),
+                    }),
+                    Err(SetError::DoesNotExist) => Err(RunError::UnknownVariable {
+                        ident: ident.deref().clone(),
+                        data: ident.data().clone(),
+                    }),
+                }
+            }
+            Expr::Walrus(ident, rhs) => {
+                let new_value = self.eval(rhs)?;
                 match self.set_value(ident.deref(), new_value.clone()) {
-                    Some(_old_value) => Ok(new_value), // return the new value
-                    None => Err(RunError::UnknownVariable {
+                    Ok(_old_value) => Ok(new_value), // return newly created value
+                    Err(SetError::Const) => Err(RunError::ConstAssign {
+                        data: expr.data().clone(),
+                    }),
+                    Err(SetError::DoesNotExist) => Err(RunError::UnknownVariable {
                         ident: ident.deref().clone(),
                         data: ident.data().clone(),
                     }),

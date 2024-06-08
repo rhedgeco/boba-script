@@ -131,9 +131,8 @@ impl<T> Scope<T> {
         self.values.get(ident)
     }
 
-    pub fn set(&mut self, ident: impl AsRef<str>, value: T) -> Option<T> {
-        let old_value = self.values.get_mut(ident)?;
-        Some(replace(old_value, value))
+    pub fn get_mut(&mut self, ident: impl AsRef<str>) -> Option<&mut T> {
+        self.values.get_mut(ident)
     }
 
     pub fn init(&mut self, ident: impl Into<String>, value: T) {
