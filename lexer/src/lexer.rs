@@ -114,6 +114,7 @@ impl<'a> Iterator for Lexer<'a> {
                 "-" => match self.symbols.peek() {
                     Some((_, symbol @ ">")) => {
                         self.span.end += symbol.len();
+                        self.symbols.next(); // consume symbol
                         Some(Ok(Token::Arrow))
                     }
                     Some(_) | None => Some(Ok(Token::Sub)),
@@ -121,6 +122,7 @@ impl<'a> Iterator for Lexer<'a> {
                 "*" => match self.symbols.peek() {
                     Some((_, symbol @ "*")) => {
                         self.span.end += symbol.len();
+                        self.symbols.next(); // consume symbol
                         Some(Ok(Token::Pow))
                     }
                     Some(_) | None => Some(Ok(Token::Mul)),
@@ -128,10 +130,12 @@ impl<'a> Iterator for Lexer<'a> {
                 "=" => match self.symbols.peek() {
                     Some((_, symbol @ "=")) => {
                         self.span.end += symbol.len();
+                        self.symbols.next(); // consume symbol
                         Some(Ok(Token::Eq))
                     }
                     Some((_, symbol @ ">")) => {
                         self.span.end += symbol.len();
+                        self.symbols.next(); // consume symbol
                         Some(Ok(Token::FatArrow))
                     }
                     Some(_) | None => Some(Ok(Token::Assign)),
@@ -139,6 +143,7 @@ impl<'a> Iterator for Lexer<'a> {
                 "<" => match self.symbols.peek() {
                     Some((_, symbol @ "=")) => {
                         self.span.end += symbol.len();
+                        self.symbols.next(); // consume symbol
                         Some(Ok(Token::LtEq))
                     }
                     Some(_) | None => Some(Ok(Token::Lt)),
@@ -146,6 +151,7 @@ impl<'a> Iterator for Lexer<'a> {
                 ">" => match self.symbols.peek() {
                     Some((_, symbol @ "=")) => {
                         self.span.end += symbol.len();
+                        self.symbols.next(); // consume symbol
                         Some(Ok(Token::GtEq))
                     }
                     Some(_) | None => Some(Ok(Token::Gt)),
@@ -153,6 +159,7 @@ impl<'a> Iterator for Lexer<'a> {
                 "!" => match self.symbols.peek() {
                     Some((_, symbol @ "=")) => {
                         self.span.end += symbol.len();
+                        self.symbols.next(); // consume symbol
                         Some(Ok(Token::NEq))
                     }
                     Some(_) | None => Some(Ok(Token::Not)),
@@ -160,6 +167,7 @@ impl<'a> Iterator for Lexer<'a> {
                 ":" => match self.symbols.peek() {
                     Some((_, symbol @ "=")) => {
                         self.span.end += symbol.len();
+                        self.symbols.next(); // consume symbol
                         Some(Ok(Token::Walrus))
                     }
                     Some(_) | None => Some(Ok(Token::Colon)),

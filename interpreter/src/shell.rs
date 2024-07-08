@@ -1,7 +1,7 @@
 use boba_script::{
     core::{engine::Value, Engine},
     lexer::{BobaCache, Lexer},
-    parser::{parsers::expr, Token, TokenStream},
+    parser::{parsers::statement, Token, TokenStream},
 };
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
@@ -46,8 +46,8 @@ pub fn session() {
             Some(_) => 0,
         };
 
-        match expr::parse(&mut parser) {
-            Ok(expr) => match expr.eval(&mut engine) {
+        match statement::parse(&mut parser) {
+            Ok(statement) => match statement.eval(&mut engine) {
                 Ok(Value::None) => continue, // do nothing with none
                 Ok(value) => println!("{value}"),
                 Err(error) => eprintln!("{error}"),

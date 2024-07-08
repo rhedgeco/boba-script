@@ -65,17 +65,25 @@ impl<T: TokenStream> StreamParser<T> {
         &self.stream
     }
 
+    pub fn token_start(&self) -> usize {
+        self.span.start
+    }
+
+    pub fn token_end(&self) -> usize {
+        self.span.end
+    }
+
     pub fn token_span(&self) -> StreamSpan<T> {
         self.source().span(self.span)
     }
 
-    pub fn token_start(&self) -> StreamSpan<T> {
-        let start = self.span.start;
+    pub fn token_span_start(&self) -> StreamSpan<T> {
+        let start = self.token_start();
         self.source().span(start..start)
     }
 
-    pub fn token_end(&self) -> StreamSpan<T> {
-        let end = self.span.end;
+    pub fn token_span_end(&self) -> StreamSpan<T> {
+        let end = self.token_end();
         self.source().span(end..end)
     }
 
@@ -110,7 +118,7 @@ impl<T: TokenStream> StreamParser<T> {
             None => Err(SpanParseError::UnexpectedInput {
                 expect: expect.into(),
                 found: None,
-                span: self.token_end(),
+                span: self.token_span_end(),
             }),
         }
     }
@@ -123,7 +131,7 @@ impl<T: TokenStream> StreamParser<T> {
         &mut self,
         expect: impl Into<String>,
     ) -> Result<(&Token, StreamSpan<T>), ParseError<T>> {
-        let end = self.token_end();
+        let end = self.token_span_end();
         match self.peek_spanned() {
             Some(result) => result,
             None => Err(SpanParseError::UnexpectedInput {
@@ -153,7 +161,7 @@ impl<T: TokenStream> StreamParser<T> {
                 Some(token) => Err(SpanParseError::UnexpectedInput {
                     expect: format!("{token}"),
                     found: None,
-                    span: self.token_end(),
+                    span: self.token_span_end(),
                 }),
             },
         }
@@ -178,9 +186,71 @@ impl<T: TokenStream> StreamParser<T> {
                 Some(token) => Err(SpanParseError::UnexpectedInput {
                     expect: format!("{token}"),
                     found: None,
-                    span: self.token_end(),
+                    span: self.token_span_end(),
                 }),
             },
+        }
+    }
+
+    pub fn consume_until(
+        &mut self,
+        until: impl Fn(&Token) -> bool,
+    ) -> Result<(), Vec<ParseError<T>>> {
+        let mut errors = Vec::new();
+        self.consume_until_with(&mut errors, until);
+        match errors.is_empty() {
+            false => Err(errors),
+            true => Ok(()),
+        }
+    }
+
+    pub fn consume_until_with(
+        &mut self,
+        errors: &mut Vec<ParseError<T>>,
+        until: impl Fn(&Token) -> bool,
+    ) {
+        while let Some(result) = self.peek() {
+            match result {
+                Err(error) => errors.push(error),
+                Ok(token) => match until(token) {
+                    true => break,
+                    false => {
+                        self.next();
+                    }
+                },
+            }
+        }
+    }
+
+    pub fn consume_line(&mut self) -> Result<(), Vec<ParseError<T>>> {
+        self.consume_until(|t| t == &Token::Newline)
+    }
+
+    pub fn consume_line_with(&mut self, errors: &mut Vec<ParseError<T>>) {
+        self.consume_until_with(errors, |t| t == &Token::Newline);
+    }
+
+    pub fn next_line_end(&mut self) -> Result<(), ParseError<T>> {
+        match self.next() {
+            Some(Err(error)) => Err(error),
+            Some(Ok(Token::Newline)) | None => Ok(()),
+            Some(Ok(found)) => Err(SpanParseError::UnexpectedInput {
+                expect: "line end".into(),
+                found: Some(found),
+                span: self.token_span(),
+            }),
+        }
+    }
+
+    pub fn peek_line_end(&mut self) -> Result<(), ParseError<T>> {
+        match self.peek() {
+            Some(Err(error)) => Err(error),
+            Some(Ok(Token::Newline)) | None => Ok(()),
+            Some(Ok(found)) => Err(SpanParseError::UnexpectedInput {
+                expect: "line end".into(),
+                found: Some(found.clone()),
+                span: self.token_span(),
+            }),
         }
     }
 

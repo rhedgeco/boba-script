@@ -18,6 +18,10 @@ pub enum SpanParseError<Span, TokenError> {
         found: Option<Token>,
         span: Span,
     },
+    UnclosedBrace {
+        open: Span,
+        end: Span,
+    },
 }
 
 impl<Span, TokenError: Display> Display for SpanParseError<Span, TokenError> {
@@ -32,6 +36,7 @@ impl<Span, TokenError: Display> Display for SpanParseError<Span, TokenError> {
                 Some(token) => write!(f, "expected {expect}, found {token}"),
                 None => write!(f, "expected {expect}, found end of input"),
             },
+            SpanParseError::UnclosedBrace { open: _, end: _ } => write!(f, "unclosed open brace"),
         }
     }
 }

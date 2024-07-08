@@ -27,6 +27,57 @@ pub fn parse_atom<T: TokenStream>(
         // VARS / CALLS
         Token::Ident(ident) => Ok(Kind::Var(ident).carry(parser.token_span())),
 
+        // PARENTHESIS
+        Token::OpenParen => {
+            let open = parser.token_span();
+            let inner = match parse(parser) {
+                Ok(expr) => expr,
+                Err(mut errors) => {
+                    // consume the rest of the expression
+                    parser.consume_until_with(&mut errors, |t| {
+                        matches!(t, Token::Newline | Token::CloseParen)
+                    });
+
+                    // check for closing paren
+                    match parser.peek() {
+                        Some(Ok(Token::CloseParen)) => {
+                            parser.next(); // consume closing paren
+                        }
+                        Some(_) | None => errors.push(SpanParseError::UnclosedBrace {
+                            open,
+                            end: parser.token_span_end(),
+                        }),
+                    };
+
+                    return Err(errors);
+                }
+            };
+
+            // check for closing paren
+            if let Err(error) = parser.next_expect(Some(&Token::CloseParen)) {
+                // consume the rest of the expression
+                let mut errors = vec![error];
+                parser.consume_until_with(&mut errors, |t| {
+                    matches!(t, Token::Newline | Token::CloseParen)
+                });
+
+                // check for closing paren
+                match parser.peek() {
+                    Some(Ok(Token::CloseParen)) => {
+                        parser.next(); // consume closing paren
+                    }
+                    Some(_) | None => errors.push(SpanParseError::UnclosedBrace {
+                        open,
+                        end: parser.token_span_end(),
+                    }),
+                };
+
+                return Err(errors);
+            }
+
+            Ok(inner)
+        }
+
         // UNEXPECTED TOKEN
         token => Err(vec![SpanParseError::UnexpectedInput {
             expect: "expression".into(),
