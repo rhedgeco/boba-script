@@ -1,7 +1,11 @@
-pub mod cache;
-pub mod engine;
-pub mod parser;
-pub mod shell;
+pub mod core {
+    pub use boba_script_core::*;
+}
 
-pub use cache::BobaCache;
-pub use engine::Engine;
+pub mod parser {
+    pub use boba_script_parser::*;
+}
+
+pub mod lexer {
+    pub use boba_script_lexer::*;
+}
