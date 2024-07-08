@@ -1,9 +1,11 @@
 use std::ops::Deref;
 
 use dashu::integer::IBig;
-use derive_more::Display;
 
-use crate::{engine::Value, Engine};
+use crate::{
+    engine::{EvalError, Value},
+    Engine,
+};
 
 use super::Carrier;
 
@@ -51,38 +53,6 @@ impl<Data> Kind<Data> {
     pub fn carry(self, data: Data) -> Expr<Data> {
         Expr { kind: self, data }
     }
-}
-
-#[derive(Debug, Display, Clone)]
-pub enum EvalError<Data> {
-    #[display(fmt = "unknown variable '{}'", name)]
-    UnknownVariable { name: String, data: Data },
-    #[display(fmt = "'{}' operator is not valid for type '{}'", op, ty)]
-    InvalidUnary {
-        ty: String,
-        op: &'static str,
-        data: Data,
-    },
-    #[display(
-        fmt = "type '{}' does not have a valid op '{}' for type '{}'",
-        ty1,
-        op,
-        ty2
-    )]
-    InvalidBinary {
-        ty1: String,
-        ty2: String,
-        op: &'static str,
-        data: Data,
-    },
-    #[display(fmt = "cannot assign to this expression")]
-    AssignError { data: Data },
-    #[display(fmt = "expected type '{}', found type '{}'", expect, found)]
-    UnexpectedType {
-        expect: String,
-        found: String,
-        data: Data,
-    },
 }
 
 #[derive(Debug, Clone)]
@@ -153,7 +123,7 @@ impl<Data: Clone> Expr<Data> {
                 let inner = expr.eval(engine)?;
                 match engine.ops().pos(&inner) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidUnary {
+                    None => Err(EvalError::InvalidUnaryOp {
                         ty: inner.type_name(),
                         op: "+",
                         data: self.data.clone(),
@@ -164,7 +134,7 @@ impl<Data: Clone> Expr<Data> {
                 let inner = expr.eval(engine)?;
                 match engine.ops().neg(&inner) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidUnary {
+                    None => Err(EvalError::InvalidUnaryOp {
                         ty: inner.type_name(),
                         op: "-",
                         data: self.data.clone(),
@@ -175,7 +145,7 @@ impl<Data: Clone> Expr<Data> {
                 let inner = expr.eval(engine)?;
                 match engine.ops().not(&inner) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidUnary {
+                    None => Err(EvalError::InvalidUnaryOp {
                         ty: inner.type_name(),
                         op: "not",
                         data: self.data.clone(),
@@ -189,7 +159,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().add(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "+",
@@ -202,7 +172,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().sub(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "-",
@@ -215,7 +185,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().mul(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "*",
@@ -228,7 +198,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().div(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "/",
@@ -241,7 +211,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().modulo(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "%",
@@ -254,7 +224,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().pow(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "**",
@@ -267,7 +237,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().eq(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "==",
@@ -280,7 +250,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().lt(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "<",
@@ -293,7 +263,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().gt(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: ">",
@@ -306,7 +276,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().neq(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "!=",
@@ -319,7 +289,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().lteq(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "<=",
@@ -332,7 +302,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().gteq(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: ">=",
@@ -345,7 +315,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().and(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "and",
@@ -358,7 +328,7 @@ impl<Data: Clone> Expr<Data> {
                 let v2 = rhs.eval(engine)?;
                 match engine.ops().or(&v1, &v2) {
                     Some(value) => Ok(value),
-                    None => Err(EvalError::InvalidBinary {
+                    None => Err(EvalError::InvalidBinaryOp {
                         ty1: v1.type_name(),
                         ty2: v2.type_name(),
                         op: "or",

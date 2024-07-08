@@ -1,6 +1,7 @@
-use derive_more::Display;
-
-use crate::{engine::Value, Engine};
+use crate::{
+    engine::{EvalError, Value},
+    Engine,
+};
 
 use super::{expr, Carrier, Expr};
 
@@ -20,28 +21,6 @@ pub enum Kind<Data> {
 impl<Data> Kind<Data> {
     pub fn carry(self, data: Data) -> Statement<Data> {
         Statement { kind: self, data }
-    }
-}
-
-#[derive(Debug, Display, Clone)]
-pub enum EvalError<Data> {
-    #[display(fmt = "{}", _0)]
-    Expr(expr::EvalError<Data>),
-    #[display(fmt = "cannot assign to expression")]
-    AssignError { data: Data },
-    #[display(fmt = "unknown variable '{}'", name)]
-    UnknownVariable { name: String, data: Data },
-    #[display(fmt = "expected type '{}', found type '{}'", expect, found)]
-    UnexpectedType {
-        expect: String,
-        found: String,
-        data: Data,
-    },
-}
-
-impl<Data> From<expr::EvalError<Data>> for EvalError<Data> {
-    fn from(value: expr::EvalError<Data>) -> Self {
-        Self::Expr(value)
     }
 }
 
