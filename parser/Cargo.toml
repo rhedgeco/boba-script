@@ -1,0 +1,10 @@
+[package]
+name = "boba-script-parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1.0.61"
+derive_more = "0.99.17"
+phf = { version = "0.11", features = ["macros"] }
+boba-script-core = { path = "../core" }

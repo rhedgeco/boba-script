@@ -1,16 +1,34 @@
 use std::{
     fmt::{Debug, Display},
-    ops::{Index, Range},
+    ops::Index,
     sync::atomic::{AtomicU32, Ordering},
 };
 
 use ariadne::{Cache, Source};
+use boba_script_parser::{
+    stream::{self, SourceSpan},
+    token::Span,
+};
 
 /// Represents a range of bytes from a file stored in [`BobaCache`]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct CacheSpan {
-    range: Range<usize>,
-    id: CacheId,
+    pub id: CacheId,
+    pub span: Span,
+}
+
+impl SourceSpan for CacheSpan {
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn start(&self) -> usize {
+        self.span.start
+    }
+
+    fn end(&self) -> usize {
+        self.span.end
+    }
 }
 
 impl ariadne::Span for CacheSpan {
@@ -21,25 +39,20 @@ impl ariadne::Span for CacheSpan {
     }
 
     fn start(&self) -> usize {
-        self.range.start
+        self.span.start
     }
 
     fn end(&self) -> usize {
-        self.range.end
+        self.span.end
     }
 }
 
 impl CacheSpan {
-    pub fn new(id: CacheId, range: Range<usize>) -> Self {
-        Self { range, id }
-    }
-
-    pub fn id(&self) -> CacheId {
-        self.id
-    }
-
-    pub fn range(&self) -> &Range<usize> {
-        &self.range
+    pub fn new(id: CacheId, span: impl Into<Span>) -> CacheSpan {
+        Self {
+            id,
+            span: span.into(),
+        }
     }
 }
 
@@ -48,6 +61,10 @@ impl CacheSpan {
 pub struct CacheId(u64);
 
 impl CacheId {
+    pub fn span(&self, span: impl Into<Span>) -> CacheSpan {
+        CacheSpan::new(*self, span)
+    }
+
     fn build(id: u32, index: usize) -> Self {
         match u32::try_from(index) {
             Ok(index) => Self((id as u64) << 32 | (index as u64)),
@@ -71,6 +88,18 @@ pub struct CacheData {
     id: CacheId,
 }
 
+impl stream::Source for CacheData {
+    type Span = CacheSpan;
+
+    fn text(&self) -> &str {
+        self.source.text()
+    }
+
+    fn span(&self, span: impl Into<Span>) -> Self::Span {
+        self.id().span(span)
+    }
+}
+
 impl CacheData {
     pub fn id(&self) -> CacheId {
         self.id
@@ -82,14 +111,6 @@ impl CacheData {
 
     pub fn source(&self) -> &Source {
         &self.source
-    }
-
-    pub fn text(&self) -> &str {
-        self.source.text()
-    }
-
-    pub fn span(&self, range: Range<usize>) -> CacheSpan {
-        CacheSpan { range, id: self.id }
     }
 }
 

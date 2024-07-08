@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use boba::shell;
+use boba::{run, shell};
 use clap::Parser;
 
 #[derive(Parser)]
@@ -13,7 +13,7 @@ struct BobaCli {
 fn main() {
     let cli = BobaCli::parse();
     match cli.file {
-        None => shell::Session::new().start_console(),
-        Some(path) => println!("TODO: run file {}", path.display()),
+        None => shell::session(),
+        Some(path) => run::file(path),
     }
 }
