@@ -1,4 +1,4 @@
-use boba_script_core::ast::{statement, Statement};
+use boba_script_core::ast::{statement, Carrier, Statement};
 
 use crate::{
     error::SpanParseError,
@@ -79,7 +79,7 @@ pub fn parse<T: TokenStream>(
             match parser.next() {
                 Some(Ok(Token::Assign)) => (),
                 Some(Ok(Token::Newline)) | None => {
-                    let span = parser.source().span(lhs.data.span());
+                    let span = parser.source().span(lhs.data().span());
                     return Ok(statement::Kind::Expr {
                         expr: lhs,
                         closed: false,
@@ -97,7 +97,7 @@ pub fn parse<T: TokenStream>(
                         }
                     }
 
-                    let span = parser.source().span(lhs.data.span());
+                    let span = parser.source().span(lhs.data().span());
                     return Ok(statement::Kind::Expr {
                         expr: lhs,
                         closed: true,
