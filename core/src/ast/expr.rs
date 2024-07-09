@@ -7,8 +7,6 @@ use crate::{
     Engine,
 };
 
-use super::Carrier;
-
 #[derive(Debug, Clone)]
 pub enum Kind<Data> {
     // VALUES
@@ -61,14 +59,6 @@ pub struct Expr<Data> {
     pub data: Data,
 }
 
-impl<Data> Carrier for Expr<Data> {
-    type Data = Data;
-
-    fn data(&self) -> &Self::Data {
-        &self.data
-    }
-}
-
 impl<Data: Clone> Expr<Data> {
     pub fn eval(&self, engine: &mut Engine) -> Result<Value, EvalError<Data>> {
         match &self.kind {
@@ -95,12 +85,12 @@ impl<Data: Clone> Expr<Data> {
                     Kind::Var(id) => match engine.vars_mut().set(id, value.clone()) {
                         Ok(_) => Ok(value),
                         Err(_) => Err(EvalError::UnknownVariable {
-                            data: lhs.data().clone(),
+                            data: lhs.data.clone(),
                             name: id.clone(),
                         }),
                     },
                     _ => Err(EvalError::AssignError {
-                        data: lhs.data().clone(),
+                        data: lhs.data.clone(),
                     }),
                 }
             }
@@ -114,7 +104,7 @@ impl<Data: Clone> Expr<Data> {
                 value => Err(EvalError::UnexpectedType {
                     expect: "bool".into(),
                     found: value.type_name(),
-                    data: cond.data().clone(),
+                    data: cond.data.clone(),
                 }),
             },
 

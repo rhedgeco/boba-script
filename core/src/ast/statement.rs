@@ -3,7 +3,7 @@ use crate::{
     Engine,
 };
 
-use super::{expr, Carrier, Expr};
+use super::{expr, Expr};
 
 pub enum Kind<Data> {
     Expr {
@@ -54,13 +54,13 @@ impl<Data: Clone> Statement<Data> {
                             Ok(_) => Ok(Value::None),
                             Err(_) => Err(EvalError::UnknownVariable {
                                 name: id.clone(),
-                                data: lhs.data().clone(),
+                                data: lhs.data.clone(),
                             }),
                         },
                     }
                 }
                 _ => Err(EvalError::AssignError {
-                    data: lhs.data().clone(),
+                    data: lhs.data.clone(),
                 }),
             },
             Kind::While { cond, body } => loop {
@@ -71,7 +71,7 @@ impl<Data: Clone> Statement<Data> {
                         break Err(EvalError::UnexpectedType {
                             expect: "bool".into(),
                             found: value.type_name(),
-                            data: cond.data().clone(),
+                            data: cond.data.clone(),
                         })
                     }
                 }
