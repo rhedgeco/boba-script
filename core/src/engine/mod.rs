@@ -3,6 +3,7 @@ mod engine;
 pub mod error;
 pub mod ops;
 pub mod shadow;
+pub mod utils;
 pub mod value;
 
 pub use engine::*;

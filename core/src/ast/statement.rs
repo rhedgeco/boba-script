@@ -1,9 +1,9 @@
 use crate::{
-    engine::{value::ValueKind, EvalError, Value},
+    engine::{utils, value::ValueKind, EvalError, Value},
     Engine,
 };
 
-use super::{expr, Carrier, Expr};
+use super::{Carrier, Expr};
 
 pub enum Kind<Data> {
     Expr {
@@ -43,53 +43,8 @@ impl<Data: Clone> Statement<Data> {
                 }
             }
             Kind::Assign { init, lhs, rhs } => {
-                fn assign<'a, Data: Clone>(
-                    lhs: &'a Expr<Data>,
-                    rhs: &'a Expr<Data>,
-                    engine: &mut Engine,
-                    store: &mut Vec<(&'a str, Value, &'a Data)>,
-                ) -> Result<(), EvalError<Data>> {
-                    match &lhs.kind {
-                        // if the lhs is a variable, then directly assign to it
-                        expr::Kind::Var(id) => {
-                            let value = rhs.eval(engine)?;
-                            store.push((id, value, rhs.data()));
-                            Ok(())
-                        }
-                        // if the lhs is a tuple, then loop over each inner expr and assign
-                        expr::Kind::Tuple(lhs_exprs) => match &rhs.kind {
-                            expr::Kind::Tuple(rhs_exprs) => {
-                                match lhs_exprs.len() == rhs_exprs.len() {
-                                    false => Err(EvalError::DestructureError {
-                                        data: rhs.data().clone(),
-                                    }),
-                                    true => {
-                                        for (lhs, rhs) in lhs_exprs.iter().zip(rhs_exprs) {
-                                            assign(lhs, rhs, engine, store)?;
-                                        }
-                                        Ok(())
-                                    }
-                                }
-                            }
-                            _ => match lhs_exprs.len() {
-                                1 => assign(&lhs_exprs[0], rhs, engine, store),
-                                _ => Err(EvalError::DestructureError {
-                                    data: rhs.data().clone(),
-                                }),
-                            },
-                        },
-                        // if the lhs is anything else, then the lhs cannot be assigned to
-                        _ => {
-                            return Err(EvalError::AssignError {
-                                data: lhs.data().clone(),
-                            })
-                        }
-                    }
-                }
-
-                // collect all the variable assignments
-                let mut store = Vec::new();
-                assign(lhs, rhs, engine, &mut store)?;
+                // destructure all the variable assignments
+                let store = utils::destructure(lhs, rhs, engine)?;
 
                 // then assign each value in the engine
                 match init {
