@@ -3,11 +3,11 @@ use std::mem::replace;
 use super::Value;
 
 #[derive(Debug, Default)]
-pub struct ShadowScope {
+pub struct ScopeStack {
     scopes: Vec<Vec<(String, Value)>>,
 }
 
-impl ShadowScope {
+impl ScopeStack {
     pub fn new() -> Self {
         Self::default()
     }

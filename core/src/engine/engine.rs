@@ -5,11 +5,11 @@ use crate::{
     engine::Value,
 };
 
-use super::{eval::Evaluate, ops::OpManager, EvalError, ShadowScope};
+use super::{eval::Evaluate, ops::OpManager, EvalError, ScopeStack};
 
 pub struct Engine<Data> {
     _data: PhantomData<*const Data>,
-    vars: ShadowScope,
+    vars: ScopeStack,
     ops: OpManager,
 }
 
@@ -42,11 +42,11 @@ impl<Data> Engine<Data> {
         &self.ops
     }
 
-    pub fn vars(&self) -> &ShadowScope {
+    pub fn vars(&self) -> &ScopeStack {
         &self.vars
     }
 
-    pub fn vars_mut(&mut self) -> &mut ShadowScope {
+    pub fn vars_mut(&mut self) -> &mut ScopeStack {
         &mut self.vars
     }
 }
