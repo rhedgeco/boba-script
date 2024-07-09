@@ -10,18 +10,18 @@ use crate::{
 pub fn parse<T: TokenStream>(
     parser: &mut StreamParser<T>,
 ) -> Result<Statement<StreamSpan<T>>, Vec<ParseError<T>>> {
-    let statement = match parser.peek_some("let or expression") {
+    match parser.peek_some("let or expression") {
         // consume the whole line if an error is found
         Err(error) => {
             let mut errors = vec![error];
             parser.consume_until_with(&mut errors, |t| {
                 matches!(t, Token::SemiColon | Token::Newline)
             });
-            return Err(errors);
+            Err(errors)
         }
         Ok(Token::Let) => {
             // get the start index of the let token
-            parser.next(); // consume let token first
+            parser.next(); // consume let token
             let start = parser.token_start();
 
             // parse the lhs
@@ -55,13 +55,110 @@ pub fn parse<T: TokenStream>(
                 }
             };
 
+            // parse close for consitency
+            parse_close_and_end(parser)?;
+
             let span = parser.source().span(start..rhs.data.end());
-            statement::Kind::Assign {
+            Ok(statement::Kind::Assign {
                 init: true,
                 lhs,
                 rhs,
             }
-            .carry(span)
+            .carry(span))
+        }
+        Ok(Token::While) => {
+            // get the start index of the while token
+            parser.next(); // consume while token
+            let start = parser.token_start();
+
+            // parse the condition
+            let cond = match expr::parse(parser) {
+                Ok(lhs) => lhs,
+                Err(mut errors) => {
+                    parser.consume_until_with(&mut errors, |t| {
+                        matches!(t, Token::SemiColon | Token::Newline)
+                    });
+                    return Err(errors);
+                }
+            };
+
+            let colon = match parser.next_some("':' or '=>'") {
+                // a colon means that the while loop has a body
+                Ok(Token::Colon) => parser.token_end(),
+                // a fat arrow is immediately followed by a statement
+                Ok(Token::FatArrow) => {
+                    let body = parse(parser)?;
+                    let span = parser.source().span(start..body.data.end());
+                    return Ok(statement::Kind::While {
+                        cond,
+                        body: vec![body],
+                    }
+                    .carry(span));
+                }
+                Ok(token) => {
+                    let mut errors = vec![SpanParseError::UnexpectedInput {
+                        expect: "':' or ';".into(),
+                        found: Some(token),
+                        span: parser.token_span(),
+                    }];
+                    parser.consume_until_with(&mut errors, |t| {
+                        matches!(t, Token::SemiColon | Token::Newline)
+                    });
+                    return Err(errors);
+                }
+                Err(error) => {
+                    let mut errors = vec![error];
+                    parser.consume_line_with(&mut errors);
+                    return Err(errors);
+                }
+            };
+
+            // check line end
+            if let Err(error) = parser.next_line_end() {
+                let mut errors = vec![error];
+                parser.consume_line_with(&mut errors);
+                return Err(errors);
+            }
+
+            // parse body statements
+            let mut body = Vec::new();
+            match parser.peek() {
+                Some(Err(error)) => return Err(vec![error]),
+                Some(Ok(Token::Indent)) => {
+                    parser.next(); // consume indent
+                    let mut errors = Vec::new();
+                    loop {
+                        // parse statement
+                        match parse(parser) {
+                            Err(mut parse_errors) => errors.append(&mut parse_errors),
+                            Ok(statement) => body.push(statement),
+                        }
+
+                        // check for dedent
+                        match parser.peek() {
+                            Some(Ok(Token::Dedent)) => {
+                                parser.next();
+                                break;
+                            }
+                            Some(Err(error)) => {
+                                let mut errors = vec![error];
+                                parser.consume_until_with(&mut errors, |t| {
+                                    matches!(t, Token::Dedent)
+                                });
+                                return Err(errors);
+                            }
+                            Some(_) | None => {}
+                        }
+                    }
+                }
+                Some(_) | None => {}
+            }
+
+            let span = match body.last() {
+                Some(body) => parser.source().span(start..body.data.end()),
+                None => parser.source().span(start..colon),
+            };
+            Ok(statement::Kind::While { cond, body }.carry(span))
         }
         Ok(_) => {
             // first parse the lhs
@@ -135,27 +232,31 @@ pub fn parse<T: TokenStream>(
                 }
             };
 
+            // parse close for consitency
+            parse_close_and_end(parser)?;
+
             let span = parser.source().span(lhs.data.start()..rhs.data.end());
-            statement::Kind::Assign {
+            Ok(statement::Kind::Assign {
                 init: false,
                 lhs,
                 rhs,
             }
-            .carry(span)
+            .carry(span))
         }
-    };
+    }
+}
 
-    // check for semicolon or newline
-    // allow for semicolons here just for consistency
-    // the semicolons have no effect on the statement at this point
+fn parse_close_and_end<T: TokenStream>(
+    parser: &mut StreamParser<T>,
+) -> Result<bool, Vec<ParseError<T>>> {
     match parser.next() {
-        Some(Ok(Token::Newline)) | None => (),
+        Some(Ok(Token::Newline)) | None => Ok(false),
         Some(Err(error)) => {
             let mut errors = vec![error];
             parser.consume_until_with(&mut errors, |t| {
                 matches!(t, Token::SemiColon | Token::Newline)
             });
-            return Err(errors);
+            Err(errors)
         }
         Some(Ok(Token::SemiColon)) => {
             if let Err(error) = parser.next_line_end() {
@@ -163,6 +264,7 @@ pub fn parse<T: TokenStream>(
                 parser.consume_line_with(&mut errors);
                 return Err(errors);
             }
+            Ok(true)
         }
         Some(Ok(token)) => {
             let mut errors = vec![SpanParseError::UnexpectedInput {
@@ -173,9 +275,7 @@ pub fn parse<T: TokenStream>(
             parser.consume_until_with(&mut errors, |t| {
                 matches!(t, Token::SemiColon | Token::Newline)
             });
-            return Err(errors);
+            Err(errors)
         }
     }
-
-    Ok(statement)
 }
