@@ -28,6 +28,17 @@ pub enum EvalError<Data> {
     AssignError { data: Data },
     #[display(fmt = "failed to destructure expression into left hand side")]
     DestructureError { data: Data },
+    #[display(
+        fmt = "expected tuple with {} parameters, found {}",
+        rhs_count,
+        lhs_count
+    )]
+    TupleDestructureError {
+        lhs_count: usize,
+        rhs_count: usize,
+        lhs_data: Data,
+        rhs_data: Data,
+    },
     #[display(fmt = "expected '{}', found '{}'", expect, found)]
     UnexpectedType {
         expect: ValueKind,

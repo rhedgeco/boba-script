@@ -103,8 +103,11 @@ impl<Data: Clone> Engine<Data> {
                 // if the lhs is a tuple, then loop over each inner expr and assign
                 expr::Kind::Tuple(lhs_exprs) => match &rhs.kind {
                     expr::Kind::Tuple(rhs_exprs) => match lhs_exprs.len() == rhs_exprs.len() {
-                        false => Err(EvalError::DestructureError {
-                            data: rhs.data.clone(),
+                        false => Err(EvalError::TupleDestructureError {
+                            lhs_count: lhs_exprs.len(),
+                            rhs_count: rhs_exprs.len(),
+                            lhs_data: lhs.data.clone(),
+                            rhs_data: rhs.data.clone(),
                         }),
                         true => {
                             for (lhs, rhs) in lhs_exprs.iter().zip(rhs_exprs) {
@@ -115,8 +118,11 @@ impl<Data: Clone> Engine<Data> {
                     },
                     _ => match lhs_exprs.len() {
                         1 => recurse(&lhs_exprs[0], rhs, engine, store),
-                        _ => Err(EvalError::DestructureError {
-                            data: rhs.data.clone(),
+                        _ => Err(EvalError::TupleDestructureError {
+                            lhs_count: lhs_exprs.len(),
+                            rhs_count: 1,
+                            lhs_data: lhs.data.clone(),
+                            rhs_data: rhs.data.clone(),
                         }),
                     },
                 },
