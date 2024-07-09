@@ -263,7 +263,7 @@ impl<T: TokenStream> StreamParser<T> {
                 Some((
                     Err(SpanParseError::TokenError {
                         error,
-                        span: self.token_span(),
+                        span: self.source().span(span),
                     }),
                     span,
                 ))

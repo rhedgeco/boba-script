@@ -227,9 +227,9 @@ impl<'a> Iterator for Lexer<'a> {
                         match self.symbols.peek() {
                             // if an f is found, then we can build and return the float
                             Some((_, "f")) => {
+                                self.span.end += 1; // increment the token span to contain the f
                                 self.symbols.next();
                                 let float = &self.cache.text()[self.span.range()];
-                                self.span.end += 1; // increment the token span to contain the f
                                 let float = float.parse::<f64>().expect("valid float");
                                 return Some(Ok(Token::Float(float)));
                             }

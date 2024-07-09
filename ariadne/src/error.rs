@@ -1,5 +1,9 @@
+use std::fmt::Display;
+
 use ariadne::{Color, Label, Report, ReportKind, Span};
-use boba_script::{core::engine::EvalError, lexer::cache::CacheSpan};
+use boba_script::{
+    core::engine::EvalError, lexer::cache::CacheSpan, parser::error::SpanParseError,
+};
 
 pub trait ToAriadne {
     fn to_ariadne(&self) -> Report<CacheSpan>;
@@ -107,6 +111,54 @@ impl ToAriadne for EvalError<CacheSpan> {
                         .with_message(format!("expected '{}', found '{}'", expect, found))
                         .with_color(Color::Red),
                 ),
+        }
+        .finish()
+    }
+}
+
+impl<T: Display> ToAriadne for SpanParseError<CacheSpan, T> {
+    fn to_ariadne(&self) -> Report<CacheSpan> {
+        match self {
+            SpanParseError::TokenError { error, span } => {
+                Report::build(ReportKind::Error, span.id, span.start())
+                    .with_code("P-001")
+                    .with_message("Token Error")
+                    .with_label(
+                        Label::new(span.clone())
+                            .with_message(format!("{error}"))
+                            .with_color(Color::Red),
+                    )
+            }
+            SpanParseError::UnexpectedInput {
+                expect,
+                found,
+                span,
+            } => Report::build(ReportKind::Error, span.id, span.start())
+                .with_code("P-002")
+                .with_message("Unexpected Input")
+                .with_label(
+                    Label::new(span.clone())
+                        .with_message(match found {
+                            Some(found) => format!("expected {expect}, found {found}"),
+                            None => format!("expected {expect}, found line end"),
+                        })
+                        .with_color(Color::Red),
+                ),
+            SpanParseError::UnclosedBrace { open, end } => {
+                Report::build(ReportKind::Error, open.id, open.start())
+                    .with_code("P-003")
+                    .with_message("Unclosed Brace")
+                    .with_label(
+                        Label::new(open.clone())
+                            .with_message(format!("unclosed opening brace found here"))
+                            .with_color(Color::Red),
+                    )
+                    .with_label(
+                        Label::new(end.clone())
+                            .with_message(format!("expected closing brace by this point"))
+                            .with_color(Color::Cyan),
+                    )
+            }
         }
         .finish()
     }

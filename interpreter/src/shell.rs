@@ -38,7 +38,7 @@ pub fn session() {
             None => continue,
             // if we find an error, print the error and try again
             Some(Err(error)) => {
-                eprintln!("{error}");
+                error.to_ariadne().eprint(&mut cache).unwrap();
                 continue;
             }
             // if the first token is an indent, then get the indent level
@@ -55,7 +55,7 @@ pub fn session() {
             },
             Err(errors) => {
                 for error in errors {
-                    eprintln!("{error}");
+                    error.to_ariadne().eprint(&mut cache).unwrap()
                 }
             }
         }

@@ -58,13 +58,13 @@ pub fn parse_atom<T: TokenStream>(
                 };
 
                 // check for comma
-                match parser.peek_some("',' or ')'") {
-                    Ok(Token::Comma) => {
+                match parser.peek() {
+                    Some(Ok(Token::Comma)) => {
                         parser.next(); // consume comma
                         exprs.push(expr);
                     }
-                    Ok(_) => break expr,
-                    Err(error) => {
+                    Some(Ok(_)) | None => break expr,
+                    Some(Err(error)) => {
                         let mut errors = vec![error];
                         parser.consume_until_with(&mut errors, |t| {
                             matches!(t, Token::Newline | Token::CloseParen)
@@ -75,25 +75,57 @@ pub fn parse_atom<T: TokenStream>(
             };
 
             // check for closing paren
-            if let Err(error) = parser.next_expect(Some(&Token::CloseParen)) {
-                // consume the rest of the expression
-                let mut errors = vec![error];
-                parser.consume_until_with(&mut errors, |t| {
-                    matches!(t, Token::Newline | Token::CloseParen)
-                });
+            match parser.next() {
+                Some(Ok(Token::CloseParen)) => {}
+                Some(Err(error)) => {
+                    // consume the rest of the expression
+                    let mut errors = vec![error];
+                    parser.consume_until_with(&mut errors, |t| {
+                        matches!(t, Token::Newline | Token::CloseParen)
+                    });
 
-                // check for closing paren
-                match parser.peek() {
-                    Some(Ok(Token::CloseParen)) => {
-                        parser.next(); // consume closing paren
-                    }
-                    Some(_) | None => errors.push(SpanParseError::UnclosedBrace {
+                    // check for closing paren
+                    match parser.peek() {
+                        Some(Ok(Token::CloseParen)) => {
+                            parser.next(); // consume closing paren
+                        }
+                        Some(_) | None => errors.push(SpanParseError::UnclosedBrace {
+                            open,
+                            end: parser.token_span_end(),
+                        }),
+                    };
+
+                    return Err(errors);
+                }
+                Some(Ok(token)) => {
+                    let mut errors = vec![SpanParseError::UnexpectedInput {
+                        expect: "',' or ')'".into(),
+                        found: Some(token),
+                        span: parser.token_span(),
+                    }];
+                    parser.consume_until_with(&mut errors, |t| {
+                        matches!(t, Token::Newline | Token::CloseParen)
+                    });
+
+                    // check for closing paren
+                    match parser.peek() {
+                        Some(Ok(Token::CloseParen)) => {
+                            parser.next(); // consume closing paren
+                        }
+                        Some(_) | None => errors.push(SpanParseError::UnclosedBrace {
+                            open,
+                            end: parser.token_span_end(),
+                        }),
+                    };
+
+                    return Err(errors);
+                }
+                None => {
+                    return Err(vec![SpanParseError::UnclosedBrace {
                         open,
                         end: parser.token_span_end(),
-                    }),
-                };
-
-                return Err(errors);
+                    }]);
+                }
             }
 
             match exprs.is_empty() {
