@@ -1,7 +1,6 @@
 mod engine;
 
 pub mod error;
-pub mod eval;
 pub mod ops;
 pub mod scope;
 pub mod value;

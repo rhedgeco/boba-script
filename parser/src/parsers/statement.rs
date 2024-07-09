@@ -1,4 +1,4 @@
-use boba_script_core::ast::{statement, Statement};
+use boba_script_core::ast::{node::Builder, Statement, StatementNode};
 
 use crate::{
     error::SpanParseError,
@@ -9,7 +9,7 @@ use crate::{
 
 pub fn parse<T: TokenStream>(
     parser: &mut StreamParser<T>,
-) -> Result<Statement<StreamSpan<T>>, Vec<ParseError<T>>> {
+) -> Result<StatementNode<StreamSpan<T>>, Vec<ParseError<T>>> {
     match parser.peek_some("let or expression") {
         // consume the whole line if an error is found
         Err(error) => {
@@ -59,12 +59,12 @@ pub fn parse<T: TokenStream>(
             parse_close_and_end(parser)?;
 
             let span = parser.source().span(start..rhs.data.end());
-            Ok(statement::Kind::Assign {
+            Ok(Statement::Assign {
                 init: true,
                 lhs,
                 rhs,
             }
-            .carry(span))
+            .build_node(span))
         }
         Ok(Token::While) => {
             // get the start index of the while token
@@ -89,11 +89,11 @@ pub fn parse<T: TokenStream>(
                 Ok(Token::FatArrow) => {
                     let body = parse(parser)?;
                     let span = parser.source().span(start..body.data.end());
-                    return Ok(statement::Kind::While {
+                    return Ok(Statement::While {
                         cond,
                         body: vec![body],
                     }
-                    .carry(span));
+                    .build_node(span));
                 }
                 Ok(token) => {
                     let mut errors = vec![SpanParseError::UnexpectedInput {
@@ -158,7 +158,7 @@ pub fn parse<T: TokenStream>(
                 Some(body) => parser.source().span(start..body.data.end()),
                 None => parser.source().span(start..colon),
             };
-            Ok(statement::Kind::While { cond, body }.carry(span))
+            Ok(Statement::While { cond, body }.build_node(span))
         }
         Ok(_) => {
             // first parse the lhs
@@ -177,11 +177,11 @@ pub fn parse<T: TokenStream>(
                 Some(Ok(Token::Assign)) => (),
                 Some(Ok(Token::Newline)) | None => {
                     let span = parser.source().span(lhs.data.span());
-                    return Ok(statement::Kind::Expr {
+                    return Ok(Statement::Expr {
                         expr: lhs,
                         closed: false,
                     }
-                    .carry(span));
+                    .build_node(span));
                 }
                 Some(Ok(Token::SemiColon)) => {
                     // ensure line ends after semicolon
@@ -195,11 +195,11 @@ pub fn parse<T: TokenStream>(
                     }
 
                     let span = parser.source().span(lhs.data.span());
-                    return Ok(statement::Kind::Expr {
+                    return Ok(Statement::Expr {
                         expr: lhs,
                         closed: true,
                     }
-                    .carry(span));
+                    .build_node(span));
                 }
                 Some(Ok(token)) => {
                     let mut errors = vec![SpanParseError::UnexpectedInput {
@@ -236,12 +236,12 @@ pub fn parse<T: TokenStream>(
             parse_close_and_end(parser)?;
 
             let span = parser.source().span(lhs.data.start()..rhs.data.end());
-            Ok(statement::Kind::Assign {
+            Ok(Statement::Assign {
                 init: false,
                 lhs,
                 rhs,
             }
-            .carry(span))
+            .build_node(span))
         }
     }
 }

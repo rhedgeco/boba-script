@@ -1,11 +1,11 @@
 use std::{fmt::Debug, marker::PhantomData};
 
 use crate::{
-    ast::{expr, Expr},
+    ast::{expr::ExprNode, node::EvalNode, Expr, Node},
     engine::Value,
 };
 
-use super::{eval::Evaluate, ops::OpManager, EvalError, ScopeStack};
+use super::{ops::OpManager, EvalError, ScopeStack};
 
 pub struct Engine<Data> {
     _data: PhantomData<*const Data>,
@@ -52,11 +52,18 @@ impl<Data> Engine<Data> {
 }
 
 impl<Data: Clone> Engine<Data> {
-    pub fn eval(&mut self, item: impl Evaluate<Data>) -> Result<Value, EvalError<Data>> {
-        item.eval_with(self)
+    pub fn eval<T: EvalNode<Data>>(
+        &mut self,
+        node: impl AsRef<Node<T, Data>>,
+    ) -> Result<Value, EvalError<Data>> {
+        T::eval_node(node.as_ref(), self)
     }
 
-    pub fn assign(&mut self, lhs: &Expr<Data>, rhs: &Expr<Data>) -> Result<(), EvalError<Data>> {
+    pub fn assign(
+        &mut self,
+        lhs: &ExprNode<Data>,
+        rhs: &ExprNode<Data>,
+    ) -> Result<(), EvalError<Data>> {
         let store = self.destructure(lhs, rhs)?;
         for (id, value, data) in store {
             if let Err(_) = self.vars.set(id, value) {
@@ -72,8 +79,8 @@ impl<Data: Clone> Engine<Data> {
 
     pub fn init_assign(
         &mut self,
-        lhs: &Expr<Data>,
-        rhs: &Expr<Data>,
+        lhs: &ExprNode<Data>,
+        rhs: &ExprNode<Data>,
     ) -> Result<(), EvalError<Data>> {
         let store = self.destructure(lhs, rhs)?;
         for (id, value, _) in store {
@@ -84,25 +91,25 @@ impl<Data: Clone> Engine<Data> {
 
     fn destructure<'a, 'b>(
         &mut self,
-        lhs: &'a Expr<Data>,
-        rhs: &'b Expr<Data>,
+        lhs: &'a ExprNode<Data>,
+        rhs: &'b ExprNode<Data>,
     ) -> Result<Vec<(&'a str, Value, &'b Data)>, EvalError<Data>> {
         fn recurse<'a, 'b, Data: Clone>(
-            lhs: &'a Expr<Data>,
-            rhs: &'b Expr<Data>,
+            lhs: &'a ExprNode<Data>,
+            rhs: &'b ExprNode<Data>,
             engine: &mut Engine<Data>,
             store: &mut Vec<(&'a str, Value, &'b Data)>,
         ) -> Result<(), EvalError<Data>> {
-            match &lhs.kind {
+            match &lhs.item {
                 // if the lhs is a variable, then directly assign to it
-                expr::Kind::Var(id) => {
+                Expr::Var(id) => {
                     let value = engine.eval(rhs)?;
                     store.push((id, value, &rhs.data));
                     Ok(())
                 }
                 // if the lhs is a tuple, then loop over each inner expr and assign
-                expr::Kind::Tuple(lhs_exprs) => match &rhs.kind {
-                    expr::Kind::Tuple(rhs_exprs) => match lhs_exprs.len() == rhs_exprs.len() {
+                Expr::Tuple(lhs_exprs) => match &rhs.item {
+                    Expr::Tuple(rhs_exprs) => match lhs_exprs.len() == rhs_exprs.len() {
                         false => Err(EvalError::TupleDestructureError {
                             lhs_count: lhs_exprs.len(),
                             rhs_count: rhs_exprs.len(),

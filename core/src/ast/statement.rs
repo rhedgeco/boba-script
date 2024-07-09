@@ -1,48 +1,42 @@
 use crate::{
-    engine::{eval::Evaluate, value::ValueKind, EvalError, Value},
+    engine::{value::ValueKind, EvalError, Value},
     Engine,
 };
 
-use super::Expr;
+use super::{expr::ExprNode, node::EvalNode, Node};
 
-pub enum Kind<Data> {
+pub type StatementNode<Data> = Node<Statement<Data>, Data>;
+
+pub enum Statement<Data> {
     Expr {
-        expr: Expr<Data>,
+        expr: ExprNode<Data>,
         closed: bool,
     },
     Assign {
         init: bool,
-        lhs: Expr<Data>,
-        rhs: Expr<Data>,
+        lhs: ExprNode<Data>,
+        rhs: ExprNode<Data>,
     },
     While {
-        cond: Expr<Data>,
-        body: Vec<Statement<Data>>,
+        cond: ExprNode<Data>,
+        body: Vec<StatementNode<Data>>,
     },
 }
 
-impl<Data> Kind<Data> {
-    pub fn carry(self, data: Data) -> Statement<Data> {
-        Statement { kind: self, data }
-    }
-}
-
-pub struct Statement<Data> {
-    pub kind: Kind<Data>,
-    pub data: Data,
-}
-
-impl<Data: Clone> Evaluate<Data> for Statement<Data> {
-    fn eval_with(&self, engine: &mut Engine<Data>) -> Result<Value, EvalError<Data>> {
-        match &self.kind {
-            Kind::Expr { expr, closed } => {
+impl<Data: Clone> EvalNode<Data> for Statement<Data> {
+    fn eval_node(
+        node: &Node<Self, Data>,
+        engine: &mut Engine<Data>,
+    ) -> Result<Value, EvalError<Data>> {
+        match &node.item {
+            Statement::Expr { expr, closed } => {
                 let value = engine.eval(expr)?;
                 match closed {
                     true => Ok(Value::None),
                     false => Ok(value),
                 }
             }
-            Kind::Assign { init, lhs, rhs } => {
+            Statement::Assign { init, lhs, rhs } => {
                 match init {
                     false => engine.assign(lhs, rhs)?,
                     true => engine.init_assign(lhs, rhs)?,
@@ -50,7 +44,7 @@ impl<Data: Clone> Evaluate<Data> for Statement<Data> {
 
                 Ok(Value::None)
             }
-            Kind::While { cond, body } => loop {
+            Statement::While { cond, body } => loop {
                 match engine.eval(cond)? {
                     Value::Bool(true) => (),
                     Value::Bool(false) => break Ok(Value::None),
