@@ -3,9 +3,9 @@ use crate::{
     Engine,
 };
 
-use super::{expr, Expr};
+use super::{expr, Carrier, Expr};
 
-pub enum Statement<Data> {
+pub enum Kind<Data> {
     Expr {
         expr: Expr<Data>,
         closed: bool,
@@ -21,17 +21,28 @@ pub enum Statement<Data> {
     },
 }
 
+impl<Data> Kind<Data> {
+    pub fn carry(self, data: Data) -> Statement<Data> {
+        Statement { kind: self, data }
+    }
+}
+
+pub struct Statement<Data> {
+    pub kind: Kind<Data>,
+    pub data: Data,
+}
+
 impl<Data: Clone> Statement<Data> {
     pub fn eval(&self, engine: &mut Engine) -> Result<Value, EvalError<Data>> {
-        match &self {
-            Self::Expr { expr, closed } => {
+        match &self.kind {
+            Kind::Expr { expr, closed } => {
                 let value = expr.eval(engine)?;
                 match closed {
                     true => Ok(Value::None),
                     false => Ok(value),
                 }
             }
-            Self::Assign { init, lhs, rhs } => match &lhs.kind {
+            Kind::Assign { init, lhs, rhs } => match &lhs.kind {
                 expr::Kind::Var(id) => {
                     let value = rhs.eval(engine)?;
                     match init {
@@ -43,16 +54,16 @@ impl<Data: Clone> Statement<Data> {
                             Ok(_) => Ok(Value::None),
                             Err(_) => Err(EvalError::UnknownVariable {
                                 name: id.clone(),
-                                data: lhs.data.clone(),
+                                data: lhs.data().clone(),
                             }),
                         },
                     }
                 }
                 _ => Err(EvalError::AssignError {
-                    data: lhs.data.clone(),
+                    data: lhs.data().clone(),
                 }),
             },
-            Self::While { cond, body } => loop {
+            Kind::While { cond, body } => loop {
                 match cond.eval(engine)? {
                     Value::Bool(true) => (),
                     Value::Bool(false) => break Ok(Value::None),
@@ -60,7 +71,7 @@ impl<Data: Clone> Statement<Data> {
                         break Err(EvalError::UnexpectedType {
                             expect: "bool".into(),
                             found: value.type_name(),
-                            data: cond.data.clone(),
+                            data: cond.data().clone(),
                         })
                     }
                 }
