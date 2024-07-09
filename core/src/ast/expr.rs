@@ -1,13 +1,21 @@
-use std::ops::Deref;
-
 use dashu::integer::IBig;
 
 use crate::{
-    engine::{value::ValueKind, EvalError, Value},
+    engine::{eval::Evaluate, value::ValueKind, EvalError, Value},
     Engine,
 };
 
-use super::Carrier;
+#[derive(Debug, Clone)]
+pub struct Expr<Data> {
+    pub kind: Kind<Data>,
+    pub data: Data,
+}
+
+impl<Data> Kind<Data> {
+    pub fn carry(self, data: Data) -> Expr<Data> {
+        Expr { kind: self, data }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Kind<Data> {
@@ -50,28 +58,8 @@ pub enum Kind<Data> {
     },
 }
 
-impl<Data> Kind<Data> {
-    pub fn carry(self, data: Data) -> Expr<Data> {
-        Expr { kind: self, data }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Expr<Data> {
-    pub kind: Kind<Data>,
-    pub data: Data,
-}
-
-impl<Data> Carrier for Expr<Data> {
-    type Data = Data;
-
-    fn data(&self) -> &Self::Data {
-        &self.data
-    }
-}
-
-impl<Data: Clone> Expr<Data> {
-    pub fn eval(&self, engine: &mut Engine) -> Result<Value, EvalError<Data>> {
+impl<Data: Clone> Evaluate<Data> for Expr<Data> {
+    fn eval_with(&self, engine: &mut Engine<Data>) -> Result<Value, EvalError<Data>> {
         match &self.kind {
             // SIMPLE VALUES
             Kind::None => Ok(Value::None),
@@ -82,7 +70,7 @@ impl<Data: Clone> Expr<Data> {
             Kind::Tuple(exprs) => {
                 let mut values = Vec::with_capacity(exprs.len());
                 for expr in exprs {
-                    values.push(expr.eval(engine)?);
+                    values.push(engine.eval(expr)?);
                 }
                 Ok(Value::Tuple(values))
             }
@@ -98,37 +86,37 @@ impl<Data: Clone> Expr<Data> {
 
             // WALRUS
             Kind::Walrus(lhs, rhs) => {
-                let value = rhs.eval(engine)?;
-                match &lhs.deref().kind {
+                let value = engine.eval(rhs)?;
+                match &lhs.kind {
                     Kind::Var(id) => match engine.vars_mut().set(id, value.clone()) {
                         Ok(_) => Ok(value),
                         Err(_) => Err(EvalError::UnknownVariable {
-                            data: lhs.data().clone(),
+                            data: lhs.data.clone(),
                             name: id.clone(),
                         }),
                     },
                     _ => Err(EvalError::AssignError {
-                        data: lhs.data().clone(),
+                        data: lhs.data.clone(),
                     }),
                 }
             }
 
             // TERNARY
-            Kind::Ternary { cond, pass, fail } => match cond.eval(engine)? {
+            Kind::Ternary { cond, pass, fail } => match engine.eval(cond)? {
                 Value::Bool(bool) => match bool {
-                    true => pass.eval(engine),
-                    false => fail.eval(engine),
+                    true => engine.eval(pass),
+                    false => engine.eval(fail),
                 },
                 value => Err(EvalError::UnexpectedType {
                     expect: ValueKind::Bool,
                     found: value.kind(),
-                    data: cond.data().clone(),
+                    data: cond.data.clone(),
                 }),
             },
 
             // UNARY OPS
             Kind::Pos(expr) => {
-                let inner = expr.eval(engine)?;
+                let inner = engine.eval(expr)?;
                 match engine.ops().pos(&inner) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidUnaryOp {
@@ -139,7 +127,7 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Neg(expr) => {
-                let inner = expr.eval(engine)?;
+                let inner = engine.eval(expr)?;
                 match engine.ops().neg(&inner) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidUnaryOp {
@@ -150,7 +138,7 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Not(expr) => {
-                let inner = expr.eval(engine)?;
+                let inner = engine.eval(expr)?;
                 match engine.ops().not(&inner) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidUnaryOp {
@@ -163,8 +151,8 @@ impl<Data: Clone> Expr<Data> {
 
             // BINARY OPS
             Kind::Add(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().add(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -176,8 +164,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Sub(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().sub(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -189,8 +177,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Mul(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().mul(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -202,8 +190,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Div(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().div(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -215,8 +203,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Modulo(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().modulo(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -228,8 +216,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Pow(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().pow(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -241,8 +229,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Eq(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().eq(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -254,8 +242,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Lt(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().lt(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -267,8 +255,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Gt(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().gt(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -280,8 +268,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::NEq(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().neq(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -293,8 +281,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::LtEq(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().lteq(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -306,8 +294,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::GtEq(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().gteq(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -319,8 +307,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::And(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().and(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
@@ -332,8 +320,8 @@ impl<Data: Clone> Expr<Data> {
                 }
             }
             Kind::Or(lhs, rhs) => {
-                let v1 = lhs.eval(engine)?;
-                let v2 = rhs.eval(engine)?;
+                let v1 = engine.eval(lhs)?;
+                let v2 = engine.eval(rhs)?;
                 match engine.ops().or(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {

@@ -47,7 +47,7 @@ pub fn session() {
         };
 
         match statement::parse(&mut parser) {
-            Ok(statement) => match statement.eval(&mut engine) {
+            Ok(statement) => match engine.eval(statement) {
                 Ok(Value::None) => continue, // do nothing with none
                 Ok(value) => println!("{value}"),
                 Err(error) => eprintln!("{error}"),
