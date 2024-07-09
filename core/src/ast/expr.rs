@@ -90,7 +90,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                             name: id.clone(),
                         }),
                     },
-                    _ => Err(EvalError::AssignError {
+                    _ => Err(EvalError::InvalidAssign {
                         data: lhs.data.clone(),
                     }),
                 }

@@ -30,9 +30,9 @@ impl Value {
         match self {
             Value::None => ValueKind::None,
             Value::Bool(_) => ValueKind::Bool,
-            Value::Int(_) => ValueKind::None,
-            Value::Float(_) => ValueKind::None,
-            Value::String(_) => ValueKind::None,
+            Value::Int(_) => ValueKind::Int,
+            Value::Float(_) => ValueKind::Float,
+            Value::String(_) => ValueKind::String,
             Value::Tuple(values) => {
                 ValueKind::Tuple(values.iter().map(|v| v.kind()).collect::<Vec<_>>())
             }

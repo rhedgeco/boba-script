@@ -110,7 +110,7 @@ impl<Data: Clone> Engine<Data> {
                 // if the lhs is a tuple, then loop over each inner expr and assign
                 Expr::Tuple(lhs_exprs) => match &rhs.item {
                     Expr::Tuple(rhs_exprs) => match lhs_exprs.len() == rhs_exprs.len() {
-                        false => Err(EvalError::TupleDestructureError {
+                        false => Err(EvalError::InvalidTupleSize {
                             lhs_count: lhs_exprs.len(),
                             rhs_count: rhs_exprs.len(),
                             lhs_data: lhs.data.clone(),
@@ -125,9 +125,8 @@ impl<Data: Clone> Engine<Data> {
                     },
                     _ => match lhs_exprs.len() {
                         1 => recurse(&lhs_exprs[0], rhs, engine, store),
-                        _ => Err(EvalError::TupleDestructureError {
+                        _ => Err(EvalError::InvalidTupleDestructure {
                             lhs_count: lhs_exprs.len(),
-                            rhs_count: 1,
                             lhs_data: lhs.data.clone(),
                             rhs_data: rhs.data.clone(),
                         }),
@@ -135,7 +134,7 @@ impl<Data: Clone> Engine<Data> {
                 },
                 // if the lhs is anything else, then the lhs cannot be assigned to
                 _ => {
-                    return Err(EvalError::AssignError {
+                    return Err(EvalError::InvalidAssign {
                         data: lhs.data.clone(),
                     })
                 }

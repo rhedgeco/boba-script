@@ -3,6 +3,7 @@ use boba_script::{
     lexer::{BobaCache, Lexer},
     parser::{parsers::statement, Token, TokenStream},
 };
+use boba_script_ariadne::ToAriadne;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 pub fn session() {
@@ -50,7 +51,7 @@ pub fn session() {
             Ok(statement) => match engine.eval(statement) {
                 Ok(Value::None) => continue, // do nothing with none
                 Ok(value) => println!("{value}"),
-                Err(error) => eprintln!("{error}"),
+                Err(error) => error.to_ariadne().eprint(&mut cache).unwrap(),
             },
             Err(errors) => {
                 for error in errors {

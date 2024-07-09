@@ -154,7 +154,7 @@ pub fn parse_pow<T: TokenStream>(
     parser.next(); // consume op
     let rhs = parse_atom(parser)?;
     let rhs = parse_pow(rhs, parser)?; // parse right to left
-    let span = parser.source().span(lhs.data.start()..lhs.data.end());
+    let span = parser.source().span(lhs.data.start()..rhs.data.end());
     Ok(op(Box::new(lhs), Box::new(rhs)).build_node(span))
 }
 
@@ -173,7 +173,7 @@ pub fn parse_mul<T: TokenStream>(
     parser.next(); // consume op
     let rhs = parse_atom(parser)?;
     let rhs = parse_pow(rhs, parser)?; // parse higher precedence
-    let span = parser.source().span(lhs.data.start()..lhs.data.end());
+    let span = parser.source().span(lhs.data.start()..rhs.data.end());
     Ok(op(Box::new(lhs), Box::new(rhs)).build_node(span))
 }
 
@@ -191,7 +191,7 @@ pub fn parse_add<T: TokenStream>(
     parser.next(); // consume op
     let rhs = parse_atom(parser)?;
     let rhs = parse_mul(rhs, parser)?; // parse higher precedence
-    let span = parser.source().span(lhs.data.start()..lhs.data.end());
+    let span = parser.source().span(lhs.data.start()..rhs.data.end());
     Ok(op(Box::new(lhs), Box::new(rhs)).build_node(span))
 }
 
@@ -213,7 +213,7 @@ pub fn parse_relation<T: TokenStream>(
     parser.next(); // consume op
     let rhs = parse_atom(parser)?;
     let rhs = parse_add(rhs, parser)?; // parse higher precedence
-    let span = parser.source().span(lhs.data.start()..lhs.data.end());
+    let span = parser.source().span(lhs.data.start()..rhs.data.end());
     Ok(op(Box::new(lhs), Box::new(rhs)).build_node(span))
 }
 
@@ -230,7 +230,7 @@ pub fn parse_and<T: TokenStream>(
     parser.next(); // consume op
     let rhs = parse_atom(parser)?;
     let rhs = parse_relation(rhs, parser)?; // parse higher precedence
-    let span = parser.source().span(lhs.data.start()..lhs.data.end());
+    let span = parser.source().span(lhs.data.start()..rhs.data.end());
     Ok(op(Box::new(lhs), Box::new(rhs)).build_node(span))
 }
 
@@ -247,7 +247,7 @@ pub fn parse_or<T: TokenStream>(
     parser.next(); // consume op
     let rhs = parse_atom(parser)?;
     let rhs = parse_and(rhs, parser)?; // parse higher precedence
-    let span = parser.source().span(lhs.data.start()..lhs.data.end());
+    let span = parser.source().span(lhs.data.start()..rhs.data.end());
     Ok(op(Box::new(lhs), Box::new(rhs)).build_node(span))
 }
 
@@ -298,6 +298,6 @@ pub fn parse_walrus<T: TokenStream>(
     parser.next(); // consume op
     let rhs = parse_atom(parser)?;
     let rhs = parse_ternary(rhs, parser)?; // parse higher precedence
-    let span = parser.source().span(lhs.data.start()..lhs.data.end());
+    let span = parser.source().span(lhs.data.start()..rhs.data.end());
     Ok(op(Box::new(lhs), Box::new(rhs)).build_node(span))
 }
