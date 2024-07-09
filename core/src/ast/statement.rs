@@ -42,27 +42,80 @@ impl<Data: Clone> Statement<Data> {
                     false => Ok(value),
                 }
             }
-            Kind::Assign { init, lhs, rhs } => match &lhs.kind {
-                expr::Kind::Var(id) => {
-                    let value = rhs.eval(engine)?;
-                    match init {
-                        true => {
-                            engine.vars_mut().init(id, value);
-                            Ok(Value::None)
+            Kind::Assign { init, lhs, rhs } => {
+                fn assign<'a, Data: Clone>(
+                    lhs: &'a Expr<Data>,
+                    rhs: &'a Expr<Data>,
+                    engine: &mut Engine,
+                    store: &mut Vec<(&'a str, Value, &'a Data)>,
+                ) -> Result<(), EvalError<Data>> {
+                    match &lhs.kind {
+                        // if the lhs is a variable, then directly assign to it
+                        expr::Kind::Var(id) => {
+                            let value = rhs.eval(engine)?;
+                            store.push((id, value, rhs.data()));
+                            Ok(())
                         }
-                        false => match engine.vars_mut().set(id, value) {
-                            Ok(_) => Ok(Value::None),
-                            Err(_) => Err(EvalError::UnknownVariable {
-                                name: id.clone(),
-                                data: lhs.data().clone(),
-                            }),
+                        // if the lhs is a tuple, then loop over each inner expr and assign
+                        expr::Kind::Tuple(lhs_exprs) => match &rhs.kind {
+                            expr::Kind::Tuple(rhs_exprs) => {
+                                match lhs_exprs.len() == rhs_exprs.len() {
+                                    false => Err(EvalError::DestructureError {
+                                        data: rhs.data().clone(),
+                                    }),
+                                    true => {
+                                        for (lhs, rhs) in lhs_exprs.iter().zip(rhs_exprs) {
+                                            assign(lhs, rhs, engine, store)?;
+                                        }
+                                        Ok(())
+                                    }
+                                }
+                            }
+                            _ => match lhs_exprs.len() {
+                                1 => assign(&lhs_exprs[0], rhs, engine, store),
+                                _ => Err(EvalError::DestructureError {
+                                    data: rhs.data().clone(),
+                                }),
+                            },
                         },
+                        // if the lhs is anything else, then the lhs cannot be assigned to
+                        _ => {
+                            return Err(EvalError::AssignError {
+                                data: lhs.data().clone(),
+                            })
+                        }
                     }
                 }
-                _ => Err(EvalError::AssignError {
-                    data: lhs.data().clone(),
-                }),
-            },
+
+                // collect all the variable assignments
+                let mut store = Vec::new();
+                assign(lhs, rhs, engine, &mut store)?;
+
+                // then assign each value in the engine
+                match init {
+                    true => {
+                        for (id, value, _) in store {
+                            engine.vars_mut().init(id, value);
+                        }
+                    }
+                    false => {
+                        for (id, value, data) in store {
+                            match engine.vars_mut().set(&id, value) {
+                                Ok(_) => (),
+                                Err(_) => {
+                                    return Err(EvalError::UnknownVariable {
+                                        name: id.to_string(),
+                                        data: data.clone(),
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // and return none
+                Ok(Value::None)
+            }
             Kind::While { cond, body } => loop {
                 match cond.eval(engine)? {
                     Value::Bool(true) => (),

@@ -26,6 +26,8 @@ pub enum EvalError<Data> {
     },
     #[display(fmt = "cannot assign to this expression")]
     AssignError { data: Data },
+    #[display(fmt = "failed to destructure expression into left hand side")]
+    DestructureError { data: Data },
     #[display(fmt = "expected '{}', found '{}'", expect, found)]
     UnexpectedType {
         expect: String,
