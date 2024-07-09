@@ -1,10 +1,8 @@
-use boba_script_core::ast::{statement, Carrier, Statement};
+use boba_script_core::ast::Statement;
 
 use crate::{
-    error::SpanParseError,
-    parsers::expr,
-    stream::{Source, SourceSpan, StreamSpan},
-    ParseError, StreamParser, Token, TokenStream,
+    error::SpanParseError, parsers::expr, stream::StreamSpan, ParseError, StreamParser, Token,
+    TokenStream,
 };
 
 pub fn parse<T: TokenStream>(
@@ -20,11 +18,8 @@ pub fn parse<T: TokenStream>(
             return Err(errors);
         }
         Ok(Token::Let) => {
-            // get the start index of the let token
-            parser.next(); // consume let token first
-            let start = parser.token_start();
-
             // parse the lhs
+            parser.next(); // consume let token first
             let lhs = match expr::parse(parser) {
                 Ok(lhs) => lhs,
                 Err(mut errors) => {
@@ -55,13 +50,14 @@ pub fn parse<T: TokenStream>(
                 }
             };
 
-            let span = parser.source().span(start..rhs.data.end());
-            statement::Kind::Assign {
+            Statement::Assign {
                 init: true,
                 lhs,
                 rhs,
             }
-            .carry(span)
+        }
+        Ok(Token::While) => {
+            todo!()
         }
         Ok(_) => {
             // first parse the lhs
@@ -79,12 +75,10 @@ pub fn parse<T: TokenStream>(
             match parser.next() {
                 Some(Ok(Token::Assign)) => (),
                 Some(Ok(Token::Newline)) | None => {
-                    let span = parser.source().span(lhs.data().span());
-                    return Ok(statement::Kind::Expr {
+                    return Ok(Statement::Expr {
                         expr: lhs,
                         closed: false,
-                    }
-                    .carry(span));
+                    });
                 }
                 Some(Ok(Token::SemiColon)) => {
                     // ensure line ends after semicolon
@@ -97,12 +91,10 @@ pub fn parse<T: TokenStream>(
                         }
                     }
 
-                    let span = parser.source().span(lhs.data().span());
-                    return Ok(statement::Kind::Expr {
+                    return Ok(Statement::Expr {
                         expr: lhs,
                         closed: true,
-                    }
-                    .carry(span));
+                    });
                 }
                 Some(Ok(token)) => {
                     let mut errors = vec![SpanParseError::UnexpectedInput {
@@ -135,13 +127,11 @@ pub fn parse<T: TokenStream>(
                 }
             };
 
-            let span = parser.source().span(lhs.data.start()..rhs.data.end());
-            statement::Kind::Assign {
+            Statement::Assign {
                 init: false,
                 lhs,
                 rhs,
             }
-            .carry(span)
         }
     };
 
