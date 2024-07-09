@@ -30,7 +30,7 @@ pub enum EvalError<Data> {
     DestructureError { data: Data },
     #[display(fmt = "expected '{}', found '{}'", expect, found)]
     UnexpectedType {
-        expect: String,
+        expect: ValueKind,
         found: ValueKind,
         data: Data,
     },

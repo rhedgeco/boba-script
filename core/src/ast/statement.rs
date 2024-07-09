@@ -1,5 +1,5 @@
 use crate::{
-    engine::{EvalError, Value},
+    engine::{value::ValueKind, EvalError, Value},
     Engine,
 };
 
@@ -122,7 +122,7 @@ impl<Data: Clone> Statement<Data> {
                     Value::Bool(false) => break Ok(Value::None),
                     value => {
                         break Err(EvalError::UnexpectedType {
-                            expect: "bool".into(),
+                            expect: ValueKind::Bool,
                             found: value.kind(),
                             data: cond.data().clone(),
                         })

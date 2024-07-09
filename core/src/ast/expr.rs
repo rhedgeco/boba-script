@@ -3,7 +3,7 @@ use std::ops::Deref;
 use dashu::integer::IBig;
 
 use crate::{
-    engine::{EvalError, Value},
+    engine::{value::ValueKind, EvalError, Value},
     Engine,
 };
 
@@ -120,7 +120,7 @@ impl<Data: Clone> Expr<Data> {
                     false => fail.eval(engine),
                 },
                 value => Err(EvalError::UnexpectedType {
-                    expect: "bool".into(),
+                    expect: ValueKind::Bool,
                     found: value.kind(),
                     data: cond.data().clone(),
                 }),
