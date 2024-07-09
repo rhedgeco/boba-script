@@ -18,6 +18,7 @@ pub enum Kind<Data> {
     Float(f64),
     String(String),
     Var(String),
+    Tuple(Vec<Expr<Data>>),
 
     // UNARY OPS
     Pos(Box<Expr<Data>>),
@@ -78,6 +79,13 @@ impl<Data: Clone> Expr<Data> {
             Kind::Int(value) => Ok(Value::Int(value.clone())),
             Kind::Float(value) => Ok(Value::Float(*value)),
             Kind::String(value) => Ok(Value::String(value.clone())),
+            Kind::Tuple(exprs) => {
+                let mut values = Vec::with_capacity(exprs.len());
+                for expr in exprs {
+                    values.push(expr.eval(engine)?);
+                }
+                Ok(Value::Tuple(values))
+            }
 
             // VARIABLES
             Kind::Var(id) => match engine.vars().get(id) {

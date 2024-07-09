@@ -1,4 +1,7 @@
-use boba_script_core::ast::{expr::Kind, Carrier, Expr};
+use boba_script_core::ast::{
+    expr::{self, Kind},
+    Carrier, Expr,
+};
 
 use crate::{
     error::SpanParseError,
@@ -30,26 +33,47 @@ pub fn parse_atom<T: TokenStream>(
         // PARENTHESIS
         Token::OpenParen => {
             let open = parser.token_span();
-            let inner = match parse(parser) {
-                Ok(expr) => expr,
-                Err(mut errors) => {
-                    // consume the rest of the expression
-                    parser.consume_until_with(&mut errors, |t| {
-                        matches!(t, Token::Newline | Token::CloseParen)
-                    });
 
-                    // check for closing paren
-                    match parser.peek() {
-                        Some(Ok(Token::CloseParen)) => {
-                            parser.next(); // consume closing paren
-                        }
-                        Some(_) | None => errors.push(SpanParseError::UnclosedBrace {
-                            open,
-                            end: parser.token_span_end(),
-                        }),
-                    };
+            // match in a loop so that tuples can be parsed
+            let mut exprs = Vec::new();
+            let expr = loop {
+                let expr = match parse(parser) {
+                    Ok(expr) => expr,
+                    Err(mut errors) => {
+                        // consume the rest of the expression
+                        parser.consume_until_with(&mut errors, |t| {
+                            matches!(t, Token::Newline | Token::CloseParen)
+                        });
 
-                    return Err(errors);
+                        // check for closing paren
+                        match parser.peek() {
+                            Some(Ok(Token::CloseParen)) => {
+                                parser.next(); // consume closing paren
+                            }
+                            Some(_) | None => errors.push(SpanParseError::UnclosedBrace {
+                                open,
+                                end: parser.token_span_end(),
+                            }),
+                        };
+
+                        return Err(errors);
+                    }
+                };
+
+                // check for comma
+                match parser.peek_some("',' or ')'") {
+                    Ok(Token::Comma) => {
+                        parser.next(); // consume comma
+                        exprs.push(expr);
+                    }
+                    Ok(_) => break expr,
+                    Err(error) => {
+                        let mut errors = vec![error];
+                        parser.consume_until_with(&mut errors, |t| {
+                            matches!(t, Token::Newline | Token::CloseParen)
+                        });
+                        return Err(errors);
+                    }
                 }
             };
 
@@ -75,7 +99,14 @@ pub fn parse_atom<T: TokenStream>(
                 return Err(errors);
             }
 
-            Ok(inner)
+            match exprs.is_empty() {
+                true => Ok(expr),
+                false => {
+                    exprs.push(expr);
+                    let span = parser.source().span(open.start()..parser.token_end());
+                    Ok(expr::Kind::Tuple(exprs).carry(span))
+                }
+            }
         }
 
         // UNEXPECTED TOKEN
