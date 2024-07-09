@@ -6,7 +6,10 @@ use crate::{
 use super::{expr, Carrier, Expr};
 
 pub enum Kind<Data> {
-    Expr(Expr<Data>),
+    Expr {
+        expr: Expr<Data>,
+        closed: bool,
+    },
     Assign {
         init: bool,
         lhs: Expr<Data>,
@@ -32,7 +35,13 @@ pub struct Statement<Data> {
 impl<Data: Clone> Statement<Data> {
     pub fn eval(&self, engine: &mut Engine) -> Result<Value, EvalError<Data>> {
         match &self.kind {
-            Kind::Expr(expr) => Ok(expr.eval(engine)?),
+            Kind::Expr { expr, closed } => {
+                let value = expr.eval(engine)?;
+                match closed {
+                    true => Ok(Value::None),
+                    false => Ok(value),
+                }
+            }
             Kind::Assign { init, lhs, rhs } => match &lhs.kind {
                 expr::Kind::Var(id) => {
                     let value = rhs.eval(engine)?;
