@@ -121,7 +121,7 @@ impl<Data: Clone> Expr<Data> {
                 },
                 value => Err(EvalError::UnexpectedType {
                     expect: "bool".into(),
-                    found: value.type_name(),
+                    found: value.kind(),
                     data: cond.data().clone(),
                 }),
             },
@@ -132,7 +132,7 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().pos(&inner) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidUnaryOp {
-                        ty: inner.type_name(),
+                        ty: inner.kind(),
                         op: "+",
                         data: self.data.clone(),
                     }),
@@ -143,7 +143,7 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().neg(&inner) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidUnaryOp {
-                        ty: inner.type_name(),
+                        ty: inner.kind(),
                         op: "-",
                         data: self.data.clone(),
                     }),
@@ -154,7 +154,7 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().not(&inner) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidUnaryOp {
-                        ty: inner.type_name(),
+                        ty: inner.kind(),
                         op: "not",
                         data: self.data.clone(),
                     }),
@@ -168,8 +168,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().add(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "+",
                         data: self.data.clone(),
                     }),
@@ -181,8 +181,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().sub(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "-",
                         data: self.data.clone(),
                     }),
@@ -194,8 +194,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().mul(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "*",
                         data: self.data.clone(),
                     }),
@@ -207,8 +207,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().div(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "/",
                         data: self.data.clone(),
                     }),
@@ -220,8 +220,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().modulo(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "%",
                         data: self.data.clone(),
                     }),
@@ -233,8 +233,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().pow(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "**",
                         data: self.data.clone(),
                     }),
@@ -246,8 +246,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().eq(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "==",
                         data: self.data.clone(),
                     }),
@@ -259,8 +259,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().lt(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "<",
                         data: self.data.clone(),
                     }),
@@ -272,8 +272,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().gt(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: ">",
                         data: self.data.clone(),
                     }),
@@ -285,8 +285,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().neq(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "!=",
                         data: self.data.clone(),
                     }),
@@ -298,8 +298,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().lteq(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "<=",
                         data: self.data.clone(),
                     }),
@@ -311,8 +311,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().gteq(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: ">=",
                         data: self.data.clone(),
                     }),
@@ -324,8 +324,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().and(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "and",
                         data: self.data.clone(),
                     }),
@@ -337,8 +337,8 @@ impl<Data: Clone> Expr<Data> {
                 match engine.ops().or(&v1, &v2) {
                     Some(value) => Ok(value),
                     None => Err(EvalError::InvalidBinaryOp {
-                        ty1: v1.type_name(),
-                        ty2: v2.type_name(),
+                        ty1: v1.kind(),
+                        ty2: v2.kind(),
                         op: "or",
                         data: self.data.clone(),
                     }),

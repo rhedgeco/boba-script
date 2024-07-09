@@ -1,12 +1,14 @@
 use derive_more::Display;
 
+use super::value::ValueKind;
+
 #[derive(Debug, Display, Clone)]
 pub enum EvalError<Data> {
     #[display(fmt = "unknown variable '{}'", name)]
     UnknownVariable { name: String, data: Data },
     #[display(fmt = "'{}' operator is not valid for '{}' types", op, ty)]
     InvalidUnaryOp {
-        ty: String,
+        ty: ValueKind,
         op: &'static str,
         data: Data,
     },
@@ -17,8 +19,8 @@ pub enum EvalError<Data> {
         ty2
     )]
     InvalidBinaryOp {
-        ty1: String,
-        ty2: String,
+        ty1: ValueKind,
+        ty2: ValueKind,
         op: &'static str,
         data: Data,
     },
@@ -27,7 +29,7 @@ pub enum EvalError<Data> {
     #[display(fmt = "expected '{}', found '{}'", expect, found)]
     UnexpectedType {
         expect: String,
-        found: String,
+        found: ValueKind,
         data: Data,
     },
 }

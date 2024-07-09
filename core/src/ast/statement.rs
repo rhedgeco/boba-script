@@ -70,7 +70,7 @@ impl<Data: Clone> Statement<Data> {
                     value => {
                         break Err(EvalError::UnexpectedType {
                             expect: "bool".into(),
-                            found: value.type_name(),
+                            found: value.kind(),
                             data: cond.data().clone(),
                         })
                     }
