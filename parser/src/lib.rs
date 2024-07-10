@@ -3,8 +3,8 @@ pub mod parsers;
 pub mod stream;
 pub mod token;
 
-pub use error::ParseError;
-pub use stream::{StreamParser, TokenStream};
+pub use error::PError;
+pub use stream::{TokenParser, TokenStream};
 pub use token::Token;
 
 pub mod core {

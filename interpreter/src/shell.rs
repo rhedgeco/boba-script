@@ -32,8 +32,8 @@ pub fn session() {
             }
         };
 
-        let mut parser = Lexer::new(data).stream_parser();
-        let _indent = match parser.peek() {
+        let mut parser = Lexer::new(data).parser();
+        let _indent = match parser.peek_next() {
             // if there are no tokens, then do nothing and try again
             None => continue,
             // if we find an error, print the error and try again

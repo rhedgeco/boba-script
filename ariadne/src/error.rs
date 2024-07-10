@@ -1,9 +1,7 @@
 use std::fmt::Display;
 
 use ariadne::{Color, Label, Report, ReportKind, Span};
-use boba_script::{
-    core::engine::EvalError, lexer::cache::CacheSpan, parser::error::SpanParseError,
-};
+use boba_script::{core::engine::EvalError, lexer::cache::CacheSpan, parser::error::ParseError};
 
 pub trait ToAriadne {
     fn to_ariadne(&self) -> Report<CacheSpan>;
@@ -116,10 +114,10 @@ impl ToAriadne for EvalError<CacheSpan> {
     }
 }
 
-impl<T: Display> ToAriadne for SpanParseError<CacheSpan, T> {
+impl<T: Display> ToAriadne for ParseError<CacheSpan, T> {
     fn to_ariadne(&self) -> Report<CacheSpan> {
         match self {
-            SpanParseError::TokenError { error, span } => {
+            ParseError::TokenError { error, span } => {
                 Report::build(ReportKind::Error, span.id, span.start())
                     .with_code("P-001")
                     .with_message("Token Error")
@@ -129,7 +127,7 @@ impl<T: Display> ToAriadne for SpanParseError<CacheSpan, T> {
                             .with_color(Color::Red),
                     )
             }
-            SpanParseError::UnexpectedInput {
+            ParseError::UnexpectedInput {
                 expect,
                 found,
                 span,
@@ -140,11 +138,11 @@ impl<T: Display> ToAriadne for SpanParseError<CacheSpan, T> {
                     Label::new(span.clone())
                         .with_message(match found {
                             Some(found) => format!("expected {expect}, found {found}"),
-                            None => format!("expected {expect}, found line end"),
+                            None => format!("expected {expect}, found end of line"),
                         })
                         .with_color(Color::Red),
                 ),
-            SpanParseError::UnclosedBrace { open, end } => {
+            ParseError::UnclosedBrace { open, end } => {
                 Report::build(ReportKind::Error, open.id, open.start())
                     .with_code("P-003")
                     .with_message("Unclosed Brace")

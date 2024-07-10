@@ -7,6 +7,7 @@ use super::{expr::ExprNode, node::EvalNode, Node};
 
 pub type StatementNode<Data> = Node<Statement<Data>, Data>;
 
+#[derive(Debug, Clone)]
 pub enum Statement<Data> {
     Expr {
         expr: ExprNode<Data>,
