@@ -22,6 +22,11 @@ pub enum Statement<Data> {
         cond: ExprNode<Data>,
         body: Vec<StatementNode<Data>>,
     },
+    If {
+        cond: ExprNode<Data>,
+        pass: Vec<StatementNode<Data>>,
+        fail: Vec<StatementNode<Data>>,
+    },
 }
 
 impl<Data: Clone> EvalNode<Data> for Statement<Data> {
@@ -45,23 +50,46 @@ impl<Data: Clone> EvalNode<Data> for Statement<Data> {
 
                 Ok(Value::None)
             }
-            Statement::While { cond, body } => loop {
-                match engine.eval(cond)? {
-                    Value::Bool(true) => (),
-                    Value::Bool(false) => break Ok(Value::None),
+            Statement::While { cond, body } => {
+                let mut output = Value::None;
+                loop {
+                    match engine.eval(cond)? {
+                        Value::Bool(true) => (),
+                        Value::Bool(false) => break Ok(output),
+                        value => {
+                            break Err(EvalError::UnexpectedType {
+                                expect: ValueKind::Bool,
+                                found: value.kind(),
+                                data: cond.data.clone(),
+                            })
+                        }
+                    }
+
+                    for statement in body {
+                        output = engine.eval(statement)?;
+                    }
+                }
+            }
+            Statement::If { cond, pass, fail } => {
+                let mut output = Value::None;
+                let statements = match engine.eval(cond)? {
+                    Value::Bool(true) => pass,
+                    Value::Bool(false) => fail,
                     value => {
-                        break Err(EvalError::UnexpectedType {
+                        return Err(EvalError::UnexpectedType {
                             expect: ValueKind::Bool,
                             found: value.kind(),
                             data: cond.data.clone(),
                         })
                     }
+                };
+
+                for statement in statements {
+                    output = engine.eval(statement)?;
                 }
 
-                for statement in body {
-                    engine.eval(statement)?;
-                }
-            },
+                Ok(output)
+            }
         }
     }
 }

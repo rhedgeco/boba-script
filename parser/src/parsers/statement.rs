@@ -16,12 +16,19 @@ pub enum Header<Data: Source> {
 
 enum IncompleteKind<Data> {
     While(ExprNode<Data>),
+    If(ExprNode<Data>),
 }
 
 impl<Data> IncompleteKind<Data> {
     fn build(self, source: Data, body: Vec<StatementNode<Data>>) -> StatementNode<Data> {
         match self {
             IncompleteKind::While(cond) => Statement::While { cond, body }.build_node(source),
+            IncompleteKind::If(cond) => Statement::If {
+                cond,
+                pass: body,
+                fail: vec![],
+            }
+            .build_node(source),
         }
     }
 }
@@ -116,7 +123,7 @@ pub fn parse_header<T: TokenStream>(
 
             // WHILE LOOP
             Some(Token::While) => {
-                // consume the let token
+                // consume the while token
                 let line = &mut peeker.consume();
                 let start = line.token_start();
 
@@ -138,6 +145,37 @@ pub fn parse_header<T: TokenStream>(
                     block::Header::Incomplete(block_source) => {
                         Ok(Header::Incomplete(IncompleteStatement {
                             kind: IncompleteKind::While(cond),
+                            block_source,
+                            source,
+                        }))
+                    }
+                }
+            }
+
+            Some(Token::If) => {
+                // consume the if token
+                let line = &mut peeker.consume();
+                let start = line.token_start();
+
+                // parse condition
+                let cond = expr::parse(line)?;
+
+                // build source for if header
+                let source = line.build_source(start..cond.data.end());
+
+                // parse the block header
+                match block::parse_header(line)? {
+                    block::Header::Complete(statement) => Ok(Header::Complete(
+                        Statement::If {
+                            cond,
+                            pass: vec![statement],
+                            fail: vec![],
+                        }
+                        .build_node(source),
+                    )),
+                    block::Header::Incomplete(block_source) => {
+                        Ok(Header::Incomplete(IncompleteStatement {
+                            kind: IncompleteKind::If(cond),
                             block_source,
                             source,
                         }))
