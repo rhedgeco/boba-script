@@ -16,7 +16,6 @@ pub struct Engine<Data> {
 impl<Data> Debug for Engine<Data> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Engine")
-            .field("_data", &self._data)
             .field("vars", &self.vars)
             .field("ops", &self.ops)
             .finish()
