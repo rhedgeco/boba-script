@@ -72,6 +72,7 @@ pub fn parse<T: TokenStream>(
 }
 
 pub fn parse_inline<T: TokenStream>(
+    inline_source: T::Source,
     line: &mut TokenLine<T>,
 ) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
     match parse_header(line)? {
@@ -80,7 +81,8 @@ pub fn parse_inline<T: TokenStream>(
 
         // FAILURE CASE
         Header::Incomplete(incomplete) => Err(vec![ParseError::InlineError {
-            source: incomplete.block_source,
+            block_source: incomplete.block_source,
+            inline_source: inline_source,
         }]),
     }
 }

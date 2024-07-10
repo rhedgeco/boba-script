@@ -20,7 +20,8 @@ pub enum ParseError<Source, TokenError> {
         end: Source,
     },
     InlineError {
-        source: Source,
+        inline_source: Source,
+        block_source: Source,
     },
     EmptyBlock {
         source: Source,

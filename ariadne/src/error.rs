@@ -157,16 +157,22 @@ impl<T: Display> ToAriadne for ParseError<CacheSpan, T> {
                             .with_color(Color::Cyan),
                     )
             }
-            ParseError::InlineError { source } => {
-                Report::build(ReportKind::Error, source.id, source.start())
-                    .with_code("P-004")
-                    .with_message("Inline Error")
-                    .with_label(
-                        Label::new(source.clone())
-                            .with_message("cannot use start multi-line block in an inline context")
-                            .with_color(Color::Red),
-                    )
-            }
+            ParseError::InlineError {
+                block_source,
+                inline_source,
+            } => Report::build(ReportKind::Error, inline_source.id, inline_source.start())
+                .with_code("P-004")
+                .with_message("Inline Error")
+                .with_label(
+                    Label::new(block_source.clone())
+                        .with_message("multi-line block not allowed here, use '=>' instead")
+                        .with_color(Color::Red),
+                )
+                .with_label(
+                    Label::new(inline_source.clone())
+                        .with_message("the '=>' token forces its statement to be inline")
+                        .with_color(Color::Cyan),
+                ),
             ParseError::EmptyBlock { source } => {
                 Report::build(ReportKind::Error, source.id, source.start())
                     .with_code("P-005")

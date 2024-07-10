@@ -38,7 +38,13 @@ pub fn parse_header<T: TokenStream>(
             }
 
             // COMPLETE CASE
-            Some(Token::FatArrow) => Ok(Header::Complete(statement::parse_inline(line)?)),
+            Some(Token::FatArrow) => {
+                let inline_source = line.token_source();
+                Ok(Header::Complete(statement::parse_inline(
+                    inline_source,
+                    line,
+                )?))
+            }
 
             // FAILURE CASE
             token => Err(vec![ParseError::UnexpectedInput {

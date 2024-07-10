@@ -72,6 +72,21 @@ impl Shell {
         Self::default()
     }
 
+    pub fn pop_pending(&mut self) -> io::Result<()> {
+        if let Some(pending) = self.pending.pop() {
+            match pending.finish() {
+                Err(error) => error.to_ariadne().eprint(&mut self.cache)?,
+                Ok(statement) => match self.engine.eval(statement) {
+                    Ok(Value::None) => {}
+                    Ok(value) => println!("{value}"),
+                    Err(error) => error.to_ariadne().eprint(&mut self.cache)?,
+                },
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn read_line(&mut self) -> io::Result<RunState> {
         let prompt = match self.pending.is_empty() {
             false => &self.pending_prompt,
@@ -91,17 +106,7 @@ impl Shell {
         let mut parser = Lexer::new(data).parser();
         let indent = match parser.line().peek_next() {
             Ok(None) => {
-                if let Some(pending) = self.pending.pop() {
-                    match pending.finish() {
-                        Err(error) => error.to_ariadne().eprint(&mut self.cache)?,
-                        Ok(statement) => match self.engine.eval(statement) {
-                            Ok(Value::None) => {}
-                            Ok(value) => println!("{value}"),
-                            Err(error) => error.to_ariadne().eprint(&mut self.cache)?,
-                        },
-                    }
-                }
-
+                self.pop_pending()?;
                 return Ok(RunState::Success);
             }
             Err(error) => {
@@ -124,27 +129,19 @@ impl Shell {
 
             // if its complete, check the pending stack
             Ok(Header::Complete(statement)) => loop {
-                match self.pending.pop() {
+                match self.pending.last_mut() {
                     // if the pending stack has items, try to complete it
-                    Some(mut pending) => match indent.cmp(&pending.indent) {
+                    Some(pending) => match indent.cmp(&pending.indent) {
                         // if the indent greater than the pending indent then the statement is part of it
                         // push the statement into its body, re-queue the pending item and break
                         Ordering::Greater => {
                             pending.body.push(statement);
-                            self.pending.push(pending);
                             break;
                         }
 
                         // if the indent is equal or less than the pending indent
-                        // then complete and execute this pending item and continue
-                        _ => match pending.finish() {
-                            Err(error) => error.to_ariadne().eprint(&mut self.cache)?,
-                            Ok(statement) => match self.engine.eval(statement) {
-                                Ok(Value::None) => {}
-                                Ok(value) => println!("{value}"),
-                                Err(error) => error.to_ariadne().eprint(&mut self.cache)?,
-                            },
-                        },
+                        // then pop and execute the pending item
+                        _ => self.pop_pending()?,
                     },
 
                     // if the stack is empty
@@ -163,6 +160,17 @@ impl Shell {
             },
             // otherwise print the errors
             Err(errors) => {
+                // pop as many pending items as possible first
+                loop {
+                    match self.pending.last_mut() {
+                        None => break,
+                        Some(pending) => match indent.cmp(&pending.indent) {
+                            Ordering::Greater => break,
+                            _ => self.pop_pending()?,
+                        },
+                    }
+                }
+
                 for error in errors {
                     error.to_ariadne().eprint(&mut self.cache)?;
                 }
