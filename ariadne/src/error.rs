@@ -117,12 +117,12 @@ impl ToAriadne for EvalError<CacheSpan> {
 impl<T: Display> ToAriadne for ParseError<CacheSpan, T> {
     fn to_ariadne(&self) -> Report<CacheSpan> {
         match self {
-            ParseError::TokenError { error, span } => {
-                Report::build(ReportKind::Error, span.id, span.start())
+            ParseError::TokenError { error, source } => {
+                Report::build(ReportKind::Error, source.id, source.start())
                     .with_code("P-001")
                     .with_message("Token Error")
                     .with_label(
-                        Label::new(span.clone())
+                        Label::new(source.clone())
                             .with_message(format!("{error}"))
                             .with_color(Color::Red),
                     )
@@ -130,12 +130,12 @@ impl<T: Display> ToAriadne for ParseError<CacheSpan, T> {
             ParseError::UnexpectedInput {
                 expect,
                 found,
-                span,
-            } => Report::build(ReportKind::Error, span.id, span.start())
+                source,
+            } => Report::build(ReportKind::Error, source.id, source.start())
                 .with_code("P-002")
                 .with_message("Unexpected Input")
                 .with_label(
-                    Label::new(span.clone())
+                    Label::new(source.clone())
                         .with_message(match found {
                             Some(found) => format!("expected {expect}, found {found}"),
                             None => format!("expected {expect}, found end of line"),
@@ -156,6 +156,27 @@ impl<T: Display> ToAriadne for ParseError<CacheSpan, T> {
                             .with_message(format!("expected closing brace by this point"))
                             .with_color(Color::Cyan),
                     )
+            }
+            ParseError::InlineError { source } => {
+                Report::build(ReportKind::Error, source.id, source.start())
+                    .with_code("P-004")
+                    .with_message("Inline Error")
+                    .with_label(
+                        Label::new(source.clone())
+                            .with_message("cannot use start multi-line block in an inline context")
+                            .with_color(Color::Red),
+                    )
+            }
+            ParseError::EmptyBlock { source } => {
+                Report::build(ReportKind::Error, source.id, source.start())
+                    .with_code("P-005")
+                    .with_message("Empty Block")
+                    .with_label(
+                        Label::new(source.clone())
+                            .with_message("expected statement, found an empty block")
+                            .with_color(Color::Red),
+                    )
+                    .with_note("try putting a temporary 'none' on the next line")
             }
         }
         .finish()

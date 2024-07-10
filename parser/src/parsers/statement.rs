@@ -1,123 +1,210 @@
-use boba_script_core::ast::{node::Builder, Statement, StatementNode};
+use boba_script_core::ast::{node::Builder, ExprNode, Statement, StatementNode};
 
 use crate::{
     error::ParseError,
-    parsers::{expr, line, statement},
-    stream::{SourceSpan, StreamSpan},
-    PError, Token, TokenParser, TokenStream,
+    parsers::expr,
+    stream::{LineParser, Source, TokenLine},
+    PError, Token, TokenStream,
 };
 
+use super::{block, line};
+
+pub enum Header<Data: Source> {
+    Complete(StatementNode<Data>),
+    Incomplete(IncompleteStatement<Data>),
+}
+
+enum IncompleteKind<Data> {
+    While(ExprNode<Data>),
+}
+
+impl<Data> IncompleteKind<Data> {
+    fn build(self, source: Data, body: Vec<StatementNode<Data>>) -> StatementNode<Data> {
+        match self {
+            IncompleteKind::While(cond) => Statement::While { cond, body }.build_node(source),
+        }
+    }
+}
+
+pub struct IncompleteStatement<Data: Source> {
+    kind: IncompleteKind<Data>,
+    block_source: Data,
+    source: Data,
+}
+
+impl<Data: Source> IncompleteStatement<Data> {
+    pub fn finish<T: TokenStream<Source = Data>>(
+        self,
+        parser: &mut LineParser<T>,
+    ) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
+        let header = block::Header::Incomplete(self.block_source);
+        let body = block::parse_with_header(header, parser)?;
+        Ok(self.kind.build(self.source, body))
+    }
+
+    pub fn finish_with<E>(
+        self,
+        body: Vec<StatementNode<Data>>,
+    ) -> Result<StatementNode<Data>, ParseError<Data, E>> {
+        match body.is_empty() {
+            false => Ok(self.kind.build(self.source, body)),
+            true => Err(ParseError::EmptyBlock {
+                source: self.block_source,
+            }),
+        }
+    }
+}
+
 pub fn parse<T: TokenStream>(
-    parser: &mut TokenParser<T>,
-) -> Result<StatementNode<StreamSpan<T>>, Vec<PError<T>>> {
-    parser.parse_peek_else(
+    parser: &mut LineParser<T>,
+) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
+    match parse_header(&mut parser.line())? {
+        Header::Complete(statement) => Ok(statement),
+        Header::Incomplete(statement) => statement.finish(parser),
+    }
+}
+
+pub fn parse_inline<T: TokenStream>(
+    line: &mut TokenLine<T>,
+) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
+    match parse_header(line)? {
+        // COMPLETE STATEMENT
+        Header::Complete(statement) => Ok(statement),
+
+        // FAILURE CASE
+        Header::Incomplete(incomplete) => Err(vec![ParseError::InlineError {
+            source: incomplete.block_source,
+        }]),
+    }
+}
+
+pub fn parse_header<T: TokenStream>(
+    line: &mut TokenLine<T>,
+) -> Result<Header<T::Source>, Vec<PError<T>>> {
+    line.parse_peek_else(
         |peeker| match peeker.token() {
             // LET STATEMENTS
             Some(Token::Let) => {
                 // consume the let token
-                let parser = peeker.consume();
-                let start = parser.token_start();
+                let line = &mut peeker.consume();
+                let start = line.token_start();
 
                 // parse the lhs
-                let lhs = expr::parse(parser)?;
+                let lhs = expr::parse(line)?;
 
                 // parse the assign symbol
-                parser
-                    .take_expect(Some(&Token::Assign))
+                line.take_expect(Some(&Token::Assign))
                     .map_err(|e| vec![e])?;
 
                 // parse the rhs
-                let rhs = expr::parse(parser)?;
+                let rhs = expr::parse(line)?;
 
                 // parse line close
-                line::parse_close(parser)?;
+                line::parse_close(line)?;
 
-                // create span and build statement
-                let span = parser.span(start..rhs.data.end());
-                Ok(Statement::Assign {
-                    init: true,
-                    lhs,
-                    rhs,
-                }
-                .build_node(span))
+                // create source and build statement
+                let source = line.build_source(start..rhs.data.end());
+                Ok(Header::Complete(
+                    Statement::Assign {
+                        init: true,
+                        lhs,
+                        rhs,
+                    }
+                    .build_node(source),
+                ))
             }
 
             // WHILE LOOP
             Some(Token::While) => {
                 // consume the let token
-                let parser = peeker.consume();
-                let start = parser.token_start();
+                let line = &mut peeker.consume();
+                let start = line.token_start();
 
                 // parse condition
-                let cond = expr::parse(parser)?;
+                let cond = expr::parse(line)?;
 
-                // parse into either inline or multi line loop
-                parser.parse_next(|token, parser| match token {
-                    // INLINE WHILE LOOP
-                    Some(Token::FatArrow) => {
-                        // parse the body statement
-                        let body = statement::parse(parser)?;
+                // build source for while header
+                let source = line.build_source(start..cond.data.end());
 
-                        // create span and build statement
-                        let span = parser.span(start..body.data.end());
-                        Ok(Statement::While {
+                // parse the block header
+                match block::parse_header(line)? {
+                    block::Header::Complete(statement) => Ok(Header::Complete(
+                        Statement::While {
                             cond,
-                            body: vec![body],
+                            body: vec![statement],
                         }
-                        .build_node(span))
+                        .build_node(source),
+                    )),
+                    block::Header::Incomplete(block_source) => {
+                        Ok(Header::Incomplete(IncompleteStatement {
+                            kind: IncompleteKind::While(cond),
+                            block_source,
+                            source,
+                        }))
                     }
-
-                    // MULTI LINE WHILE LOOP
-                    Some(Token::Colon) => todo!("parse multi line while loop"),
-
-                    // FAILURE CASE
-                    token => Err(vec![ParseError::UnexpectedInput {
-                        expect: "':', or '=>'".into(),
-                        found: token,
-                        span: parser.token_span(),
-                    }]),
-                })
+                }
             }
 
             // ASSIGNMENT OR EXPRESSION
             Some(_) => {
                 // ignore the peeked token
-                let parser = peeker.ignore();
+                let line = &mut peeker.ignore();
 
-                // parse the left expression
-                let expr = expr::parse(parser)?;
+                // parse initial expression
+                let expr = expr::parse(line)?;
 
                 // parse into either an assignment or expression
-                parser.parse_next(|token, parser| match token {
-                    // ASSIGNMENT
-                    Some(Token::Assign) => todo!(),
-
+                line.parse_next(|token, line| match token {
                     // OPEN EXPRESSION
                     Some(Token::Newline) | None => {
-                        // create span and build open expression
-                        let span = parser.span(expr.data.span());
-                        Ok(Statement::Expr {
-                            expr,
-                            closed: false,
-                        }
-                        .build_node(span))
+                        // create source and build open expression
+                        let source = line.build_source(expr.data.span());
+                        Ok(Header::Complete(
+                            Statement::Expr {
+                                expr,
+                                closed: false,
+                            }
+                            .build_node(source),
+                        ))
                     }
 
                     // CLOSED EXPRESSION
                     Some(Token::SemiColon) => {
                         // parse line end
-                        line::parse_end(parser)?;
+                        line.take_expect(None).map_err(|e| vec![e])?;
 
-                        // create span and build closed expression
-                        let span = parser.span(expr.data.span());
-                        Ok(Statement::Expr { expr, closed: true }.build_node(span))
+                        // create source and build closed expression
+                        let source = line.build_source(expr.data.span());
+                        Ok(Header::Complete(
+                            Statement::Expr { expr, closed: true }.build_node(source),
+                        ))
+                    }
+
+                    // ASSIGNMENT
+                    Some(Token::Assign) => {
+                        // parse rhs expression
+                        let rhs = expr::parse(line)?;
+
+                        // parse line close
+                        line::parse_close(line)?;
+
+                        // create source and build assignment
+                        let source = line.build_source(expr.data.start()..rhs.data.end());
+                        Ok(Header::Complete(
+                            Statement::Assign {
+                                init: false,
+                                lhs: expr,
+                                rhs,
+                            }
+                            .build_node(source),
+                        ))
                     }
 
                     // FAILURE CASE
                     token => Err(vec![ParseError::UnexpectedInput {
                         expect: "'=', ';', or end of line".into(),
                         found: token,
-                        span: parser.token_span(),
+                        source: line.token_source(),
                     }]),
                 })
             }
@@ -126,248 +213,12 @@ pub fn parse<T: TokenStream>(
             None => Err(vec![ParseError::UnexpectedInput {
                 expect: "'let' or expression".into(),
                 found: None,
-                span: peeker.token_span(),
+                source: peeker.token_source(),
             }]),
         },
         |errors| {
             // if an error is found, just consume until the end of the line
-            errors.consume_until(|t| matches!(t, Token::SemiColon | Token::Newline));
+            errors.consume_until_inclusive(|t| matches!(t, Token::Newline));
         },
     )
-
-    // match parser.peek_some("let or expression") {
-    //     // consume the whole line if an error is found
-    //     Err(error) => {
-    //         let mut errors = vec![error];
-    //         parser.consume_until_with(&mut errors, |t| {
-    //             matches!(t, Token::SemiColon | Token::Newline)
-    //         });
-    //         Err(errors)
-    //     }
-    //     Ok(Token::Let) => {
-    //         // get the start index of the let token
-    //         parser.next();
-    //         let start = parser.token_start();
-
-    //         // parse the lhs
-    //         let lhs = expr::parse(parser).map_err(|mut errors| {
-    //             parser.consume_until_with(&mut errors, |t| {
-    //                 matches!(t, Token::SemiColon | Token::Newline)
-    //             });
-    //             errors
-    //         })?;
-
-    //         // parse the assignment symbol
-    //         parser.parse_next(
-    //             |token, parser| match token {
-    //                 Some(Token::Assign) => Ok(()),
-    //                 token => Err(vec![ParseError::UnexpectedInput {
-    //                     expect: format!("'='"),
-    //                     found: token,
-    //                     span: parser.token_span(),
-    //                 }]),
-    //             },
-    //             |parser| {
-    //                 parser.consume_until(|t| matches!(t, Token::SemiColon | Token::Newline));
-    //             },
-    //         )?;
-
-    //         // parse the rhs
-    //         let rhs = expr::parse(parser).map_err(|mut errors| {
-    //             parser.consume_until_with(&mut errors, |t| {
-    //                 matches!(t, Token::SemiColon | Token::Newline)
-    //             });
-    //             errors
-    //         })?;
-
-    //         // parse close for consitency
-    //         line::parse_close(parser)?;
-
-    //         // build statement
-    //         let span = parser.source().span(start..rhs.data.end());
-    //         Ok(Statement::Assign {
-    //             init: true,
-    //             lhs,
-    //             rhs,
-    //         }
-    //         .build_node(span))
-    //     }
-    //     Ok(Token::While) => {
-    //         // get the start index of the while token
-    //         parser.next(); // consume while token
-    //         let start = parser.token_start();
-
-    //         // parse the condition
-    //         let cond = match expr::parse(parser) {
-    //             Ok(lhs) => lhs,
-    //             Err(mut errors) => {
-    //                 parser.consume_until_with(&mut errors, |t| {
-    //                     matches!(t, Token::SemiColon | Token::Newline)
-    //                 });
-    //                 return Err(errors);
-    //             }
-    //         };
-
-    //         let colon = match parser.next_some("':' or '=>'") {
-    //             // a colon means that the while loop has a body
-    //             Ok(Token::Colon) => parser.token_end(),
-    //             // a fat arrow is immediately followed by a statement
-    //             Ok(Token::FatArrow) => {
-    //                 let body = parse(parser)?;
-    //                 let span = parser.source().span(start..body.data.end());
-    //                 return Ok(Statement::While {
-    //                     cond,
-    //                     body: vec![body],
-    //                 }
-    //                 .build_node(span));
-    //             }
-    //             Ok(token) => {
-    //                 let mut errors = vec![ParseError::UnexpectedInput {
-    //                     expect: "':' or ';".into(),
-    //                     found: Some(token),
-    //                     span: parser.token_span(),
-    //                 }];
-    //                 parser.consume_until_with(&mut errors, |t| {
-    //                     matches!(t, Token::SemiColon | Token::Newline)
-    //                 });
-    //                 return Err(errors);
-    //             }
-    //             Err(error) => {
-    //                 let mut errors = vec![error];
-    //                 parser.consume_line_with(&mut errors);
-    //                 return Err(errors);
-    //             }
-    //         };
-
-    //         // check line end
-    //         if let Err(error) = parser.next_line_end() {
-    //             let mut errors = vec![error];
-    //             parser.consume_line_with(&mut errors);
-    //             return Err(errors);
-    //         }
-
-    //         // parse body statements
-    //         let mut body = Vec::new();
-    //         match parser.peek() {
-    //             Some(Err(error)) => return Err(vec![error]),
-    //             Some(Ok(Token::Indent)) => {
-    //                 parser.next(); // consume indent
-    //                 let mut errors = Vec::new();
-    //                 loop {
-    //                     // parse statement
-    //                     match parse(parser) {
-    //                         Err(mut parse_errors) => errors.append(&mut parse_errors),
-    //                         Ok(statement) => body.push(statement),
-    //                     }
-
-    //                     // check for dedent
-    //                     match parser.peek() {
-    //                         Some(Ok(Token::Dedent)) => {
-    //                             parser.next();
-    //                             break;
-    //                         }
-    //                         Some(Err(error)) => {
-    //                             let mut errors = vec![error];
-    //                             parser.consume_until_with(&mut errors, |t| {
-    //                                 matches!(t, Token::Dedent)
-    //                             });
-    //                             return Err(errors);
-    //                         }
-    //                         Some(_) | None => {}
-    //                     }
-    //                 }
-    //             }
-    //             Some(_) | None => {}
-    //         }
-
-    //         let span = match body.last() {
-    //             Some(body) => parser.source().span(start..body.data.end()),
-    //             None => parser.source().span(start..colon),
-    //         };
-    //         Ok(Statement::While { cond, body }.build_node(span))
-    //     }
-    //     Ok(_) => {
-    //         // first parse the lhs
-    //         let lhs = match expr::parse(parser) {
-    //             Ok(lhs) => lhs,
-    //             Err(mut errors) => {
-    //                 parser.consume_until_with(&mut errors, |t| {
-    //                     matches!(t, Token::SemiColon | Token::Newline)
-    //                 });
-    //                 return Err(errors);
-    //             }
-    //         };
-
-    //         // then check for an assignment
-    //         match parser.next() {
-    //             Some(Ok(Token::Assign)) => (),
-    //             Some(Ok(Token::Newline)) | None => {
-    //                 let span = parser.source().span(lhs.data.span());
-    //                 return Ok(Statement::Expr {
-    //                     expr: lhs,
-    //                     closed: false,
-    //                 }
-    //                 .build_node(span));
-    //             }
-    //             Some(Ok(Token::SemiColon)) => {
-    //                 // ensure line ends after semicolon
-    //                 match parser.next_line_end() {
-    //                     Ok(_) => (),
-    //                     Err(error) => {
-    //                         let mut errors = vec![error];
-    //                         parser.consume_line_with(&mut errors);
-    //                         return Err(errors);
-    //                     }
-    //                 }
-
-    //                 let span = parser.source().span(lhs.data.span());
-    //                 return Ok(Statement::Expr {
-    //                     expr: lhs,
-    //                     closed: true,
-    //                 }
-    //                 .build_node(span));
-    //             }
-    //             Some(Ok(token)) => {
-    //                 let mut errors = vec![ParseError::UnexpectedInput {
-    //                     expect: "'=' or line end".into(),
-    //                     found: Some(token),
-    //                     span: parser.token_span(),
-    //                 }];
-    //                 parser.consume_until_with(&mut errors, |t| {
-    //                     matches!(t, Token::SemiColon | Token::Newline)
-    //                 });
-    //                 return Err(errors);
-    //             }
-    //             Some(Err(error)) => {
-    //                 let mut errors = vec![error];
-    //                 parser.consume_until_with(&mut errors, |t| {
-    //                     matches!(t, Token::SemiColon | Token::Newline)
-    //                 });
-    //                 return Err(errors);
-    //             }
-    //         }
-
-    //         // if an assignment was found, then parse the rhs
-    //         let rhs = match expr::parse(parser) {
-    //             Ok(lhs) => lhs,
-    //             Err(mut errors) => {
-    //                 parser.consume_until_with(&mut errors, |t| {
-    //                     matches!(t, Token::SemiColon | Token::Newline)
-    //                 });
-    //                 return Err(errors);
-    //             }
-    //         };
-
-    //         // parse close for consitency
-    //         parse_close_and_end(parser)?;
-
-    //         let span = parser.source().span(lhs.data.start()..rhs.data.end());
-    //         Ok(Statement::Assign {
-    //             init: false,
-    //             lhs,
-    //             rhs,
-    //         }
-    //         .build_node(span))
-    //     }
-    // }
 }

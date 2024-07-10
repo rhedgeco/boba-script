@@ -4,7 +4,7 @@ pub mod stream;
 pub mod token;
 
 pub use error::PError;
-pub use stream::{TokenParser, TokenStream};
+pub use stream::TokenStream;
 pub use token::Token;
 
 pub mod core {

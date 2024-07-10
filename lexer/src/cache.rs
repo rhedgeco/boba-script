@@ -5,10 +5,7 @@ use std::{
 };
 
 use ariadne::{Cache, Source};
-use boba_script_parser::{
-    stream::{self, SourceSpan},
-    token::Span,
-};
+use boba_script_parser::{stream, token::Span};
 
 /// Represents a range of bytes from a file stored in [`BobaCache`]
 #[derive(Debug, Clone, Copy)]
@@ -17,7 +14,7 @@ pub struct CacheSpan {
     pub span: Span,
 }
 
-impl SourceSpan for CacheSpan {
+impl stream::Source for CacheSpan {
     fn span(&self) -> Span {
         self.span
     }
@@ -88,18 +85,6 @@ pub struct CacheData {
     id: CacheId,
 }
 
-impl stream::Source for CacheData {
-    type Span = CacheSpan;
-
-    fn text(&self) -> &str {
-        self.source.text()
-    }
-
-    fn span(&self, span: impl Into<Span>) -> Self::Span {
-        self.id().span(span)
-    }
-}
-
 impl CacheData {
     pub fn id(&self) -> CacheId {
         self.id
@@ -107,6 +92,10 @@ impl CacheData {
 
     pub fn label(&self) -> &str {
         &self.label
+    }
+
+    pub fn text(&self) -> &str {
+        self.source.text()
     }
 
     pub fn source(&self) -> &Source {
@@ -119,6 +108,17 @@ impl CacheData {
 pub struct BobaCache {
     store: Vec<CacheData>,
     cache_id: u32,
+}
+
+impl Default for BobaCache {
+    fn default() -> Self {
+        static COUNTER: AtomicU32 = AtomicU32::new(0);
+        let cache_id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        Self {
+            cache_id,
+            store: vec![],
+        }
+    }
 }
 
 impl Index<CacheId> for BobaCache {
@@ -146,12 +146,7 @@ impl Cache<CacheId> for BobaCache {
 
 impl BobaCache {
     pub fn new() -> Self {
-        static COUNTER: AtomicU32 = AtomicU32::new(0);
-        let cache_id = COUNTER.fetch_add(1, Ordering::Relaxed);
-        Self {
-            cache_id,
-            store: vec![],
-        }
+        Self::default()
     }
 
     pub fn load(&self, id: CacheId) -> Option<&CacheData> {

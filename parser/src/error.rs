@@ -1,23 +1,28 @@
 use thiserror::Error;
 
-use crate::{stream::Source, Token, TokenStream};
+use crate::{Token, TokenStream};
 
-pub type PError<T> =
-    ParseError<<<T as TokenStream>::Source as Source>::Span, <T as TokenStream>::Error>;
+pub type PError<T> = ParseError<<T as TokenStream>::Source, <T as TokenStream>::Error>;
 
 #[derive(Debug, Error, Clone, PartialEq)]
-pub enum ParseError<Span, TokenError> {
+pub enum ParseError<Source, TokenError> {
     TokenError {
         error: TokenError,
-        span: Span,
+        source: Source,
     },
     UnexpectedInput {
         expect: String,
         found: Option<Token>,
-        span: Span,
+        source: Source,
     },
     UnclosedBrace {
-        open: Span,
-        end: Span,
+        open: Source,
+        end: Source,
+    },
+    InlineError {
+        source: Source,
+    },
+    EmptyBlock {
+        source: Source,
     },
 }

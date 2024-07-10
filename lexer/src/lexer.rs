@@ -1,11 +1,13 @@
 use std::{cmp::Ordering, iter::Peekable};
 
-use boba_script_parser::{
-    core::dashu::integer::IBig, stream::Source, token::Span, Token, TokenStream,
-};
+use boba_script_parser::{core::dashu::integer::IBig, token::Span, Token, TokenStream};
 use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
 
-use crate::{cache::CacheData, error::IndentType, LexerError};
+use crate::{
+    cache::{CacheData, CacheSpan},
+    error::IndentType,
+    LexerError,
+};
 
 #[derive(Debug, PartialEq)]
 enum IndentStyle {
@@ -28,14 +30,18 @@ pub struct Lexer<'a> {
 
 impl<'a> TokenStream for Lexer<'a> {
     type Error = LexerError;
-    type Source = CacheData;
+    type Source = CacheSpan;
 
-    fn span(&self) -> Span {
-        self.span
+    fn token_start(&self) -> usize {
+        self.span.start
     }
 
-    fn source(&self) -> &Self::Source {
-        self.cache
+    fn token_end(&self) -> usize {
+        self.span.end
+    }
+
+    fn build_source(&self, span: impl Into<Span>) -> Self::Source {
+        self.cache.id().span(span)
     }
 }
 

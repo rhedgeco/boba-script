@@ -1,41 +1,31 @@
-use crate::{error::ParseError, PError, Token, TokenParser, TokenStream};
+use crate::{error::ParseError, stream::TokenLine, PError, Token, TokenStream};
 
 pub enum CloseType {
-    Semicolon,
-    LineEnd,
+    SemiColon,
+    EndLine,
 }
 
-pub fn parse_end<T: TokenStream>(parser: &mut TokenParser<T>) -> Result<(), Vec<PError<T>>> {
+pub fn parse_close<T: TokenStream>(parser: &mut TokenLine<T>) -> Result<CloseType, Vec<PError<T>>> {
     parser.parse_next_else(
-        |token, parser| match token {
-            None => Ok(()),
-            token => Err(vec![ParseError::UnexpectedInput {
-                expect: "end of line".into(),
-                found: token,
-                span: parser.token_span(),
-            }]),
-        },
-        |parser| {
-            parser.consume_until(|t| matches!(t, Token::Newline));
-        },
-    )
-}
+        |token, line| match token {
+            // END LINE CASE
+            None => Ok(CloseType::EndLine),
 
-pub fn parse_close<T: TokenStream>(
-    parser: &mut TokenParser<T>,
-) -> Result<CloseType, Vec<PError<T>>> {
-    parser.parse_next_else(
-        |token, parser| match token {
-            Some(Token::SemiColon) => Ok(CloseType::Semicolon),
-            None => Ok(CloseType::LineEnd),
-            token => Err(vec![ParseError::UnexpectedInput {
+            // SEMICOLON CASE
+            Some(Token::SemiColon) => {
+                // ensure nothing comes after semicolon
+                line.take_expect(None).map_err(|e| vec![e])?;
+                Ok(CloseType::SemiColon)
+            }
+
+            // FAILURE CASE
+            Some(token) => Err(vec![ParseError::UnexpectedInput {
                 expect: "';' or end of line".into(),
-                found: token,
-                span: parser.token_span(),
+                found: Some(token),
+                source: line.token_source(),
             }]),
         },
-        |parser| {
-            parser.consume_until(|t| matches!(t, Token::Newline | Token::SemiColon));
-        },
+        // consume the rest of the line on error
+        |errors| errors.consume_line(),
     )
 }
