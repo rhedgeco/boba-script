@@ -14,7 +14,7 @@ pub struct CacheSpan {
     pub span: Span,
 }
 
-impl stream::Source for CacheSpan {
+impl stream::SpanSource for CacheSpan {
     fn span(&self) -> Span {
         self.span
     }

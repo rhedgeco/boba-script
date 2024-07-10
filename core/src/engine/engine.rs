@@ -7,13 +7,13 @@ use crate::{
 
 use super::{ops::OpManager, EvalError, ScopeStack};
 
-pub struct Engine<Data> {
-    _data: PhantomData<*const Data>,
+pub struct Engine<Source> {
+    _source: PhantomData<*const Source>,
     vars: ScopeStack,
     ops: OpManager,
 }
 
-impl<Data> Debug for Engine<Data> {
+impl<Source> Debug for Engine<Source> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Engine")
             .field("vars", &self.vars)
@@ -22,17 +22,17 @@ impl<Data> Debug for Engine<Data> {
     }
 }
 
-impl<Data> Default for Engine<Data> {
+impl<Source> Default for Engine<Source> {
     fn default() -> Self {
         Self {
-            _data: Default::default(),
+            _source: Default::default(),
             vars: Default::default(),
             ops: Default::default(),
         }
     }
 }
 
-impl<Data> Engine<Data> {
+impl<Source> Engine<Source> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -50,25 +50,25 @@ impl<Data> Engine<Data> {
     }
 }
 
-impl<Data: Clone> Engine<Data> {
-    pub fn eval<T: EvalNode<Data>>(
+impl<Source: Clone> Engine<Source> {
+    pub fn eval<T: EvalNode<Source>>(
         &mut self,
-        node: impl AsRef<Node<T, Data>>,
-    ) -> Result<Value, EvalError<Data>> {
+        node: impl AsRef<Node<T, Source>>,
+    ) -> Result<Value, EvalError<Source>> {
         T::eval_node(node.as_ref(), self)
     }
 
     pub fn assign(
         &mut self,
-        lhs: &ExprNode<Data>,
-        rhs: &ExprNode<Data>,
-    ) -> Result<(), EvalError<Data>> {
+        lhs: &ExprNode<Source>,
+        rhs: &ExprNode<Source>,
+    ) -> Result<(), EvalError<Source>> {
         let store = self.destructure(lhs, rhs)?;
-        for (id, value, data) in store {
+        for (id, value, source) in store {
             if let Err(_) = self.vars.set(id, value) {
                 return Err(EvalError::UnknownVariable {
                     name: id.to_string(),
-                    data: data.clone(),
+                    source: source.clone(),
                 });
             }
         }
@@ -78,9 +78,9 @@ impl<Data: Clone> Engine<Data> {
 
     pub fn init_assign(
         &mut self,
-        lhs: &ExprNode<Data>,
-        rhs: &ExprNode<Data>,
-    ) -> Result<(), EvalError<Data>> {
+        lhs: &ExprNode<Source>,
+        rhs: &ExprNode<Source>,
+    ) -> Result<(), EvalError<Source>> {
         let store = self.destructure(lhs, rhs)?;
         for (id, value, _) in store {
             self.vars.init(id, value);
@@ -90,20 +90,20 @@ impl<Data: Clone> Engine<Data> {
 
     fn destructure<'a, 'b>(
         &mut self,
-        lhs: &'a ExprNode<Data>,
-        rhs: &'b ExprNode<Data>,
-    ) -> Result<Vec<(&'a str, Value, &'b Data)>, EvalError<Data>> {
-        fn recurse<'a, 'b, Data: Clone>(
-            lhs: &'a ExprNode<Data>,
-            rhs: &'b ExprNode<Data>,
-            engine: &mut Engine<Data>,
-            store: &mut Vec<(&'a str, Value, &'b Data)>,
-        ) -> Result<(), EvalError<Data>> {
+        lhs: &'a ExprNode<Source>,
+        rhs: &'b ExprNode<Source>,
+    ) -> Result<Vec<(&'a str, Value, &'b Source)>, EvalError<Source>> {
+        fn recurse<'a, 'b, Source: Clone>(
+            lhs: &'a ExprNode<Source>,
+            rhs: &'b ExprNode<Source>,
+            engine: &mut Engine<Source>,
+            store: &mut Vec<(&'a str, Value, &'b Source)>,
+        ) -> Result<(), EvalError<Source>> {
             match &lhs.item {
                 // if the lhs is a variable, then directly assign to it
                 Expr::Var(id) => {
                     let value = engine.eval(rhs)?;
-                    store.push((id, value, &rhs.data));
+                    store.push((id, value, &rhs.source));
                     Ok(())
                 }
                 // if the lhs is a tuple, then loop over each inner expr and assign
@@ -112,8 +112,8 @@ impl<Data: Clone> Engine<Data> {
                         false => Err(EvalError::InvalidTupleSize {
                             lhs_count: lhs_exprs.len(),
                             rhs_count: rhs_exprs.len(),
-                            lhs_data: lhs.data.clone(),
-                            rhs_data: rhs.data.clone(),
+                            lhs_source: lhs.source.clone(),
+                            rhs_source: rhs.source.clone(),
                         }),
                         true => {
                             for (lhs, rhs) in lhs_exprs.iter().zip(rhs_exprs) {
@@ -126,15 +126,15 @@ impl<Data: Clone> Engine<Data> {
                         1 => recurse(&lhs_exprs[0], rhs, engine, store),
                         _ => Err(EvalError::InvalidTupleDestructure {
                             lhs_count: lhs_exprs.len(),
-                            lhs_data: lhs.data.clone(),
-                            rhs_data: rhs.data.clone(),
+                            lhs_source: lhs.source.clone(),
+                            rhs_source: rhs.source.clone(),
                         }),
                     },
                 },
                 // if the lhs is anything else, then the lhs cannot be assigned to
                 _ => {
                     return Err(EvalError::InvalidAssign {
-                        data: lhs.data.clone(),
+                        source: lhs.source.clone(),
                     })
                 }
             }

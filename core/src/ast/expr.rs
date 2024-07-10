@@ -7,10 +7,10 @@ use crate::{
 
 use super::{node::EvalNode, Node};
 
-pub type ExprNode<Data> = Node<Expr<Data>, Data>;
+pub type ExprNode<Source> = Node<Expr<Source>, Source>;
 
 #[derive(Debug, Clone)]
-pub enum Expr<Data> {
+pub enum Expr<Source> {
     // VALUES
     None,
     Bool(bool),
@@ -18,43 +18,43 @@ pub enum Expr<Data> {
     Float(f64),
     String(String),
     Var(String),
-    Tuple(Vec<ExprNode<Data>>),
+    Tuple(Vec<ExprNode<Source>>),
 
     // UNARY OPS
-    Pos(Box<ExprNode<Data>>),
-    Neg(Box<ExprNode<Data>>),
-    Not(Box<ExprNode<Data>>),
+    Pos(Box<ExprNode<Source>>),
+    Neg(Box<ExprNode<Source>>),
+    Not(Box<ExprNode<Source>>),
 
     // BINARY OPS
-    Add(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Sub(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Mul(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Div(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Modulo(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Pow(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Eq(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Lt(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Gt(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    NEq(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    LtEq(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    GtEq(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    And(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Or(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
-    Walrus(Box<ExprNode<Data>>, Box<ExprNode<Data>>),
+    Add(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Sub(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Mul(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Div(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Modulo(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Pow(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Eq(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Lt(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Gt(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    NEq(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    LtEq(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    GtEq(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    And(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Or(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
+    Walrus(Box<ExprNode<Source>>, Box<ExprNode<Source>>),
 
     // TERNARY OP
     Ternary {
-        cond: Box<ExprNode<Data>>,
-        pass: Box<ExprNode<Data>>,
-        fail: Box<ExprNode<Data>>,
+        cond: Box<ExprNode<Source>>,
+        pass: Box<ExprNode<Source>>,
+        fail: Box<ExprNode<Source>>,
     },
 }
 
-impl<Data: Clone> EvalNode<Data> for Expr<Data> {
+impl<Source: Clone> EvalNode<Source> for Expr<Source> {
     fn eval_node(
-        node: &Node<Self, Data>,
-        engine: &mut Engine<Data>,
-    ) -> Result<Value, EvalError<Data>> {
+        node: &Node<Self, Source>,
+        engine: &mut Engine<Source>,
+    ) -> Result<Value, EvalError<Source>> {
         match &node.item {
             // SIMPLE VALUES
             Expr::None => Ok(Value::None),
@@ -74,7 +74,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
             Expr::Var(id) => match engine.vars().get(id) {
                 Some(value) => Ok(value.clone()),
                 None => Err(EvalError::UnknownVariable {
-                    data: node.data.clone(),
+                    source: node.source.clone(),
                     name: id.clone(),
                 }),
             },
@@ -86,12 +86,12 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                     Expr::Var(id) => match engine.vars_mut().set(id, value.clone()) {
                         Ok(_) => Ok(value),
                         Err(_) => Err(EvalError::UnknownVariable {
-                            data: lhs.data.clone(),
+                            source: lhs.source.clone(),
                             name: id.clone(),
                         }),
                     },
                     _ => Err(EvalError::InvalidAssign {
-                        data: lhs.data.clone(),
+                        source: lhs.source.clone(),
                     }),
                 }
             }
@@ -105,7 +105,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                 value => Err(EvalError::UnexpectedType {
                     expect: ValueKind::Bool,
                     found: value.kind(),
-                    data: cond.data.clone(),
+                    source: cond.source.clone(),
                 }),
             },
 
@@ -117,7 +117,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                     None => Err(EvalError::InvalidUnaryOp {
                         ty: inner.kind(),
                         op: "+",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -128,7 +128,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                     None => Err(EvalError::InvalidUnaryOp {
                         ty: inner.kind(),
                         op: "-",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -139,7 +139,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                     None => Err(EvalError::InvalidUnaryOp {
                         ty: inner.kind(),
                         op: "not",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -154,7 +154,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "+",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -167,7 +167,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "-",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -180,7 +180,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "*",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -193,7 +193,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "/",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -206,7 +206,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "%",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -219,7 +219,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "**",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -232,7 +232,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "==",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -245,7 +245,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "<",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -258,7 +258,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: ">",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -271,7 +271,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "!=",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -284,7 +284,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "<=",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -297,7 +297,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: ">=",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -310,7 +310,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "and",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }
@@ -323,7 +323,7 @@ impl<Data: Clone> EvalNode<Data> for Expr<Data> {
                         ty1: v1.kind(),
                         ty2: v2.kind(),
                         op: "or",
-                        data: node.data.clone(),
+                        source: node.source.clone(),
                     }),
                 }
             }

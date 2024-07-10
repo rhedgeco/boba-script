@@ -5,35 +5,35 @@ use crate::{
 
 use super::{expr::ExprNode, node::EvalNode, Node};
 
-pub type StatementNode<Data> = Node<Statement<Data>, Data>;
+pub type StatementNode<Source> = Node<Statement<Source>, Source>;
 
 #[derive(Debug, Clone)]
-pub enum Statement<Data> {
+pub enum Statement<Source> {
     Expr {
-        expr: ExprNode<Data>,
+        expr: ExprNode<Source>,
         closed: bool,
     },
     Assign {
         init: bool,
-        lhs: ExprNode<Data>,
-        rhs: ExprNode<Data>,
+        lhs: ExprNode<Source>,
+        rhs: ExprNode<Source>,
     },
     While {
-        cond: ExprNode<Data>,
-        body: Vec<StatementNode<Data>>,
+        cond: ExprNode<Source>,
+        body: Vec<StatementNode<Source>>,
     },
     If {
-        cond: ExprNode<Data>,
-        pass: Vec<StatementNode<Data>>,
-        fail: Vec<StatementNode<Data>>,
+        cond: ExprNode<Source>,
+        pass: Vec<StatementNode<Source>>,
+        fail: Vec<StatementNode<Source>>,
     },
 }
 
-impl<Data: Clone> EvalNode<Data> for Statement<Data> {
+impl<Source: Clone> EvalNode<Source> for Statement<Source> {
     fn eval_node(
-        node: &Node<Self, Data>,
-        engine: &mut Engine<Data>,
-    ) -> Result<Value, EvalError<Data>> {
+        node: &Node<Self, Source>,
+        engine: &mut Engine<Source>,
+    ) -> Result<Value, EvalError<Source>> {
         match &node.item {
             Statement::Expr { expr, closed } => {
                 let value = engine.eval(expr)?;
@@ -60,7 +60,7 @@ impl<Data: Clone> EvalNode<Data> for Statement<Data> {
                             break Err(EvalError::UnexpectedType {
                                 expect: ValueKind::Bool,
                                 found: value.kind(),
-                                data: cond.data.clone(),
+                                source: cond.source.clone(),
                             })
                         }
                     }
@@ -79,7 +79,7 @@ impl<Data: Clone> EvalNode<Data> for Statement<Data> {
                         return Err(EvalError::UnexpectedType {
                             expect: ValueKind::Bool,
                             found: value.kind(),
-                            data: cond.data.clone(),
+                            source: cond.source.clone(),
                         })
                     }
                 };

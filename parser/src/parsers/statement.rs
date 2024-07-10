@@ -3,24 +3,24 @@ use boba_script_core::ast::{node::Builder, ExprNode, Statement, StatementNode};
 use crate::{
     error::ParseError,
     parsers::expr,
-    stream::{LineParser, Source, TokenLine},
+    stream::{LineParser, SpanSource, TokenLine},
     PError, Token, TokenStream,
 };
 
 use super::{block, line};
 
-pub enum Header<Data: Source> {
-    Complete(StatementNode<Data>),
-    Incomplete(IncompleteStatement<Data>),
+pub enum Header<Source: SpanSource> {
+    Complete(StatementNode<Source>),
+    Incomplete(IncompleteStatement<Source>),
 }
 
-enum IncompleteKind<Data> {
-    While(ExprNode<Data>),
-    If(ExprNode<Data>),
+enum IncompleteKind<Source> {
+    While(ExprNode<Source>),
+    If(ExprNode<Source>),
 }
 
-impl<Data> IncompleteKind<Data> {
-    fn build(self, source: Data, body: Vec<StatementNode<Data>>) -> StatementNode<Data> {
+impl<Source> IncompleteKind<Source> {
+    fn build(self, source: Source, body: Vec<StatementNode<Source>>) -> StatementNode<Source> {
         match self {
             IncompleteKind::While(cond) => Statement::While { cond, body }.build_node(source),
             IncompleteKind::If(cond) => Statement::If {
@@ -33,14 +33,14 @@ impl<Data> IncompleteKind<Data> {
     }
 }
 
-pub struct IncompleteStatement<Data: Source> {
-    kind: IncompleteKind<Data>,
-    block_source: Data,
-    source: Data,
+pub struct IncompleteStatement<Source: SpanSource> {
+    kind: IncompleteKind<Source>,
+    block_source: Source,
+    source: Source,
 }
 
-impl<Data: Source> IncompleteStatement<Data> {
-    pub fn finish<T: TokenStream<Source = Data>>(
+impl<Source: SpanSource> IncompleteStatement<Source> {
+    pub fn finish<T: TokenStream<Source = Source>>(
         self,
         parser: &mut LineParser<T>,
     ) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
@@ -51,8 +51,8 @@ impl<Data: Source> IncompleteStatement<Data> {
 
     pub fn finish_with<E>(
         self,
-        body: Vec<StatementNode<Data>>,
-    ) -> Result<StatementNode<Data>, ParseError<Data, E>> {
+        body: Vec<StatementNode<Source>>,
+    ) -> Result<StatementNode<Source>, ParseError<Source, E>> {
         match body.is_empty() {
             false => Ok(self.kind.build(self.source, body)),
             true => Err(ParseError::EmptyBlock {
@@ -112,7 +112,7 @@ pub fn parse_header<T: TokenStream>(
                 line::parse_close(line)?;
 
                 // create source and build statement
-                let source = line.build_source(start..rhs.data.end());
+                let source = line.build_source(start..rhs.source.end());
                 Ok(Header::Complete(
                     Statement::Assign {
                         init: true,
@@ -133,7 +133,7 @@ pub fn parse_header<T: TokenStream>(
                 let cond = expr::parse(line)?;
 
                 // build source for while header
-                let source = line.build_source(start..cond.data.end());
+                let source = line.build_source(start..cond.source.end());
 
                 // parse the block header
                 match block::parse_header(line)? {
@@ -163,7 +163,7 @@ pub fn parse_header<T: TokenStream>(
                 let cond = expr::parse(line)?;
 
                 // build source for if header
-                let source = line.build_source(start..cond.data.end());
+                let source = line.build_source(start..cond.source.end());
 
                 // parse the block header
                 match block::parse_header(line)? {
@@ -198,7 +198,7 @@ pub fn parse_header<T: TokenStream>(
                     // OPEN EXPRESSION
                     Some(Token::Newline) | None => {
                         // create source and build open expression
-                        let source = line.build_source(expr.data.span());
+                        let source = line.build_source(expr.source.span());
                         Ok(Header::Complete(
                             Statement::Expr {
                                 expr,
@@ -214,7 +214,7 @@ pub fn parse_header<T: TokenStream>(
                         line.take_expect(None).map_err(|e| vec![e])?;
 
                         // create source and build closed expression
-                        let source = line.build_source(expr.data.span());
+                        let source = line.build_source(expr.source.span());
                         Ok(Header::Complete(
                             Statement::Expr { expr, closed: true }.build_node(source),
                         ))
@@ -229,7 +229,7 @@ pub fn parse_header<T: TokenStream>(
                         line::parse_close(line)?;
 
                         // create source and build assignment
-                        let source = line.build_source(expr.data.start()..rhs.data.end());
+                        let source = line.build_source(expr.source.start()..rhs.source.end());
                         Ok(Header::Complete(
                             Statement::Assign {
                                 init: false,

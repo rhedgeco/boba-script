@@ -1,39 +1,39 @@
 use super::value::ValueKind;
 
 #[derive(Debug, Clone)]
-pub enum EvalError<Data> {
+pub enum EvalError<Source> {
     UnknownVariable {
         name: String,
-        data: Data,
+        source: Source,
     },
     InvalidUnaryOp {
         ty: ValueKind,
         op: &'static str,
-        data: Data,
+        source: Source,
     },
     InvalidBinaryOp {
         ty1: ValueKind,
         ty2: ValueKind,
         op: &'static str,
-        data: Data,
+        source: Source,
     },
     InvalidAssign {
-        data: Data,
+        source: Source,
     },
     InvalidTupleSize {
         lhs_count: usize,
         rhs_count: usize,
-        lhs_data: Data,
-        rhs_data: Data,
+        lhs_source: Source,
+        rhs_source: Source,
     },
     InvalidTupleDestructure {
         lhs_count: usize,
-        lhs_data: Data,
-        rhs_data: Data,
+        lhs_source: Source,
+        rhs_source: Source,
     },
     UnexpectedType {
         expect: ValueKind,
         found: ValueKind,
-        data: Data,
+        source: Source,
     },
 }

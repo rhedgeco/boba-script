@@ -6,18 +6,18 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Node<Item, Data> {
+pub struct Node<Item, Source> {
     pub item: Item,
-    pub data: Data,
+    pub source: Source,
 }
 
-impl<Item, Data> DerefMut for Node<Item, Data> {
+impl<Item, Source> DerefMut for Node<Item, Source> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.item
     }
 }
 
-impl<Item, Data> Deref for Node<Item, Data> {
+impl<Item, Source> Deref for Node<Item, Source> {
     type Target = Item;
 
     fn deref(&self) -> &Self::Target {
@@ -25,31 +25,31 @@ impl<Item, Data> Deref for Node<Item, Data> {
     }
 }
 
-impl<Item, Data> AsRef<Node<Item, Data>> for Node<Item, Data> {
-    fn as_ref(&self) -> &Node<Item, Data> {
+impl<Item, Source> AsRef<Node<Item, Source>> for Node<Item, Source> {
+    fn as_ref(&self) -> &Node<Item, Source> {
         self
     }
 }
 
-impl<Item, Data> Node<Item, Data> {
-    pub fn new(item: Item, data: Data) -> Self {
-        Self { item, data }
+impl<Item, Source> Node<Item, Source> {
+    pub fn new(item: Item, source: Source) -> Self {
+        Self { item, source }
     }
 }
 
-pub trait EvalNode<Data: Clone>: Sized {
+pub trait EvalNode<Source: Clone>: Sized {
     fn eval_node(
-        node: &Node<Self, Data>,
-        engine: &mut Engine<Data>,
-    ) -> Result<Value, EvalError<Data>>;
+        node: &Node<Self, Source>,
+        engine: &mut Engine<Source>,
+    ) -> Result<Value, EvalError<Source>>;
 }
 
-pub trait Builder<Data>: Sized {
-    fn build_node(self, data: Data) -> Node<Self, Data>;
+pub trait Builder<Source>: Sized {
+    fn build_node(self, source: Source) -> Node<Self, Source>;
 }
 
-impl<Data, T: Sized> Builder<Data> for T {
-    fn build_node(self, data: Data) -> Node<Self, Data> {
-        Node::new(self, data)
+impl<Source, T: Sized> Builder<Source> for T {
+    fn build_node(self, source: Source) -> Node<Self, Source> {
+        Node::new(self, source)
     }
 }

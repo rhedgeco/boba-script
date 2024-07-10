@@ -2,7 +2,7 @@ use boba_script_core::ast::{node::Builder, Expr, ExprNode};
 
 use crate::{
     error::ParseError,
-    stream::{Source, TokenLine, UntilKind},
+    stream::{SpanSource, TokenLine, UntilKind},
     PError, Token, TokenStream,
 };
 
@@ -148,7 +148,7 @@ pub fn parse_pow<T: TokenStream>(
         let line = &mut peeker.consume(); // consume op
         let rhs = parse_atom(line)?;
         let rhs = parse_pow(rhs, line)?; // parse right to left
-        let source = line.build_source(lhs.data.start()..rhs.data.end());
+        let source = line.build_source(lhs.source.start()..rhs.source.end());
         Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
     })
 }
@@ -173,7 +173,7 @@ pub fn parse_mul<T: TokenStream>(
         let line = &mut peeker.consume(); // consume op
         let rhs = parse_atom(line)?;
         let rhs = parse_pow(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.data.start()..rhs.data.end());
+        let source = line.build_source(lhs.source.start()..rhs.source.end());
         Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
     })
 }
@@ -197,7 +197,7 @@ pub fn parse_add<T: TokenStream>(
         let line = &mut peeker.consume(); // consume op
         let rhs = parse_atom(line)?;
         let rhs = parse_mul(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.data.start()..rhs.data.end());
+        let source = line.build_source(lhs.source.start()..rhs.source.end());
         Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
     })
 }
@@ -225,7 +225,7 @@ pub fn parse_relation<T: TokenStream>(
         let line = &mut peeker.consume(); // consume op
         let rhs = parse_atom(line)?;
         let rhs = parse_add(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.data.start()..rhs.data.end());
+        let source = line.build_source(lhs.source.start()..rhs.source.end());
         Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
     })
 }
@@ -248,7 +248,7 @@ pub fn parse_and<T: TokenStream>(
         let line = &mut peeker.consume(); // consume op
         let rhs = parse_atom(line)?;
         let rhs = parse_relation(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.data.start()..rhs.data.end());
+        let source = line.build_source(lhs.source.start()..rhs.source.end());
         Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
     })
 }
@@ -271,7 +271,7 @@ pub fn parse_or<T: TokenStream>(
         let line = &mut peeker.consume(); // consume op
         let rhs = parse_atom(line)?;
         let rhs = parse_and(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.data.start()..rhs.data.end());
+        let source = line.build_source(lhs.source.start()..rhs.source.end());
         Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
     })
 }
@@ -305,7 +305,7 @@ pub fn parse_ternary<T: TokenStream>(
         let fail = parse(line)?;
 
         // build source and return the ternary
-        let source = line.build_source(cond.data.start()..fail.data.end());
+        let source = line.build_source(cond.source.start()..fail.source.end());
         Ok(Expr::Ternary {
             cond: Box::new(cond),
             pass: Box::new(pass),
@@ -333,7 +333,7 @@ pub fn parse_walrus<T: TokenStream>(
         let line = &mut peeker.consume(); // consume op
         let rhs = parse_atom(line)?;
         let rhs = parse_ternary(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.data.start()..rhs.data.end());
+        let source = line.build_source(lhs.source.start()..rhs.source.end());
         Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
     })
 }
