@@ -1,9 +1,23 @@
 use crate::{error::ParseError, token::Span, PError, Token};
 
-pub trait SpanSource {
+pub trait SpanSource: Clone + Sized {
     fn span(&self) -> Span;
     fn start(&self) -> usize;
     fn end(&self) -> usize;
+    fn build(&self, span: impl Into<Span>) -> Self;
+}
+
+impl<T: SpanSource> SpanSourceExt for T {}
+pub trait SpanSourceExt: SpanSource {
+    fn start_source(&self) -> Self {
+        let start = self.start();
+        self.build(start..start)
+    }
+
+    fn end_source(&self) -> Self {
+        let end = self.end();
+        self.build(end..end)
+    }
 }
 
 pub trait TokenStream: Iterator<Item = Result<Token, Self::Error>> + Sized {

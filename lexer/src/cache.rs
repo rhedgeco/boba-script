@@ -26,6 +26,10 @@ impl stream::SpanSource for CacheSpan {
     fn end(&self) -> usize {
         self.span.end
     }
+
+    fn build(&self, span: impl Into<Span>) -> Self {
+        self.id.span(span)
+    }
 }
 
 impl ariadne::Span for CacheSpan {
