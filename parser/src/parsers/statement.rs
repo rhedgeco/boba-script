@@ -3,71 +3,50 @@ use boba_script_core::ast::{node::Builder, ExprNode, Statement, StatementNode};
 use crate::{
     error::ParseError,
     parsers::expr,
-    stream::{LineParser, SpanSource, TokenLine},
+    stream::{SpanSource, TokenLine},
     PError, Token, TokenStream,
 };
 
-use super::{block, line};
+use super::{
+    block::{self, BlockParser},
+    line,
+};
 
-pub enum Header<Source: SpanSource> {
+pub enum State<Source: SpanSource, Error> {
     Complete(StatementNode<Source>),
-    Incomplete(IncompleteStatement<Source>),
+    Incomplete(StatementParser<Source, Error>),
 }
 
-enum IncompleteKind<Source> {
-    While(ExprNode<Source>),
-    If(ExprNode<Source>),
+enum ParserKind<Source: SpanSource> {
+    While {
+        source: Source,
+        cond: ExprNode<Source>,
+    },
 }
 
-impl<Source> IncompleteKind<Source> {
-    fn build(self, source: Source, body: Vec<StatementNode<Source>>) -> StatementNode<Source> {
-        match self {
-            IncompleteKind::While(cond) => Statement::While { cond, body }.build_node(source),
-            IncompleteKind::If(cond) => Statement::If {
-                cond,
-                pass: body,
-                fail: vec![],
+pub struct StatementParser<Source: SpanSource, Error> {
+    block: BlockParser<Source, Error>,
+    kind: ParserKind<Source>,
+}
+
+impl<Source: SpanSource, Error> StatementParser<Source, Error> {
+    pub fn parse_line<T: TokenStream<Source = Source, Error = Error>>(
+        mut self,
+        line: &mut TokenLine<T>,
+    ) -> Result<State<Source, Error>, Vec<PError<T>>> {
+        let body = match self.block.parse_line(line)? {
+            block::State::Complete(body) => body,
+            block::State::Incomplete(block) => {
+                self.block = block;
+                return Ok(State::Incomplete(self));
             }
-            .build_node(source),
+        };
+
+        match self.kind {
+            ParserKind::While { source, cond } => Ok(State::Complete(
+                Statement::While { cond, body }.build_node(source),
+            )),
         }
-    }
-}
-
-pub struct IncompleteStatement<Source: SpanSource> {
-    kind: IncompleteKind<Source>,
-    block_source: Source,
-    source: Source,
-}
-
-impl<Source: SpanSource> IncompleteStatement<Source> {
-    pub fn finish<T: TokenStream<Source = Source>>(
-        self,
-        parser: &mut LineParser<T>,
-    ) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
-        let header = block::Header::Incomplete(self.block_source);
-        let body = block::parse_with_header(header, parser)?;
-        Ok(self.kind.build(self.source, body))
-    }
-
-    pub fn finish_with<E>(
-        self,
-        body: Vec<StatementNode<Source>>,
-    ) -> Result<StatementNode<Source>, ParseError<Source, E>> {
-        match body.is_empty() {
-            false => Ok(self.kind.build(self.source, body)),
-            true => Err(ParseError::EmptyBlock {
-                source: self.block_source,
-            }),
-        }
-    }
-}
-
-pub fn parse<T: TokenStream>(
-    parser: &mut LineParser<T>,
-) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
-    match parse_header(&mut parser.line())? {
-        Header::Complete(statement) => Ok(statement),
-        Header::Incomplete(statement) => statement.finish(parser),
     }
 }
 
@@ -75,21 +54,21 @@ pub fn parse_inline<T: TokenStream>(
     inline_source: T::Source,
     line: &mut TokenLine<T>,
 ) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
-    match parse_header(line)? {
+    match start_parsing(line)? {
         // COMPLETE STATEMENT
-        Header::Complete(statement) => Ok(statement),
+        State::Complete(statement) => Ok(statement),
 
         // FAILURE CASE
-        Header::Incomplete(incomplete) => Err(vec![ParseError::InlineError {
-            block_source: incomplete.block_source,
+        State::Incomplete(parser) => Err(vec![ParseError::InlineError {
+            block_source: parser.block.source(),
             inline_source: inline_source,
         }]),
     }
 }
 
-pub fn parse_header<T: TokenStream>(
+pub fn start_parsing<T: TokenStream>(
     line: &mut TokenLine<T>,
-) -> Result<Header<T::Source>, Vec<PError<T>>> {
+) -> Result<State<T::Source, T::Error>, Vec<PError<T>>> {
     line.parse_peek_else(
         |peeker| match peeker.token() {
             // LET STATEMENTS
@@ -113,7 +92,7 @@ pub fn parse_header<T: TokenStream>(
 
                 // create source and build statement
                 let source = line.build_source(start..rhs.source.end());
-                Ok(Header::Complete(
+                Ok(State::Complete(
                     Statement::Assign {
                         init: true,
                         lhs,
@@ -136,21 +115,14 @@ pub fn parse_header<T: TokenStream>(
                 let source = line.build_source(start..cond.source.end());
 
                 // parse the block header
-                match block::parse_header(line)? {
-                    block::Header::Complete(statement) => Ok(Header::Complete(
-                        Statement::While {
-                            cond,
-                            body: vec![statement],
-                        }
-                        .build_node(source),
+                match block::start_parsing(line)? {
+                    block::State::Complete(body) => Ok(State::Complete(
+                        Statement::While { cond, body }.build_node(source),
                     )),
-                    block::Header::Incomplete(block_source) => {
-                        Ok(Header::Incomplete(IncompleteStatement {
-                            kind: IncompleteKind::While(cond),
-                            block_source,
-                            source,
-                        }))
-                    }
+                    block::State::Incomplete(block) => Ok(State::Incomplete(StatementParser {
+                        kind: ParserKind::While { source, cond },
+                        block,
+                    })),
                 }
             }
 
@@ -163,26 +135,26 @@ pub fn parse_header<T: TokenStream>(
                 let cond = expr::parse(line)?;
 
                 // build source for if header
-                let source = line.build_source(start..cond.source.end());
+                let _source = line.build_source(start..cond.source.end());
 
                 // parse the block header
-                match block::parse_header(line)? {
-                    block::Header::Complete(statement) => Ok(Header::Complete(
-                        Statement::If {
-                            cond,
-                            pass: vec![statement],
-                            fail: vec![],
-                        }
-                        .build_node(source),
-                    )),
-                    block::Header::Incomplete(block_source) => {
-                        Ok(Header::Incomplete(IncompleteStatement {
-                            kind: IncompleteKind::If(cond),
-                            block_source,
-                            source,
-                        }))
-                    }
-                }
+                // match block::parse_header(line)? {
+                //     block::Header::Complete(statement) => Ok(State::Complete(
+                //         Statement::If {
+                //             cond,
+                //             pass: vec![statement],
+                //             fail: vec![],
+                //         }
+                //         .build_node(source),
+                //     )),
+                //     block::Header::Incomplete(block_source) => Ok(State::Block(BlockStatement {
+                //         kind: BlockKind::If(cond),
+                //         block_source,
+                //         source,
+                //     })),
+                // }
+
+                todo!()
             }
 
             // ASSIGNMENT OR EXPRESSION
@@ -199,7 +171,7 @@ pub fn parse_header<T: TokenStream>(
                     Some(Token::Newline) | None => {
                         // create source and build open expression
                         let source = line.build_source(expr.source.span());
-                        Ok(Header::Complete(
+                        Ok(State::Complete(
                             Statement::Expr {
                                 expr,
                                 closed: false,
@@ -215,7 +187,7 @@ pub fn parse_header<T: TokenStream>(
 
                         // create source and build closed expression
                         let source = line.build_source(expr.source.span());
-                        Ok(Header::Complete(
+                        Ok(State::Complete(
                             Statement::Expr { expr, closed: true }.build_node(source),
                         ))
                     }
@@ -230,7 +202,7 @@ pub fn parse_header<T: TokenStream>(
 
                         // create source and build assignment
                         let source = line.build_source(expr.source.start()..rhs.source.end());
-                        Ok(Header::Complete(
+                        Ok(State::Complete(
                             Statement::Assign {
                                 init: false,
                                 lhs: expr,

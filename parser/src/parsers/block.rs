@@ -2,48 +2,39 @@ use boba_script_core::ast::StatementNode;
 
 use crate::{
     error::ParseError,
-    stream::{LineParser, TokenLine},
+    stream::{SpanSource, TokenLine},
     PError, Token, TokenStream,
 };
 
-use super::statement;
+use super::statement::{self, StatementParser};
 
-pub enum Header<Data> {
-    Complete(StatementNode<Data>),
-    Incomplete(Data),
-}
-
-pub fn parse<T: TokenStream>(
-    parser: &mut LineParser<T>,
-) -> Result<Vec<StatementNode<T::Source>>, Vec<PError<T>>> {
-    let header = parse_header(&mut parser.line())?;
-    parse_with_header(header, parser)
-}
-
-pub fn parse_header<T: TokenStream>(
+pub fn start_parsing<T: TokenStream>(
     line: &mut TokenLine<T>,
-) -> Result<Header<T::Source>, Vec<PError<T>>> {
+) -> Result<State<T::Source, T::Error>, Vec<PError<T>>> {
     line.parse_next_else(
         |token, line| match token {
-            // INCOMPLETE CASE
+            // INLINE CASE
+            Some(Token::FatArrow) => {
+                let inline_source = line.token_source();
+                let statement = statement::parse_inline(inline_source, line)?;
+                Ok(State::Complete(vec![statement]))
+            }
+
+            // MULTI LINE CASE
             Some(Token::Colon) => {
-                // capture colon source
-                let source = line.token_source();
+                // get block source
+                let block_source = line.token_source();
 
                 // ensure end of line
                 line.take_expect(None).map_err(|e| vec![e])?;
 
-                // return incomplete
-                Ok(Header::Incomplete(source))
-            }
-
-            // COMPLETE CASE
-            Some(Token::FatArrow) => {
-                let inline_source = line.token_source();
-                Ok(Header::Complete(statement::parse_inline(
-                    inline_source,
-                    line,
-                )?))
+                // build block parser
+                Ok(State::Incomplete(BlockParser {
+                    pending: Vec::new(),
+                    errors: Vec::new(),
+                    body: Vec::new(),
+                    source: block_source,
+                }))
             }
 
             // FAILURE CASE
@@ -53,68 +44,79 @@ pub fn parse_header<T: TokenStream>(
                 source: line.token_source(),
             }]),
         },
-        // consume rest of line on error
         |errors| errors.consume_line(),
     )
 }
 
-pub fn parse_with_header<T: TokenStream>(
-    header: Header<T::Source>,
-    parser: &mut LineParser<T>,
-) -> Result<Vec<StatementNode<T::Source>>, Vec<PError<T>>> {
-    if let Header::Complete(statement) = header {
-        return Ok(vec![statement]);
+pub enum State<Source: SpanSource, Error> {
+    Complete(Vec<StatementNode<Source>>),
+    Incomplete(BlockParser<Source, Error>),
+}
+
+pub struct BlockParser<Source: SpanSource, Error> {
+    pending: Vec<StatementParser<Source, Error>>,
+    errors: Vec<ParseError<Source, Error>>,
+    body: Vec<StatementNode<Source>>,
+    source: Source,
+}
+
+impl<Source: SpanSource, Error> BlockParser<Source, Error> {
+    pub fn source(&self) -> Source {
+        self.source.clone()
     }
 
-    // consume the previous line
-    parser.consume_line()?;
+    pub fn parse_line<T: TokenStream<Source = Source, Error = Error>>(
+        mut self,
+        line: &mut TokenLine<T>,
+    ) -> Result<State<Source, Error>, Vec<PError<T>>> {
+        // if the body is empty, ensure that it starts with an indent token
+        if self.body.is_empty() {
+            line.parse_peek(|peeker| match peeker.token() {
+                // consume indent if found
+                Some(Token::Indent) => {
+                    peeker.consume();
+                    Ok(())
+                }
 
-    // then check for an indent
-    match parser.line().peek_next().map_err(|e| vec![e])? {
-        // if there is an indent, continue on
-        Some(Token::Indent) => {}
-        // if its not an indent, then the block body is empty
-        _ => return Ok(Vec::new()),
-    }
-
-    // consume all the statements in the body
-    let mut body = Vec::new();
-    let mut parse_errors = Vec::new();
-    loop {
-        // parse the next statement
-        match statement::parse(parser) {
-            Err(mut errors) => parse_errors.append(&mut errors),
-            Ok(statement) => body.push(statement),
+                // otherwise produce an empty body error
+                _ => Err(vec![ParseError::EmptyBlock {
+                    source: self.source.clone(),
+                }]),
+            })?;
         }
 
-        // consume the line
-        if let Err(mut errors) = parser.consume_line() {
-            parse_errors.append(&mut errors);
-        }
+        // parse any pending statements
+        let state = match self.pending.pop() {
+            Some(parser) => parser.parse_line(line),
 
-        // check for dedent
-        match parser.line().peek_next() {
-            // if a dedent or none is found, consume it and break
-            Ok(Some(Token::Dedent)) | Ok(None) => match parser.line().take_next() {
-                Ok(Some(Token::Dedent)) | Ok(None) => break,
-                _ => unreachable!(),
+            // if no more statements are pending check for dedent
+            None => match line.peek_next() {
+                // if we find a dedent, then end parsing and return the data
+                Ok(Some(Token::Dedent)) => match self.errors.is_empty() {
+                    true => return Ok(State::Complete(self.body)),
+                    false => return Err(self.errors),
+                },
+
+                // if we find any other token, parse the line as a statement
+                Ok(_) => statement::start_parsing(line),
+
+                // if we find an error, store it, consume the line, and return incomplete
+                Err(error) => {
+                    self.errors.push(error);
+                    line.consume_line(&mut self.errors);
+                    return Ok(State::Incomplete(self));
+                }
             },
+        };
 
-            // if any other token is found, continue
-            Ok(Some(_)) => continue,
-
-            // if an error is found, consume the line
-            Err(error) => {
-                parse_errors.push(error);
-                parser.line().consume_line(&mut parse_errors);
-            }
+        // store the statement data for later parsing
+        match state {
+            Ok(statement::State::Complete(statement)) => self.body.push(statement),
+            Ok(statement::State::Incomplete(parser)) => self.pending.push(parser),
+            Err(mut errors) => self.errors.append(&mut errors),
         }
-    }
 
-    match parse_errors.is_empty() {
-        // if there are errors, return those
-        false => Err(parse_errors),
-        // otherwise return the body
-        true => Ok(body),
+        // if we get here then the parsing is incomplete
+        Ok(State::Incomplete(self))
     }
 }
