@@ -107,8 +107,11 @@ impl<'a, Stream: TokenStream> TokenLine<'a, Stream> {
     pub fn take_token(&mut self) -> Option<Result<Token, PError<Stream>>> {
         // take peeked token, or generate a new one
         let result = match self.peeked.take() {
-            Some(result) => result,
             None => self.generate()?,
+            Some(result) => {
+                self.span = self.stream.token_span();
+                result
+            }
         };
 
         match result {
