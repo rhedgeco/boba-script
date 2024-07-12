@@ -68,8 +68,8 @@ pub fn parse_atom<T: TokenStream>(
                             ConsumeEnd::Inclusive(_) => {}
                             // otherwise, push an unclosed brace error too
                             _ => errors.push(ParseError::UnclosedBrace {
-                                open: errors.build_source(start..start + 1),
-                                end: errors.token_end_source(),
+                                open: errors.line().build_source(start..start + 1),
+                                end: errors.line().token_end_source(),
                             }),
                         }
                     },
@@ -114,7 +114,6 @@ pub fn parse_with_lhs<T: TokenStream>(
     // keep parsing operators until an invalid operator is found
     loop {
         lhs = match line.peek_token() {
-            Some(Err(error)) => return Err(vec![error]),
             Some(Ok(token)) => match token {
                 Token::Pow => parse_pow(lhs, line)?,
                 Token::Mul | Token::Div | Token::Modulo => parse_mul(lhs, line)?,
@@ -128,7 +127,7 @@ pub fn parse_with_lhs<T: TokenStream>(
                 Token::Walrus => parse_walrus(lhs, line)?,
                 _ => return Ok(lhs),
             },
-            None => return Ok(lhs),
+            _ => return Ok(lhs),
         }
     }
 }
@@ -137,201 +136,160 @@ pub fn parse_pow<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.peek_guard(|peeker| {
-        let op = match peeker.token() {
-            Some(Token::Pow) => Expr::Pow,
-            _ => return Ok(lhs),
-        };
+    let op = match line.peek_token() {
+        Some(Ok(Token::Pow)) => Expr::Pow,
+        _ => return Ok(lhs),
+    };
 
-        let line = &mut peeker.consume(); // consume op
-        let rhs = parse_atom(line)?;
-        let rhs = parse_pow(rhs, line)?; // parse right to left
-        let source = line.build_source(lhs.source.start()..rhs.source.end());
-        Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
-    })
+    line.consume_token(); // consume op
+    let rhs = parse_atom(line)?;
+    let rhs = parse_pow(rhs, line)?; // parse right to left
+    let source = line.build_source(lhs.source.start()..rhs.source.end());
+    Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
 }
 
 pub fn parse_mul<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.peek_guard(|peeker| {
-        let op = match peeker.token() {
-            Some(Token::Mul) => Expr::Mul,
-            Some(Token::Div) => Expr::Div,
-            Some(Token::Modulo) => Expr::Modulo,
-            _ => {
-                // if its not the previous ops
-                // try the next precedence level
-                let line = &mut peeker.ignore();
-                return parse_pow(lhs, line);
-            }
-        };
+    let op = match line.peek_token() {
+        Some(Ok(Token::Mul)) => Expr::Mul,
+        Some(Ok(Token::Div)) => Expr::Div,
+        Some(Ok(Token::Modulo)) => Expr::Modulo,
+        Some(Err(_)) => return Ok(lhs),
+        // try the next precedence level
+        _ => return parse_pow(lhs, line),
+    };
 
-        let line = &mut peeker.consume(); // consume op
-        let rhs = parse_atom(line)?;
-        let rhs = parse_pow(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.source.start()..rhs.source.end());
-        Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
-    })
+    line.consume_token(); // consume op
+    let rhs = parse_atom(line)?;
+    let rhs = parse_pow(rhs, line)?; // parse higher precedence on rhs
+    let source = line.build_source(lhs.source.start()..rhs.source.end());
+    Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
 }
 
 pub fn parse_add<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.peek_guard(|peeker| {
-        let op = match peeker.token() {
-            Some(Token::Add) => Expr::Add,
-            Some(Token::Sub) => Expr::Sub,
-            _ => {
-                // if its not the previous ops
-                // try the next precedence level
-                let line = &mut peeker.ignore();
-                return parse_mul(lhs, line);
-            }
-        };
+    let op = match line.peek_token() {
+        Some(Ok(Token::Add)) => Expr::Add,
+        Some(Ok(Token::Sub)) => Expr::Sub,
+        Some(Err(_)) => return Ok(lhs),
+        // try the next precedence level
+        _ => return parse_mul(lhs, line),
+    };
 
-        let line = &mut peeker.consume(); // consume op
-        let rhs = parse_atom(line)?;
-        let rhs = parse_mul(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.source.start()..rhs.source.end());
-        Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
-    })
+    line.consume_token(); // consume op
+    let rhs = parse_atom(line)?;
+    let rhs = parse_mul(rhs, line)?; // parse higher precedence on rhs
+    let source = line.build_source(lhs.source.start()..rhs.source.end());
+    Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
 }
 
 pub fn parse_relation<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.peek_guard(|peeker| {
-        let op = match peeker.token() {
-            Some(Token::Eq) => Expr::Eq,
-            Some(Token::Lt) => Expr::Lt,
-            Some(Token::Gt) => Expr::Gt,
-            Some(Token::NEq) => Expr::NEq,
-            Some(Token::LtEq) => Expr::LtEq,
-            Some(Token::GtEq) => Expr::GtEq,
-            _ => {
-                // if its not the previous ops
-                // try the next precedence level
-                let line = &mut peeker.ignore();
-                return parse_add(lhs, line);
-            }
-        };
+    let op = match line.peek_token() {
+        Some(Ok(Token::Eq)) => Expr::Eq,
+        Some(Ok(Token::Lt)) => Expr::Lt,
+        Some(Ok(Token::Gt)) => Expr::Gt,
+        Some(Ok(Token::NEq)) => Expr::NEq,
+        Some(Ok(Token::LtEq)) => Expr::LtEq,
+        Some(Ok(Token::GtEq)) => Expr::GtEq,
+        Some(Err(_)) => return Ok(lhs),
+        // try the next precedence level
+        _ => return parse_add(lhs, line),
+    };
 
-        let line = &mut peeker.consume(); // consume op
-        let rhs = parse_atom(line)?;
-        let rhs = parse_add(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.source.start()..rhs.source.end());
-        Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
-    })
+    line.consume_token(); // consume op
+    let rhs = parse_atom(line)?;
+    let rhs = parse_add(rhs, line)?; // parse higher precedence on rhs
+    let source = line.build_source(lhs.source.start()..rhs.source.end());
+    Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
 }
 
 pub fn parse_and<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.peek_guard(|peeker| {
-        let op = match peeker.token() {
-            Some(Token::And) => Expr::And,
-            _ => {
-                // if its not the previous ops
-                // try the next precedence level
-                let line = &mut peeker.ignore();
-                return parse_relation(lhs, line);
-            }
-        };
+    let op = match line.peek_token() {
+        Some(Ok(Token::And)) => Expr::And,
+        // try the next precedence level
+        _ => return parse_relation(lhs, line),
+    };
 
-        let line = &mut peeker.consume(); // consume op
-        let rhs = parse_atom(line)?;
-        let rhs = parse_relation(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.source.start()..rhs.source.end());
-        Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
-    })
+    line.consume_token(); // consume op
+    let rhs = parse_atom(line)?;
+    let rhs = parse_relation(rhs, line)?; // parse higher precedence on rhs
+    let source = line.build_source(lhs.source.start()..rhs.source.end());
+    Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
 }
 
 pub fn parse_or<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.peek_guard(|peeker| {
-        let op = match peeker.token() {
-            Some(Token::Or) => Expr::Or,
-            _ => {
-                // if its not the previous ops
-                // try the next precedence level
-                let line = &mut peeker.ignore();
-                return parse_and(lhs, line);
-            }
-        };
+    let op = match line.peek_token() {
+        Some(Ok(Token::Or)) => Expr::Or,
+        // try the next precedence level
+        _ => return parse_and(lhs, line),
+    };
 
-        let line = &mut peeker.consume(); // consume op
-        let rhs = parse_atom(line)?;
-        let rhs = parse_and(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.source.start()..rhs.source.end());
-        Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
-    })
+    line.consume_token(); // consume op
+    let rhs = parse_atom(line)?;
+    let rhs = parse_and(rhs, line)?; // parse higher precedence on rhs
+    let source = line.build_source(lhs.source.start()..rhs.source.end());
+    Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
 }
 
 pub fn parse_ternary<T: TokenStream>(
     cond: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.peek_guard(|peeker| {
-        // parse the question mark
-        match peeker.token() {
-            Some(Token::Question) => (),
-            _ => {
-                // if its not the previous ops
-                // try the next precedence level
-                let line = &mut peeker.ignore();
-                return parse_or(cond, line);
-            }
-        };
+    // parse the question mark
+    match line.peek_token() {
+        Some(Ok(Token::Question)) => (),
+        // try the next precedence level
+        _ => return parse_or(cond, line),
+    };
 
-        // consume the question mark
-        let line = &mut peeker.consume();
+    // consume the question mark
+    line.consume_token();
 
-        // parse the pass expression
-        let pass = parse(line)?;
+    // parse the pass expression
+    let pass = parse(line)?;
 
-        // parse the colon delimiter
-        line.take_expect(Some(&Token::Colon)).map_err(|e| vec![e])?;
+    // parse the colon delimiter
+    line.take_exact(Some(&Token::Colon)).map_err(|e| vec![e])?;
 
-        // parse the fail expression
-        let fail = parse(line)?;
+    // parse the fail expression
+    let fail = parse(line)?;
 
-        // build source and return the ternary
-        let source = line.build_source(cond.source.start()..fail.source.end());
-        Ok(Expr::Ternary {
-            cond: Box::new(cond),
-            pass: Box::new(pass),
-            fail: Box::new(fail),
-        }
-        .build_node(source))
-    })
+    // build source and return the ternary
+    let source = line.build_source(cond.source.start()..fail.source.end());
+    Ok(Expr::Ternary {
+        cond: Box::new(cond),
+        pass: Box::new(pass),
+        fail: Box::new(fail),
+    }
+    .build_node(source))
 }
 
 pub fn parse_walrus<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.peek_guard(|peeker| {
-        let op = match peeker.token() {
-            Some(Token::Walrus) => Expr::Walrus,
-            _ => {
-                // if its not the previous ops
-                // try the next precedence level
-                let line = &mut peeker.ignore();
-                return parse_ternary(lhs, line);
-            }
-        };
+    let op = match line.peek_token() {
+        Some(Ok(Token::Walrus)) => Expr::Walrus,
+        // try the next precedence level
+        _ => return parse_ternary(lhs, line),
+    };
 
-        let line = &mut peeker.consume(); // consume op
-        let rhs = parse_atom(line)?;
-        let rhs = parse_ternary(rhs, line)?; // parse higher precedence
-        let source = line.build_source(lhs.source.start()..rhs.source.end());
-        Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
-    })
+    line.consume_token(); // consume op
+    let rhs = parse_atom(line)?;
+    let rhs = parse_ternary(rhs, line)?; // parse higher precedence on rhs
+    let source = line.build_source(lhs.source.start()..rhs.source.end());
+    Ok(op(Box::new(lhs), Box::new(rhs)).build_node(source))
 }

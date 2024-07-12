@@ -14,7 +14,7 @@ pub fn parse_close<T: TokenStream>(line: &mut TokenLine<T>) -> Result<CloseType,
             // SEMICOLON CASE
             Some(Token::SemiColon) => {
                 // ensure nothing comes after semicolon
-                line.take_expect(None).map_err(|e| vec![e])?;
+                line.take_exact(None).map_err(|e| vec![e])?;
                 Ok(CloseType::SemiColon)
             }
 

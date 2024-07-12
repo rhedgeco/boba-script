@@ -68,20 +68,19 @@ pub fn parse_inline<T: TokenStream>(
 pub fn start_parsing<T: TokenStream>(
     line: &mut TokenLine<T>,
 ) -> Result<State<T::Source, T::Error>, Vec<PError<T>>> {
-    line.peek_guard_else(
-        |peeker| match peeker.token() {
+    line.guard_else(
+        |line| match line.peek_token() {
             // LET STATEMENTS
-            Some(Token::Let) => {
+            Some(Ok(Token::Let)) => {
                 // consume the let token
-                let line = &mut peeker.consume();
+                line.consume_token();
                 let start = line.token_start();
 
                 // parse the lhs
                 let lhs = expr::parse(line)?;
 
                 // parse the assign symbol
-                line.take_expect(Some(&Token::Assign))
-                    .map_err(|e| vec![e])?;
+                line.take_exact(Some(&Token::Assign)).map_err(|e| vec![e])?;
 
                 // parse the rhs
                 let rhs = expr::parse(line)?;
@@ -102,9 +101,9 @@ pub fn start_parsing<T: TokenStream>(
             }
 
             // WHILE LOOP
-            Some(Token::While) => {
+            Some(Ok(Token::While)) => {
                 // consume the while token
-                let line = &mut peeker.consume();
+                line.consume_token();
                 let start = line.token_start();
 
                 // parse condition
@@ -125,9 +124,9 @@ pub fn start_parsing<T: TokenStream>(
                 }
             }
 
-            Some(Token::If) => {
+            Some(Ok(Token::If)) => {
                 // consume the if token
-                let line = &mut peeker.consume();
+                line.consume_token();
                 let start = line.token_start();
 
                 // parse condition
@@ -158,9 +157,6 @@ pub fn start_parsing<T: TokenStream>(
 
             // ASSIGNMENT OR EXPRESSION
             Some(_) => {
-                // ignore the peeked token
-                let line = &mut peeker.ignore();
-
                 // parse initial expression
                 let expr = expr::parse(line)?;
 
@@ -182,7 +178,7 @@ pub fn start_parsing<T: TokenStream>(
                     // CLOSED EXPRESSION
                     Some(Token::SemiColon) => {
                         // parse line end
-                        line.take_expect(None).map_err(|e| vec![e])?;
+                        line.take_exact(None).map_err(|e| vec![e])?;
 
                         // create source and build closed expression
                         let source = line.build_source(expr.source.span());
@@ -221,14 +217,11 @@ pub fn start_parsing<T: TokenStream>(
             }
 
             // FAILURE CASE
-            None => {
-                let line = peeker.consume();
-                Err(vec![ParseError::UnexpectedInput {
-                    expect: "'let' or expression".into(),
-                    found: None,
-                    source: line.token_source(),
-                }])
-            }
+            None => Err(vec![ParseError::UnexpectedInput {
+                expect: "'let' or expression".into(),
+                found: None,
+                source: line.token_source(),
+            }]),
         },
         |errors| {
             // if an error is found, just consume the line

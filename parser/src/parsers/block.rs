@@ -22,7 +22,7 @@ pub fn start_parsing<T: TokenStream>(
                 let block_source = line.token_source();
 
                 // ensure end of line
-                line.take_expect(None).map_err(|e| vec![e])?;
+                line.take_exact(None).map_err(|e| vec![e])?;
 
                 // build block parser
                 Ok(State::Incomplete(BlockParser {
@@ -67,18 +67,17 @@ impl<Source: SourceSpan, Error> BlockParser<Source, Error> {
     ) -> Result<State<Source, Error>, Vec<PError<T>>> {
         // if the body is empty, ensure that it starts with an indent token
         if self.body.is_empty() {
-            line.peek_guard(|peeker| match peeker.token() {
+            match line.peek_token() {
                 // consume indent if found
-                Some(Token::Indent) => {
-                    peeker.consume();
-                    Ok(())
-                }
+                Some(Ok(Token::Indent)) => line.consume_token(),
 
                 // otherwise produce an empty body error
-                _ => Err(vec![ParseError::EmptyBlock {
-                    source: self.source.clone(),
-                }]),
-            })?;
+                _ => {
+                    return Err(vec![ParseError::EmptyBlock {
+                        source: self.source.clone(),
+                    }])
+                }
+            }
         }
 
         // parse any pending statements
@@ -93,15 +92,8 @@ impl<Source: SourceSpan, Error> BlockParser<Source, Error> {
                     false => return Err(self.errors),
                 },
 
-                // if we find any other token, parse the line as a statement
-                Some(Ok(_)) | None => statement::start_parsing(line),
-
-                // if we find an error, store it, consume the line, and return incomplete
-                Some(Err(error)) => {
-                    self.errors.push(error);
-                    line.consume_line(&mut self.errors);
-                    return Ok(State::Incomplete(self));
-                }
+                // if we find anything else, parse the line as a statement
+                _ => statement::start_parsing(line),
             },
         };
 
