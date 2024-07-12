@@ -1,9 +1,8 @@
 use boba_script_core::ast::{node::Builder, Expr, ExprNode};
 
 use crate::{
-    error::ParseError,
-    stream::{SpanSource, TokenLine, UntilKind},
-    PError, Token, TokenStream,
+    error::PError, stream::SourceSpan, ConsumeEnd, ConsumeFlag, ParseError, Token, TokenLine,
+    TokenStream,
 };
 
 pub fn parse<T: TokenStream>(
@@ -16,7 +15,7 @@ pub fn parse<T: TokenStream>(
 pub fn parse_atom<T: TokenStream>(
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_next(|token, line| match token {
+    line.take_guard(|token, line| match token {
         // VALUES
         Some(Token::None) => Ok(Expr::None.build_node(line.token_source())),
         Some(Token::Bool(value)) => Ok(Expr::Bool(value).build_node(line.token_source())),
@@ -36,13 +35,13 @@ pub fn parse_atom<T: TokenStream>(
             let mut exprs = Vec::new();
             let expr = loop {
                 // try parsing an inner expression
-                let result = line.parse_else(
+                let result = line.guard_else(
                     |line| {
                         // parse expression
                         let inner = parse(line)?;
 
                         // then check for a comma or closing paren
-                        let end = line.parse_next(|token, line| match token {
+                        let end = line.take_guard(|token, line| match token {
                             // a paren will tell the loop it is complete
                             Some(Token::CloseParen) => Ok(true),
                             // and a comma will tell the loop to continue
@@ -60,14 +59,13 @@ pub fn parse_atom<T: TokenStream>(
                     },
                     |errors| {
                         // consume until the end of the inner expression
-                        match errors.consume_until(
-                            // inclusive
-                            |t| matches!(t, Token::CloseParen),
-                            // exclusive
-                            |t| matches!(t, Token::Newline),
-                        ) {
+
+                        match errors.consume_until(|t| match t {
+                            Token::CloseParen => ConsumeFlag::Inclusive,
+                            _ => ConsumeFlag::Ignore,
+                        }) {
                             // if the error found a closing paren, then finish
-                            UntilKind::Inclusive(_) => {}
+                            ConsumeEnd::Inclusive(_) => {}
                             // otherwise, push an unclosed brace error too
                             _ => errors.push(ParseError::UnclosedBrace {
                                 open: errors.build_source(start..start + 1),
@@ -115,9 +113,9 @@ pub fn parse_with_lhs<T: TokenStream>(
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
     // keep parsing operators until an invalid operator is found
     loop {
-        lhs = match line.peek_next() {
-            Err(error) => return Err(vec![error]),
-            Ok(Some(token)) => match token {
+        lhs = match line.peek_token() {
+            Some(Err(error)) => return Err(vec![error]),
+            Some(Ok(token)) => match token {
                 Token::Pow => parse_pow(lhs, line)?,
                 Token::Mul | Token::Div | Token::Modulo => parse_mul(lhs, line)?,
                 Token::Add | Token::Sub => parse_add(lhs, line)?,
@@ -130,7 +128,7 @@ pub fn parse_with_lhs<T: TokenStream>(
                 Token::Walrus => parse_walrus(lhs, line)?,
                 _ => return Ok(lhs),
             },
-            Ok(_) => return Ok(lhs),
+            None => return Ok(lhs),
         }
     }
 }
@@ -139,7 +137,7 @@ pub fn parse_pow<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_peek(|peeker| {
+    line.peek_guard(|peeker| {
         let op = match peeker.token() {
             Some(Token::Pow) => Expr::Pow,
             _ => return Ok(lhs),
@@ -157,7 +155,7 @@ pub fn parse_mul<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_peek(|peeker| {
+    line.peek_guard(|peeker| {
         let op = match peeker.token() {
             Some(Token::Mul) => Expr::Mul,
             Some(Token::Div) => Expr::Div,
@@ -182,7 +180,7 @@ pub fn parse_add<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_peek(|peeker| {
+    line.peek_guard(|peeker| {
         let op = match peeker.token() {
             Some(Token::Add) => Expr::Add,
             Some(Token::Sub) => Expr::Sub,
@@ -206,7 +204,7 @@ pub fn parse_relation<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_peek(|peeker| {
+    line.peek_guard(|peeker| {
         let op = match peeker.token() {
             Some(Token::Eq) => Expr::Eq,
             Some(Token::Lt) => Expr::Lt,
@@ -234,7 +232,7 @@ pub fn parse_and<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_peek(|peeker| {
+    line.peek_guard(|peeker| {
         let op = match peeker.token() {
             Some(Token::And) => Expr::And,
             _ => {
@@ -257,7 +255,7 @@ pub fn parse_or<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_peek(|peeker| {
+    line.peek_guard(|peeker| {
         let op = match peeker.token() {
             Some(Token::Or) => Expr::Or,
             _ => {
@@ -280,7 +278,7 @@ pub fn parse_ternary<T: TokenStream>(
     cond: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_peek(|peeker| {
+    line.peek_guard(|peeker| {
         // parse the question mark
         match peeker.token() {
             Some(Token::Question) => (),
@@ -319,7 +317,7 @@ pub fn parse_walrus<T: TokenStream>(
     lhs: ExprNode<T::Source>,
     line: &mut TokenLine<T>,
 ) -> Result<ExprNode<T::Source>, Vec<PError<T>>> {
-    line.parse_peek(|peeker| {
+    line.peek_guard(|peeker| {
         let op = match peeker.token() {
             Some(Token::Walrus) => Expr::Walrus,
             _ => {

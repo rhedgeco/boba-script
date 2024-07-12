@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{Token, TokenStream};
 
-pub type PError<T> = ParseError<<T as TokenStream>::Source, <T as TokenStream>::Error>;
+pub type PError<S> = ParseError<<S as TokenStream>::Source, <S as TokenStream>::Error>;
 
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ParseError<Source, TokenError> {

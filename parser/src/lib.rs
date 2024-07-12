@@ -1,9 +1,13 @@
+mod parser;
+
 pub mod error;
 pub mod parsers;
 pub mod stream;
 pub mod token;
 
-pub use error::PError;
+pub use parser::*;
+
+pub use error::ParseError;
 pub use stream::TokenStream;
 pub use token::Token;
 

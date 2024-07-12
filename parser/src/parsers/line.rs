@@ -1,12 +1,12 @@
-use crate::{error::ParseError, stream::TokenLine, PError, Token, TokenStream};
+use crate::{error::PError, ParseError, Token, TokenLine, TokenStream};
 
 pub enum CloseType {
     SemiColon,
     EndLine,
 }
 
-pub fn parse_close<T: TokenStream>(parser: &mut TokenLine<T>) -> Result<CloseType, Vec<PError<T>>> {
-    parser.parse_next_else(
+pub fn parse_close<T: TokenStream>(line: &mut TokenLine<T>) -> Result<CloseType, Vec<PError<T>>> {
+    line.take_guard_else(
         |token, line| match token {
             // END LINE CASE
             None => Ok(CloseType::EndLine),

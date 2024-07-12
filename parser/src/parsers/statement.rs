@@ -1,35 +1,34 @@
 use boba_script_core::ast::{node::Builder, ExprNode, Statement, StatementNode};
 
 use crate::{
-    error::ParseError,
-    parsers::expr,
-    stream::{SpanSource, TokenLine},
-    PError, Token, TokenStream,
+    error::PError,
+    stream::{SourceExt, SourceSpan},
+    ParseError, Token, TokenLine, TokenStream,
 };
 
 use super::{
     block::{self, BlockParser},
-    line,
+    expr, line,
 };
 
-pub enum State<Source: SpanSource, Error> {
+pub enum State<Source: SourceSpan, Error> {
     Complete(StatementNode<Source>),
     Incomplete(StatementParser<Source, Error>),
 }
 
-enum ParserKind<Source: SpanSource> {
+enum ParserKind<Source: SourceSpan> {
     While {
         source: Source,
         cond: ExprNode<Source>,
     },
 }
 
-pub struct StatementParser<Source: SpanSource, Error> {
+pub struct StatementParser<Source: SourceSpan, Error> {
     block: BlockParser<Source, Error>,
     kind: ParserKind<Source>,
 }
 
-impl<Source: SpanSource, Error> StatementParser<Source, Error> {
+impl<Source: SourceSpan, Error> StatementParser<Source, Error> {
     pub fn parse_line<T: TokenStream<Source = Source, Error = Error>>(
         mut self,
         line: &mut TokenLine<T>,
@@ -69,7 +68,7 @@ pub fn parse_inline<T: TokenStream>(
 pub fn start_parsing<T: TokenStream>(
     line: &mut TokenLine<T>,
 ) -> Result<State<T::Source, T::Error>, Vec<PError<T>>> {
-    line.parse_peek_else(
+    line.peek_guard_else(
         |peeker| match peeker.token() {
             // LET STATEMENTS
             Some(Token::Let) => {
@@ -166,7 +165,7 @@ pub fn start_parsing<T: TokenStream>(
                 let expr = expr::parse(line)?;
 
                 // parse into either an assignment or expression
-                line.parse_next(|token, line| match token {
+                line.take_guard(|token, line| match token {
                     // OPEN EXPRESSION
                     Some(Token::Newline) | None => {
                         // create source and build open expression
@@ -222,15 +221,18 @@ pub fn start_parsing<T: TokenStream>(
             }
 
             // FAILURE CASE
-            None => Err(vec![ParseError::UnexpectedInput {
-                expect: "'let' or expression".into(),
-                found: None,
-                source: peeker.token_source(),
-            }]),
+            None => {
+                let line = peeker.consume();
+                Err(vec![ParseError::UnexpectedInput {
+                    expect: "'let' or expression".into(),
+                    found: None,
+                    source: line.token_source(),
+                }])
+            }
         },
         |errors| {
-            // if an error is found, just consume until the end of the line
-            errors.consume_until_inclusive(|t| matches!(t, Token::Newline));
+            // if an error is found, just consume the line
+            errors.consume_line();
         },
     )
 }

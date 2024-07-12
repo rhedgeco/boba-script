@@ -1,17 +1,13 @@
 use boba_script_core::ast::StatementNode;
 
-use crate::{
-    error::ParseError,
-    stream::{SpanSource, TokenLine},
-    PError, Token, TokenStream,
-};
+use crate::{error::PError, stream::SourceSpan, ParseError, Token, TokenLine, TokenStream};
 
 use super::statement::{self, StatementParser};
 
 pub fn start_parsing<T: TokenStream>(
     line: &mut TokenLine<T>,
 ) -> Result<State<T::Source, T::Error>, Vec<PError<T>>> {
-    line.parse_next_else(
+    line.take_guard_else(
         |token, line| match token {
             // INLINE CASE
             Some(Token::FatArrow) => {
@@ -48,19 +44,19 @@ pub fn start_parsing<T: TokenStream>(
     )
 }
 
-pub enum State<Source: SpanSource, Error> {
+pub enum State<Source: SourceSpan, Error> {
     Complete(Vec<StatementNode<Source>>),
     Incomplete(BlockParser<Source, Error>),
 }
 
-pub struct BlockParser<Source: SpanSource, Error> {
+pub struct BlockParser<Source: SourceSpan, Error> {
     pending: Vec<StatementParser<Source, Error>>,
     errors: Vec<ParseError<Source, Error>>,
     body: Vec<StatementNode<Source>>,
     source: Source,
 }
 
-impl<Source: SpanSource, Error> BlockParser<Source, Error> {
+impl<Source: SourceSpan, Error> BlockParser<Source, Error> {
     pub fn source(&self) -> Source {
         self.source.clone()
     }
@@ -71,7 +67,7 @@ impl<Source: SpanSource, Error> BlockParser<Source, Error> {
     ) -> Result<State<Source, Error>, Vec<PError<T>>> {
         // if the body is empty, ensure that it starts with an indent token
         if self.body.is_empty() {
-            line.parse_peek(|peeker| match peeker.token() {
+            line.peek_guard(|peeker| match peeker.token() {
                 // consume indent if found
                 Some(Token::Indent) => {
                     peeker.consume();
@@ -90,18 +86,18 @@ impl<Source: SpanSource, Error> BlockParser<Source, Error> {
             Some(parser) => parser.parse_line(line),
 
             // if no more statements are pending check for dedent
-            None => match line.peek_next() {
+            None => match line.peek_token() {
                 // if we find a dedent, then end parsing and return the data
-                Ok(Some(Token::Dedent)) => match self.errors.is_empty() {
+                Some(Ok(Token::Dedent)) => match self.errors.is_empty() {
                     true => return Ok(State::Complete(self.body)),
                     false => return Err(self.errors),
                 },
 
                 // if we find any other token, parse the line as a statement
-                Ok(_) => statement::start_parsing(line),
+                Some(Ok(_)) | None => statement::start_parsing(line),
 
                 // if we find an error, store it, consume the line, and return incomplete
-                Err(error) => {
+                Some(Err(error)) => {
                     self.errors.push(error);
                     line.consume_line(&mut self.errors);
                     return Ok(State::Incomplete(self));
