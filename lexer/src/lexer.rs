@@ -17,8 +17,6 @@ pub struct Lexer {
     style: TabStyle,
     level: usize,
     indent: bool,
-    span_start: usize,
-    bytes: usize,
 }
 
 impl Lexer {
@@ -28,8 +26,6 @@ impl Lexer {
             style: TabStyle::None,
             level: 0,
             indent: true,
-            span_start: 0,
-            bytes: 0,
         }
     }
 
@@ -59,11 +55,11 @@ pub struct LexTokens<'lexer, 'source> {
 
 impl LexTokens<'_, '_> {
     pub fn token_start(&self) -> usize {
-        self.lexer.span_start + self.span.start
+        self.span.start
     }
 
     pub fn token_end(&self) -> usize {
-        self.lexer.span_start + self.span.end
+        self.span.end
     }
 
     pub fn token_span(&self) -> Span {
@@ -389,7 +385,6 @@ impl<'source> LexTokens<'_, 'source> {
 
     fn take_symbol(&mut self) -> Option<&'source str> {
         let symbol = self.symbols.next()?;
-        self.lexer.bytes += symbol.len();
         self.span.end += symbol.len();
         Some(symbol)
     }
@@ -401,9 +396,7 @@ impl<'source> LexTokens<'_, 'source> {
     fn consume_line(&mut self) {
         self.lexer.indent = true;
         self.span.start = self.span.end;
-        while let Some(symbol) = self.symbols.next() {
-            self.lexer.bytes += symbol.len();
-        }
+        while let Some(_) = self.symbols.next() {}
     }
 
     fn tab_error(&mut self, space: bool) -> Option<Result<Token, LexError>> {

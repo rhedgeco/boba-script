@@ -24,14 +24,14 @@ impl SourceSpan for ShellSource {
     }
 }
 
-pub struct ShellTokens {
+pub struct ShellStream {
     tokens: VecDeque<(Result<Token, LexError>, Span)>,
     source: String,
     lexer: Lexer,
     span: Span,
 }
 
-impl Iterator for ShellTokens {
+impl Iterator for ShellStream {
     type Item = Result<Token, LexError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -41,7 +41,7 @@ impl Iterator for ShellTokens {
     }
 }
 
-impl TokenStream for ShellTokens {
+impl TokenStream for ShellStream {
     type Error = LexError;
     type Source = ShellSource;
 
@@ -58,7 +58,7 @@ impl TokenStream for ShellTokens {
     }
 }
 
-impl ShellTokens {
+impl ShellStream {
     pub fn new() -> Self {
         Self {
             tokens: VecDeque::new(),

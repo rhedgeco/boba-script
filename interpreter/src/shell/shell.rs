@@ -4,13 +4,13 @@ use boba_script::{
     core::{engine::Value, Engine},
     lexer::LexError,
     parser::{
-        parsers::statement::{self, State, StatementParser},
+        parsers::statement::{self, ParseState, StatementParser},
         TokenLine,
     },
 };
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use super::{stream::ShellSource, ShellTokens};
+use super::{stream::ShellSource, ShellStream};
 
 pub enum RunState {
     Parsed,
@@ -22,7 +22,7 @@ pub struct Shell {
     editor: Reedline,
     normal_prompt: DefaultPrompt,
     pending_prompt: DefaultPrompt,
-    tokens: ShellTokens,
+    tokens: ShellStream,
     engine: Engine<ShellSource>,
     pending: Option<StatementParser<ShellSource, LexError>>,
 }
@@ -39,7 +39,7 @@ impl Default for Shell {
                 DefaultPromptSegment::Basic(format!("  ...")),
                 DefaultPromptSegment::Empty,
             ),
-            tokens: ShellTokens::new(),
+            tokens: ShellStream::new(),
             engine: Engine::new(),
             pending: None,
         }
@@ -81,16 +81,16 @@ impl Shell {
             let statement = match self.pending.take() {
                 Some(parser) => match parser.parse_line(&mut line) {
                     Err(errors) => Err(errors),
-                    Ok(State::Complete(statement)) => Ok(statement),
-                    Ok(State::Incomplete(parser)) => {
+                    Ok(ParseState::Complete(statement)) => Ok(statement),
+                    Ok(ParseState::Incomplete(parser)) => {
                         self.pending = Some(parser);
                         continue;
                     }
                 },
                 None => match statement::start_parsing(&mut line) {
                     Err(errors) => Err(errors),
-                    Ok(State::Complete(statement)) => Ok(statement),
-                    Ok(State::Incomplete(parser)) => {
+                    Ok(ParseState::Complete(statement)) => Ok(statement),
+                    Ok(ParseState::Incomplete(parser)) => {
                         self.pending = Some(parser);
                         continue;
                     }

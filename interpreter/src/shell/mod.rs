@@ -4,4 +4,4 @@ pub mod stream;
 
 pub use shell::*;
 
-pub use stream::ShellTokens;
+pub use stream::ShellStream;

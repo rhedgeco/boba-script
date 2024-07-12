@@ -11,7 +11,7 @@ use super::{
     expr, line,
 };
 
-pub enum State<Source: SourceSpan, Error> {
+pub enum ParseState<Source: SourceSpan, Error> {
     Complete(StatementNode<Source>),
     Incomplete(StatementParser<Source, Error>),
 }
@@ -25,58 +25,34 @@ pub enum StatementParser<Source: SourceSpan, Error> {
 }
 
 impl<Source: SourceSpan, Error> StatementParser<Source, Error> {
-    pub fn block_source(&self) -> Source {
-        match self {
-            StatementParser::While {
-                source: _,
-                cond: _,
-                block,
-            } => block.source(),
-        }
-    }
-
     pub fn parse_line<T: TokenStream<Source = Source, Error = Error>>(
         self,
         line: &mut TokenLine<T>,
-    ) -> Result<State<Source, Error>, Vec<PError<T>>> {
+    ) -> Result<ParseState<Source, Error>, Vec<PError<T>>> {
         match self {
             StatementParser::While {
                 source,
                 cond,
                 block,
             } => match block.parse_line(line)? {
-                block::State::Complete(body) => Ok(State::Complete(
+                block::ParseState::Complete(body) => Ok(ParseState::Complete(
                     Statement::While { cond, body }.build_node(source),
                 )),
-                block::State::Incomplete(block) => Ok(State::Incomplete(StatementParser::While {
-                    source,
-                    cond,
-                    block,
-                })),
+                block::ParseState::Incomplete(block) => {
+                    Ok(ParseState::Incomplete(StatementParser::While {
+                        source,
+                        cond,
+                        block,
+                    }))
+                }
             },
         }
     }
 }
 
-pub fn parse_inline<T: TokenStream>(
-    inline_source: T::Source,
-    line: &mut TokenLine<T>,
-) -> Result<StatementNode<T::Source>, Vec<PError<T>>> {
-    match start_parsing(line)? {
-        // COMPLETE STATEMENT
-        State::Complete(statement) => Ok(statement),
-
-        // FAILURE CASE
-        State::Incomplete(parser) => Err(vec![ParseError::InlineError {
-            block_source: parser.block_source(),
-            inline_source: inline_source,
-        }]),
-    }
-}
-
 pub fn start_parsing<T: TokenStream>(
     line: &mut TokenLine<T>,
-) -> Result<State<T::Source, T::Error>, Vec<PError<T>>> {
+) -> Result<ParseState<T::Source, T::Error>, Vec<PError<T>>> {
     line.guard_else(
         |line| match line.peek_token() {
             // LET STATEMENTS
@@ -99,7 +75,7 @@ pub fn start_parsing<T: TokenStream>(
 
                 // create source and build statement
                 let source = line.build_source(start..rhs.source.end());
-                Ok(State::Complete(
+                Ok(ParseState::Complete(
                     Statement::Assign {
                         init: true,
                         lhs,
@@ -122,18 +98,14 @@ pub fn start_parsing<T: TokenStream>(
                 let source = line.build_source(start..cond.source.end());
 
                 // parse the block header
-                match block::start_parsing(line)? {
-                    block::State::Complete(body) => Ok(State::Complete(
-                        Statement::While { cond, body }.build_node(source),
-                    )),
-                    block::State::Incomplete(block) => {
-                        Ok(State::Incomplete(StatementParser::While {
-                            source,
-                            cond,
-                            block,
-                        }))
-                    }
-                }
+                let block = block::start_parsing(line)?;
+
+                // return the while parser
+                Ok(ParseState::Incomplete(StatementParser::While {
+                    source,
+                    cond,
+                    block,
+                }))
             }
 
             Some(Ok(Token::If)) => {
@@ -178,7 +150,7 @@ pub fn start_parsing<T: TokenStream>(
                     Some(Token::Newline) | None => {
                         // create source and build open expression
                         let source = line.build_source(expr.source.span());
-                        Ok(State::Complete(
+                        Ok(ParseState::Complete(
                             Statement::Expr {
                                 expr,
                                 closed: false,
@@ -194,7 +166,7 @@ pub fn start_parsing<T: TokenStream>(
 
                         // create source and build closed expression
                         let source = line.build_source(expr.source.span());
-                        Ok(State::Complete(
+                        Ok(ParseState::Complete(
                             Statement::Expr { expr, closed: true }.build_node(source),
                         ))
                     }
@@ -209,7 +181,7 @@ pub fn start_parsing<T: TokenStream>(
 
                         // create source and build assignment
                         let source = line.build_source(expr.source.start()..rhs.source.end());
-                        Ok(State::Complete(
+                        Ok(ParseState::Complete(
                             Statement::Assign {
                                 init: false,
                                 lhs: expr,
