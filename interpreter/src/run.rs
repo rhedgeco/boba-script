@@ -1,23 +1,29 @@
 use std::{fs, path::PathBuf};
 
-use boba_script::lexer::{BobaCache, Lexer};
+use boba_script::lexer::{LexResult, LexerState, LineLexer, TextLines};
 
 pub fn file(path: PathBuf) {
     let name = path.to_string_lossy();
-    let mut cache = BobaCache::new();
-    let data = match fs::read_to_string(&path) {
-        Ok(data) => cache.store(name, data),
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
         Err(err) => {
             eprintln!("Failed to open {name}: {err}");
             return;
         }
     };
 
-    let lexer = Lexer::new(data);
-    for result in lexer {
-        match result {
-            Ok(token) => println!("{token}"),
-            Err(error) => eprintln!("{error}"),
+    let mut state = LexerState::new();
+    let lines = TextLines::new(&text);
+    for line in lines {
+        let mut lexer = LineLexer::new_with(line, state);
+        loop {
+            match lexer.generate() {
+                LexResult::Token(token) => println!("{token:?}"),
+                LexResult::Error(error) => eprintln!("{error}"),
+                _ => break,
+            }
         }
+
+        state = lexer.consume();
     }
 }

@@ -1,35 +1,16 @@
 use std::{
     fmt::{Debug, Display},
-    ops::Index,
+    ops::{Index, Range},
     sync::atomic::{AtomicU32, Ordering},
 };
 
 use ariadne::{Cache, Source};
-use boba_script_parser::{stream, token::Span};
 
 /// Represents a range of bytes from a file stored in [`BobaCache`]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct CacheSpan {
     pub id: CacheId,
-    pub span: Span,
-}
-
-impl stream::SpanSource for CacheSpan {
-    fn span(&self) -> Span {
-        self.span
-    }
-
-    fn start(&self) -> usize {
-        self.span.start
-    }
-
-    fn end(&self) -> usize {
-        self.span.end
-    }
-
-    fn build(&self, span: impl Into<Span>) -> Self {
-        self.id.span(span)
-    }
+    pub span: Range<usize>,
 }
 
 impl ariadne::Span for CacheSpan {
@@ -49,7 +30,7 @@ impl ariadne::Span for CacheSpan {
 }
 
 impl CacheSpan {
-    pub fn new(id: CacheId, span: impl Into<Span>) -> CacheSpan {
+    pub fn new(id: CacheId, span: impl Into<Range<usize>>) -> CacheSpan {
         Self {
             id,
             span: span.into(),
@@ -62,7 +43,7 @@ impl CacheSpan {
 pub struct CacheId(u64);
 
 impl CacheId {
-    pub fn span(&self, span: impl Into<Span>) -> CacheSpan {
+    pub fn span(&self, span: impl Into<Range<usize>>) -> CacheSpan {
         CacheSpan::new(*self, span)
     }
 

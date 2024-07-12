@@ -1,7 +1,9 @@
 use std::fmt::Display;
 
 use ariadne::{Color, Label, Report, ReportKind, Span};
-use boba_script::{core::engine::EvalError, lexer::cache::CacheSpan, parser::error::ParseError};
+use boba_script::{core::engine::EvalError, parser::error::ParseError};
+
+use crate::cache::CacheSpan;
 
 pub trait ToAriadne {
     fn to_ariadne(&self) -> Report<CacheSpan>;

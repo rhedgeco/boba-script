@@ -17,7 +17,7 @@ fn main() {
         None => {
             let mut shell = Shell::new();
             loop {
-                match shell.read_line() {
+                match shell.read_statement() {
                     Err(error) => panic!("{error}"),
                     Ok(RunState::Success) => continue,
                     Ok(RunState::CtrlC) => {

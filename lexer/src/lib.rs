@@ -1,9 +1,9 @@
 mod lexer;
 
-pub mod cache;
 pub mod error;
+pub mod line;
 
 pub use lexer::*;
 
-pub use cache::BobaCache;
 pub use error::LexerError;
+pub use line::{TextLine, TextLines};
