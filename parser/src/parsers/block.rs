@@ -4,39 +4,6 @@ use crate::{error::PError, stream::SourceSpan, ParseError, Token, TokenLine, Tok
 
 use super::statement::{self, StatementParser};
 
-pub fn start_parsing<T: TokenStream>(
-    line: &mut TokenLine<T>,
-) -> Result<BlockParser<T::Source, T::Error>, Vec<PError<T>>> {
-    line.take_guard_else(
-        |token, line| match token {
-            // check for leading block colon
-            Some(Token::Colon) => {
-                // get block source
-                let block_source = line.token_source();
-
-                // ensure end of line
-                line.take_exact(None).map_err(|e| vec![e])?;
-
-                // build block parser
-                Ok(BlockParser {
-                    pending: Vec::new(),
-                    errors: Vec::new(),
-                    body: Vec::new(),
-                    source: block_source,
-                })
-            }
-
-            // otherwise return an error
-            token => Err(vec![ParseError::UnexpectedInput {
-                expect: "':'".into(),
-                found: token,
-                source: line.token_source(),
-            }]),
-        },
-        |errors| errors.consume_line(),
-    )
-}
-
 pub enum ParseState<Source: SourceSpan, Error> {
     Complete(Vec<StatementNode<Source>>),
     Incomplete(BlockParser<Source, Error>),
@@ -100,4 +67,37 @@ impl<Source: SourceSpan, Error> BlockParser<Source, Error> {
         // if we get here then the parsing is incomplete
         Ok(ParseState::Incomplete(self))
     }
+}
+
+pub fn start_parsing<T: TokenStream>(
+    line: &mut TokenLine<T>,
+) -> Result<BlockParser<T::Source, T::Error>, Vec<PError<T>>> {
+    line.take_guard_else(
+        |token, line| match token {
+            // check for leading block colon
+            Some(Token::Colon) => {
+                // get block source
+                let block_source = line.token_source();
+
+                // ensure end of line
+                line.take_exact(None).map_err(|e| vec![e])?;
+
+                // build block parser
+                Ok(BlockParser {
+                    pending: Vec::new(),
+                    errors: Vec::new(),
+                    body: Vec::new(),
+                    source: block_source,
+                })
+            }
+
+            // otherwise return an error
+            token => Err(vec![ParseError::UnexpectedInput {
+                expect: "':'".into(),
+                found: token,
+                source: line.token_source(),
+            }]),
+        },
+        |errors| errors.consume_line(),
+    )
 }
