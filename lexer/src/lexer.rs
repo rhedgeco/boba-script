@@ -3,7 +3,7 @@ use std::{cmp::Ordering, iter::Peekable};
 use boba_script_parser::{core::dashu::integer::IBig, token::Span, Token};
 use unicode_segmentation::{Graphemes, UnicodeSegmentation};
 
-use crate::{error::IndentType, LexerError, TextLine};
+use crate::{error::IndentType, LexError};
 
 #[derive(PartialEq)]
 enum TabStyle {
@@ -12,93 +12,72 @@ enum TabStyle {
     None,
 }
 
-pub enum LexResult {
-    Token(Token),
-    Error(LexerError),
-    Incomplete,
-    Finished,
-}
-
-pub struct LexerState {
-    // indent management
-    pending_block: bool,
+pub struct Lexer {
     levels: Vec<usize>,
     style: TabStyle,
     level: usize,
     indent: bool,
-
-    // span management
-    progress: usize,
-    start: usize,
+    span_start: usize,
+    bytes: usize,
 }
 
-impl LexerState {
+impl Lexer {
     pub fn new() -> Self {
         Self {
-            pending_block: false,
             levels: Vec::new(),
             style: TabStyle::None,
             level: 0,
             indent: true,
-            progress: 0,
-            start: 0,
+            span_start: 0,
+            bytes: 0,
         }
     }
 
-    pub fn close_all_blocks(&mut self) {
-        self.pending_block = false;
+    pub fn close_blocks(&mut self) -> usize {
+        let levels = self.levels.len();
         self.levels.clear();
         self.level = 0;
+        levels
     }
 
-    pub fn is_finished(&self) -> bool {
-        if !self.levels.is_empty() {
-            return false;
+    pub fn lex<'source>(&mut self, source: &'source str) -> LexTokens<'_, 'source> {
+        LexTokens {
+            lexer: self,
+            symbols: source.graphemes(true).peekable(),
+            source,
+            span: Span::from(0..0),
         }
-
-        if self.pending_block {
-            return false;
-        }
-
-        true
     }
 }
 
-pub struct LineLexer<'a> {
-    symbols: Peekable<Graphemes<'a>>,
-    line: &'a str,
-    state: LexerState,
+pub struct LexTokens<'lexer, 'source> {
+    lexer: &'lexer mut Lexer,
+    symbols: Peekable<Graphemes<'source>>,
+    source: &'source str,
     span: Span,
 }
 
-impl<'a> LineLexer<'a> {
-    pub fn new(line: TextLine<'a>) -> Self {
-        Self::new_with(line, LexerState::new())
+impl LexTokens<'_, '_> {
+    pub fn token_start(&self) -> usize {
+        self.lexer.span_start + self.span.start
     }
 
-    pub fn new_with(line: TextLine<'a>, state: LexerState) -> Self {
-        Self {
-            symbols: line.text().graphemes(true).peekable(),
-            line: line.text(),
-            state,
-            span: (0..0).into(),
-        }
+    pub fn token_end(&self) -> usize {
+        self.lexer.span_start + self.span.end
     }
 
-    pub fn consume(self) -> LexerState {
-        self.state
+    pub fn token_span(&self) -> Span {
+        (self.token_start()..self.token_end()).into()
     }
+}
 
-    pub fn span(&self) -> Span {
-        let start = self.state.start + self.span.start;
-        let end = self.state.start + self.span.end;
-        (start..end).into()
-    }
+impl Iterator for LexTokens<'_, '_> {
+    type Item = Result<Token, LexError>;
 
-    pub fn generate(&mut self) -> LexResult {
+    fn next(&mut self) -> Option<Self::Item> {
         // check if an indent has to be scanned
-        if self.state.indent {
-            self.state.indent = false;
+        if self.lexer.indent {
+            self.lexer.indent = false;
             self.span.start = self.span.end;
 
             // scan all indent tokens
@@ -108,7 +87,8 @@ impl<'a> LineLexer<'a> {
                 let Some(symbol) = self.peek_symbol() else {
                     // if there is none, consume the lin and dont update indent
                     // indent/dedent/newline tokens should not be sent on blank lines
-                    return self.consume_line();
+                    self.consume_line();
+                    return None;
                 };
 
                 // match the symbol with the stored indent style
@@ -117,19 +97,20 @@ impl<'a> LineLexer<'a> {
                     // if a newline or comment is found
                     // consume the rest of the line
                     "\n" | "\r" | "\r\n" | "#" => {
-                        return self.consume_line();
+                        self.consume_line();
+                        return None;
                     }
 
                     // ARBITRARY STYLE CASES
                     // if the indent style has not been decided yet
                     // define the indent style, consume the symbol, and increment the level
-                    " " if self.state.style == TabStyle::None => {
-                        self.state.style = TabStyle::Spaces;
+                    " " if self.lexer.style == TabStyle::None => {
+                        self.lexer.style = TabStyle::Spaces;
                         self.consume_symbol();
                         new_level += 1;
                     }
-                    "\t" if self.state.style == TabStyle::None => {
-                        self.state.style = TabStyle::Tabs;
+                    "\t" if self.lexer.style == TabStyle::None => {
+                        self.lexer.style = TabStyle::Tabs;
                         self.consume_symbol();
                         new_level += 1;
                     }
@@ -137,21 +118,21 @@ impl<'a> LineLexer<'a> {
                     // CORRECT STYLE CASES
                     // if the indent character matches the internal style
                     // then just consume the token and increment the level
-                    " " if self.state.style == TabStyle::Spaces => {
+                    " " if self.lexer.style == TabStyle::Spaces => {
                         self.consume_symbol();
                         new_level += 1;
                     }
-                    "\t" if self.state.style == TabStyle::Tabs => {
+                    "\t" if self.lexer.style == TabStyle::Tabs => {
                         self.consume_symbol();
                         new_level += 1;
                     }
 
                     // INVALID STYLE CASES
                     // if the indent character doesnt match the internal style, return a tab error
-                    " " if self.state.style == TabStyle::Tabs => {
+                    " " if self.lexer.style == TabStyle::Tabs => {
                         return self.tab_error(true);
                     }
-                    "\t" if self.state.style == TabStyle::Spaces => {
+                    "\t" if self.lexer.style == TabStyle::Spaces => {
                         return self.tab_error(false);
                     }
 
@@ -162,25 +143,25 @@ impl<'a> LineLexer<'a> {
             }
 
             // then update the internal level
-            self.state.level = new_level;
+            self.lexer.level = new_level;
         }
 
         // check if indent/dedent tokens need to be sent
-        let last_level = self.state.levels.last().unwrap_or(&0);
-        match self.state.level.cmp(last_level) {
+        let last_level = self.lexer.levels.last().unwrap_or(&0);
+        match self.lexer.level.cmp(last_level) {
             // if the levels are equal, then do nothing and continue
             Ordering::Equal => {}
             // if the indent level is less than the last
             // then pop the last level and produce a dedent token
             Ordering::Less => {
-                self.state.levels.pop();
-                return LexResult::Token(Token::Dedent);
+                self.lexer.levels.pop();
+                return Some(Ok(Token::Dedent));
             }
             // if the indent level is greater than the last
             // then store the new level and produce an indent token
             Ordering::Greater => {
-                self.state.levels.push(self.state.level);
-                return LexResult::Token(Token::Indent);
+                self.lexer.levels.push(self.lexer.level);
+                return Some(Ok(Token::Indent));
             }
         }
 
@@ -190,10 +171,11 @@ impl<'a> LineLexer<'a> {
             // get the next symbol
             self.span.start = self.span.end;
             let Some(symbol) = self.take_symbol() else {
-                return self.consume_line();
+                self.consume_line();
+                return None;
             };
 
-            self.state.pending_block = false;
+            // then match the symbol to a token
             return match symbol {
                 // WHITESPACE
                 " " | "\t" => continue, // skip whitespace
@@ -201,80 +183,78 @@ impl<'a> LineLexer<'a> {
                 // NEWLINE / COMMENT
                 // if a comment or newline is found, consume the line
                 "\n" | "\r" | "\r\n" | "#" => {
-                    return self.consume_line();
+                    self.consume_line();
+                    return None;
                 }
 
                 // SIMPLE TOKENS
-                "+" => LexResult::Token(Token::Add),
-                "/" => LexResult::Token(Token::Div),
-                "%" => LexResult::Token(Token::Modulo),
-                "." => LexResult::Token(Token::Period),
-                "," => LexResult::Token(Token::Comma),
-                ";" => LexResult::Token(Token::SemiColon),
-                "?" => LexResult::Token(Token::Question),
-                "(" => LexResult::Token(Token::OpenParen),
-                ")" => LexResult::Token(Token::CloseParen),
-                "{" => LexResult::Token(Token::OpenCurly),
-                "}" => LexResult::Token(Token::CloseCurly),
-                "[" => LexResult::Token(Token::OpenSquare),
-                "]" => LexResult::Token(Token::CloseSquare),
+                "+" => Some(Ok(Token::Add)),
+                "/" => Some(Ok(Token::Div)),
+                "%" => Some(Ok(Token::Modulo)),
+                "." => Some(Ok(Token::Period)),
+                "," => Some(Ok(Token::Comma)),
+                ";" => Some(Ok(Token::SemiColon)),
+                "?" => Some(Ok(Token::Question)),
+                "(" => Some(Ok(Token::OpenParen)),
+                ")" => Some(Ok(Token::CloseParen)),
+                "{" => Some(Ok(Token::OpenCurly)),
+                "}" => Some(Ok(Token::CloseCurly)),
+                "[" => Some(Ok(Token::OpenSquare)),
+                "]" => Some(Ok(Token::CloseSquare)),
 
                 // MULTI TOKENS
                 "-" => match self.peek_symbol() {
                     Some(">") => {
                         self.consume_symbol();
-                        LexResult::Token(Token::Arrow)
+                        Some(Ok(Token::Arrow))
                     }
-                    _ => LexResult::Token(Token::Sub),
+                    _ => Some(Ok(Token::Sub)),
                 },
                 "*" => match self.peek_symbol() {
                     Some("*") => {
                         self.consume_symbol();
-                        LexResult::Token(Token::Pow)
+                        Some(Ok(Token::Pow))
                     }
-                    _ => LexResult::Token(Token::Mul),
+                    _ => Some(Ok(Token::Mul)),
                 },
                 "=" => match self.peek_symbol() {
                     Some("=") => {
                         self.consume_symbol();
-                        LexResult::Token(Token::Eq)
+                        Some(Ok(Token::Eq))
                     }
                     Some(">") => {
                         self.consume_symbol();
-                        LexResult::Token(Token::FatArrow)
+                        Some(Ok(Token::FatArrow))
                     }
-                    _ => LexResult::Token(Token::Assign),
+                    _ => Some(Ok(Token::Assign)),
                 },
                 "<" => match self.peek_symbol() {
                     Some("=") => {
                         self.consume_symbol();
-                        LexResult::Token(Token::LtEq)
+                        Some(Ok(Token::LtEq))
                     }
-                    _ => LexResult::Token(Token::Lt),
+                    _ => Some(Ok(Token::Lt)),
                 },
                 ">" => match self.peek_symbol() {
                     Some("=") => {
                         self.consume_symbol();
-                        LexResult::Token(Token::GtEq)
+                        Some(Ok(Token::GtEq))
                     }
-                    _ => LexResult::Token(Token::Gt),
+                    _ => Some(Ok(Token::Gt)),
                 },
                 "!" => match self.peek_symbol() {
                     Some("=") => {
                         self.consume_symbol();
-                        LexResult::Token(Token::NEq)
+                        Some(Ok(Token::NEq))
                     }
-                    _ => LexResult::Token(Token::Not),
+                    _ => Some(Ok(Token::Not)),
                 },
                 ":" => match self.peek_symbol() {
                     Some("=") => {
                         self.consume_symbol();
-                        LexResult::Token(Token::Walrus)
+                        Some(Ok(Token::Walrus))
                     }
-                    _ => {
-                        self.state.pending_block = true;
-                        LexResult::Token(Token::Colon)
-                    }
+                    _ => Some(Ok(Token::Colon)),
                 },
 
                 // IDENTIFIERS
@@ -285,8 +265,8 @@ impl<'a> LineLexer<'a> {
                                 self.consume_symbol(); // consume symbol
                             }
                             _ => {
-                                let ident = &self.line[self.span.range()];
-                                return LexResult::Token(Token::parse_ident(ident));
+                                let ident = &self.source[self.span.range()];
+                                return Some(Ok(Token::parse_ident(ident)));
                             }
                         }
                     }
@@ -305,10 +285,10 @@ impl<'a> LineLexer<'a> {
 
                             // if an f is found, then we can build and return the float early
                             Some("f") => {
-                                let float = &self.line[self.span.range()];
+                                let float = &self.source[self.span.range()];
                                 let float = float.parse::<f64>().expect("valid float");
                                 self.consume_symbol(); // take after so 'f' is not included in parsing
-                                return LexResult::Token(Token::Float(float));
+                                return Some(Ok(Token::Float(float)));
                             }
 
                             // if a digit is found then just increment the end location and continue
@@ -316,9 +296,9 @@ impl<'a> LineLexer<'a> {
 
                             // if anything else is found, then build the integer and return
                             _ => {
-                                let int = &self.line[self.span.range()];
+                                let int = &self.source[self.span.range()];
                                 let int = int.parse::<IBig>().expect("valid integer");
-                                return LexResult::Token(Token::Int(int));
+                                return Some(Ok(Token::Int(int)));
                             }
                         }
                     }
@@ -328,10 +308,10 @@ impl<'a> LineLexer<'a> {
                         match self.peek_symbol() {
                             // if an f is found, then we can build and return the float
                             Some("f") => {
-                                let float = &self.line[self.span.range()];
+                                let float = &self.source[self.span.range()];
                                 let float = float.parse::<f64>().expect("valid float");
                                 self.consume_symbol(); // consume after so 'f' is not included in parsing
-                                return LexResult::Token(Token::Float(float));
+                                return Some(Ok(Token::Float(float)));
                             }
 
                             // if a digit is found then just increment the end location and continue
@@ -339,9 +319,9 @@ impl<'a> LineLexer<'a> {
 
                             // if anything else is found, then build the float and return
                             _ => {
-                                let float = &self.line[self.span.range()];
+                                let float = &self.source[self.span.range()];
                                 let float = float.parse::<f64>().expect("valid float");
-                                return LexResult::Token(Token::Float(float));
+                                return Some(Ok(Token::Float(float)));
                             }
                         }
                     }
@@ -352,29 +332,29 @@ impl<'a> LineLexer<'a> {
                     let Some(next_symbol) = self.peek_symbol() else {
                         // if there is no symbol, then the string is unclosed
                         self.consume_line(); // consume line first
-                        return LexResult::Error(LexerError::UnclosedString);
+                        return Some(Err(LexError::UnclosedString));
                     };
 
                     match symbol {
                         // if a newline is found, then the string is unclosed
                         "\n" | "\r" | "\r\n" => {
                             self.consume_line(); // consume line first
-                            return LexResult::Error(LexerError::UnclosedString);
+                            return Some(Err(LexError::UnclosedString));
                         }
                         // if an escape character is found, skip the next symbol
                         "\\" => {
                             self.consume_symbol();
                             if let None = self.take_symbol() {
                                 self.consume_line(); // consume line first
-                                return LexResult::Error(LexerError::UnclosedString);
+                                return Some(Err(LexError::UnclosedString));
                             }
                         }
                         // if a matching symbol is found, then it is the end quote
                         _ if next_symbol == symbol => {
                             self.consume_symbol();
                             let str_range = self.span.start + 1..self.span.end - 1;
-                            let string = self.line[str_range].to_string();
-                            return LexResult::Token(Token::String(string));
+                            let string = self.source[str_range].to_string();
+                            return Some(Ok(Token::String(string)));
                         }
                         // otherwise the symbol is just part of the string
                         _ => self.consume_symbol(),
@@ -382,7 +362,7 @@ impl<'a> LineLexer<'a> {
                 },
 
                 // INVALID SYMBOL
-                _ => LexResult::Error(LexerError::InvalidSymbol),
+                _ => Some(Err(LexError::InvalidSymbol)),
             };
         }
 
@@ -399,50 +379,50 @@ impl<'a> LineLexer<'a> {
             s.chars().all(|c| c.is_ascii_digit())
         }
     }
+}
 
+// PRIVATE HELPER METHODS
+impl<'source> LexTokens<'_, 'source> {
     fn consume_symbol(&mut self) {
         self.take_symbol();
     }
 
-    fn take_symbol(&mut self) -> Option<&'a str> {
+    fn take_symbol(&mut self) -> Option<&'source str> {
         let symbol = self.symbols.next()?;
-        self.state.progress += symbol.len();
+        self.lexer.bytes += symbol.len();
         self.span.end += symbol.len();
         Some(symbol)
     }
 
-    fn peek_symbol(&mut self) -> Option<&'a str> {
+    fn peek_symbol(&mut self) -> Option<&'source str> {
         Some(*self.symbols.peek()?)
     }
 
-    fn tab_error(&mut self, space: bool) -> LexResult {
+    fn consume_line(&mut self) {
+        self.lexer.indent = true;
+        self.span.start = self.span.end;
+        while let Some(symbol) = self.symbols.next() {
+            self.lexer.bytes += symbol.len();
+        }
+    }
+
+    fn tab_error(&mut self, space: bool) -> Option<Result<Token, LexError>> {
         while let Some(symbol) = self.peek_symbol() {
             match symbol {
                 " " | "\t" => {
-                    self.take_symbol();
+                    self.consume_symbol();
                 }
                 "\n" | "\r" | "\r\n" | "#" => {
-                    return self.consume_line();
+                    self.consume_line();
+                    return None;
                 }
                 _ => break,
             }
         }
 
         match space {
-            false => LexResult::Error(LexerError::InvalidIndent(IndentType::Tab)),
-            true => LexResult::Error(LexerError::InvalidIndent(IndentType::Space)),
-        }
-    }
-
-    fn consume_line(&mut self) -> LexResult {
-        self.state.indent = true;
-        self.span.start = self.span.end;
-        while let Some(symbol) = self.symbols.next() {
-            self.state.progress += symbol.len();
-        }
-        match self.state.is_finished() {
-            false => return LexResult::Incomplete,
-            true => return LexResult::Finished,
+            false => Some(Err(LexError::InvalidIndent(IndentType::Tab))),
+            true => Some(Err(LexError::InvalidIndent(IndentType::Space))),
         }
     }
 }

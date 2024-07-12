@@ -17,9 +17,9 @@ fn main() {
         None => {
             let mut shell = Shell::new();
             loop {
-                match shell.read_statement() {
+                match shell.read_line() {
                     Err(error) => panic!("{error}"),
-                    Ok(RunState::Success) => continue,
+                    Ok(RunState::Parsed) => continue,
                     Ok(RunState::CtrlC) => {
                         println!("Aborting...");
                         break;

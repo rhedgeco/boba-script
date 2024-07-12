@@ -1,11 +1,19 @@
 use std::io;
 
+use boba_script::{
+    core::{engine::Value, Engine},
+    lexer::LexError,
+    parser::{
+        parsers::statement::{self, State, StatementParser},
+        TokenLine,
+    },
+};
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
-use super::ShellTokens;
+use super::{stream::ShellSource, ShellTokens};
 
 pub enum RunState {
-    Success,
+    Parsed,
     CtrlD,
     CtrlC,
 }
@@ -15,6 +23,8 @@ pub struct Shell {
     normal_prompt: DefaultPrompt,
     pending_prompt: DefaultPrompt,
     tokens: ShellTokens,
+    engine: Engine<ShellSource>,
+    pending: Option<StatementParser<ShellSource, LexError>>,
 }
 
 impl Default for Shell {
@@ -30,6 +40,8 @@ impl Default for Shell {
                 DefaultPromptSegment::Empty,
             ),
             tokens: ShellTokens::new(),
+            engine: Engine::new(),
+            pending: None,
         }
     }
 }
@@ -39,35 +51,67 @@ impl Shell {
         Self::default()
     }
 
-    pub fn read_statement(&mut self) -> io::Result<RunState> {
-        loop {
-            // choose a prompt
-            let prompt = match self.tokens.is_ready() {
-                false => &self.pending_prompt,
-                true => &self.normal_prompt,
-            };
+    pub fn read_line(&mut self) -> io::Result<RunState> {
+        // choose a prompt
+        let prompt = match self.pending.is_some() {
+            true => &self.pending_prompt,
+            false => &self.normal_prompt,
+        };
 
-            // get the text
-            let text = match self.editor.read_line(prompt)? {
-                Signal::Success(text) => text,
-                Signal::CtrlC => {
-                    return Ok(RunState::CtrlC);
-                }
-                Signal::CtrlD => {
-                    return Ok(RunState::CtrlD);
-                }
-            };
-
-            // load the tokens
-            if !self.tokens.load(text) {
-                self.tokens.close_all_blocks();
-                continue;
+        // get the text
+        let text = match self.editor.read_line(prompt)? {
+            Signal::Success(text) => text,
+            Signal::CtrlC => {
+                return Ok(RunState::CtrlC);
             }
+            Signal::CtrlD => {
+                return Ok(RunState::CtrlD);
+            }
+        };
 
-            // check if tokens are ready
-            if !self.tokens.is_ready() {
-                continue;
+        // load the tokens
+        self.tokens.load(text);
+
+        // keep parsing while there are still tokens
+        while !self.tokens.is_empty() {
+            // get the next line of tokens
+            let mut line = TokenLine::new(&mut self.tokens);
+
+            // get pending or create the next statement
+            let statement = match self.pending.take() {
+                Some(parser) => match parser.parse_line(&mut line) {
+                    Err(errors) => Err(errors),
+                    Ok(State::Complete(statement)) => Ok(statement),
+                    Ok(State::Incomplete(parser)) => {
+                        self.pending = Some(parser);
+                        continue;
+                    }
+                },
+                None => match statement::start_parsing(&mut line) {
+                    Err(errors) => Err(errors),
+                    Ok(State::Complete(statement)) => Ok(statement),
+                    Ok(State::Incomplete(parser)) => {
+                        self.pending = Some(parser);
+                        continue;
+                    }
+                },
+            };
+
+            // execute the completed statement
+            match statement {
+                Ok(statement) => match self.engine.eval(statement) {
+                    Ok(Value::None) => {} // do nothing
+                    Ok(value) => println!("{value}"),
+                    Err(error) => eprintln!("{error:?}"),
+                },
+                Err(errors) => {
+                    for error in errors {
+                        eprintln!("{error:?}");
+                    }
+                }
             }
         }
+
+        Ok(RunState::Parsed)
     }
 }
