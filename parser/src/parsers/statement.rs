@@ -16,35 +16,44 @@ pub enum State<Source: SourceSpan, Error> {
     Incomplete(StatementParser<Source, Error>),
 }
 
-enum ParserKind<Source: SourceSpan> {
+pub enum StatementParser<Source: SourceSpan, Error> {
     While {
         source: Source,
         cond: ExprNode<Source>,
+        block: BlockParser<Source, Error>,
     },
 }
 
-pub struct StatementParser<Source: SourceSpan, Error> {
-    block: BlockParser<Source, Error>,
-    kind: ParserKind<Source>,
-}
-
 impl<Source: SourceSpan, Error> StatementParser<Source, Error> {
+    pub fn block_source(&self) -> Source {
+        match self {
+            StatementParser::While {
+                source: _,
+                cond: _,
+                block,
+            } => block.source(),
+        }
+    }
+
     pub fn parse_line<T: TokenStream<Source = Source, Error = Error>>(
-        mut self,
+        self,
         line: &mut TokenLine<T>,
     ) -> Result<State<Source, Error>, Vec<PError<T>>> {
-        let body = match self.block.parse_line(line)? {
-            block::State::Complete(body) => body,
-            block::State::Incomplete(block) => {
-                self.block = block;
-                return Ok(State::Incomplete(self));
-            }
-        };
-
-        match self.kind {
-            ParserKind::While { source, cond } => Ok(State::Complete(
-                Statement::While { cond, body }.build_node(source),
-            )),
+        match self {
+            StatementParser::While {
+                source,
+                cond,
+                block,
+            } => match block.parse_line(line)? {
+                block::State::Complete(body) => Ok(State::Complete(
+                    Statement::While { cond, body }.build_node(source),
+                )),
+                block::State::Incomplete(block) => Ok(State::Incomplete(StatementParser::While {
+                    source,
+                    cond,
+                    block,
+                })),
+            },
         }
     }
 }
@@ -59,7 +68,7 @@ pub fn parse_inline<T: TokenStream>(
 
         // FAILURE CASE
         State::Incomplete(parser) => Err(vec![ParseError::InlineError {
-            block_source: parser.block.source(),
+            block_source: parser.block_source(),
             inline_source: inline_source,
         }]),
     }
@@ -117,10 +126,13 @@ pub fn start_parsing<T: TokenStream>(
                     block::State::Complete(body) => Ok(State::Complete(
                         Statement::While { cond, body }.build_node(source),
                     )),
-                    block::State::Incomplete(block) => Ok(State::Incomplete(StatementParser {
-                        kind: ParserKind::While { source, cond },
-                        block,
-                    })),
+                    block::State::Incomplete(block) => {
+                        Ok(State::Incomplete(StatementParser::While {
+                            source,
+                            cond,
+                            block,
+                        }))
+                    }
                 }
             }
 
