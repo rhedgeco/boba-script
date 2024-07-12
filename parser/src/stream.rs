@@ -37,23 +37,6 @@ pub trait TokenStream: Iterator<Item = Result<Token, Self::Error>> {
     fn build_source(&self, span: impl Into<Span>) -> Self::Source;
 }
 
-impl<T: TokenStream> TokenStream for &mut T {
-    type Error = T::Error;
-    type Source = T::Source;
-
-    fn token_start(&self) -> usize {
-        T::token_start(self)
-    }
-
-    fn token_end(&self) -> usize {
-        T::token_end(self)
-    }
-
-    fn build_source(&self, span: impl Into<Span>) -> Self::Source {
-        T::build_source(self, span)
-    }
-}
-
 impl<T: TokenStream> StreamExt for T {}
 pub trait StreamExt: TokenStream {
     fn token_span(&self) -> Span {
