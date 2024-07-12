@@ -2,9 +2,8 @@ use std::io;
 
 use boba_script::{
     core::{engine::Value, Engine},
-    lexer::LexError,
     parser::{
-        parsers::statement::{self, ParseState, StatementParser},
+        parsers::statement::{self, StatementParser, StatementType},
         TokenLine,
     },
 };
@@ -24,7 +23,7 @@ pub struct Shell {
     pending_prompt: DefaultPrompt,
     tokens: ShellStream,
     engine: Engine<ShellSource>,
-    pending: Option<StatementParser<ShellSource, LexError>>,
+    pending: StatementParser<ShellSource>,
 }
 
 impl Default for Shell {
@@ -41,7 +40,7 @@ impl Default for Shell {
             ),
             tokens: ShellStream::new(),
             engine: Engine::new(),
-            pending: None,
+            pending: StatementParser::none(),
         }
     }
 }
@@ -53,9 +52,9 @@ impl Shell {
 
     pub fn read_line(&mut self) -> io::Result<RunState> {
         // choose a prompt
-        let prompt = match self.pending.is_some() {
-            true => &self.pending_prompt,
-            false => &self.normal_prompt,
+        let prompt = match self.pending.is_none() {
+            false => &self.pending_prompt,
+            true => &self.normal_prompt,
         };
 
         // get the text
@@ -72,27 +71,29 @@ impl Shell {
         // load the tokens
         self.tokens.load(text);
 
-        // keep parsing while there are still tokens
-        while !self.tokens.is_empty() {
+        loop {
             // get the next line of tokens
             let mut line = TokenLine::new(&mut self.tokens);
 
             // get pending or create the next statement
-            let statement = match self.pending.take() {
-                Some(parser) => match parser.parse_line(&mut line) {
+            let statement = match self.pending.is_none() {
+                false => match self.pending.parse_line(&mut line) {
                     Err(errors) => Err(errors),
-                    Ok(ParseState::Complete(statement)) => Ok(statement),
-                    Ok(ParseState::Incomplete(parser)) => {
-                        self.pending = Some(parser);
-                        continue;
-                    }
+                    Ok(Some(statement)) => Ok(statement),
+                    Ok(None) => match self.tokens.is_empty() {
+                        false => continue,
+                        true => break,
+                    },
                 },
-                None => match statement::start_parsing(&mut line) {
+                true => match statement::start_parsing(&mut line) {
                     Err(errors) => Err(errors),
-                    Ok(ParseState::Complete(statement)) => Ok(statement),
-                    Ok(ParseState::Incomplete(parser)) => {
-                        self.pending = Some(parser);
-                        continue;
+                    Ok(StatementType::SingleLine(statement)) => Ok(statement),
+                    Ok(StatementType::MultiLine(parser)) => {
+                        self.pending = parser;
+                        match self.tokens.is_empty() {
+                            false => continue,
+                            true => break,
+                        }
                     }
                 },
             };
@@ -109,6 +110,11 @@ impl Shell {
                         eprintln!("{error:?}");
                     }
                 }
+            }
+
+            // break if there are no more tokens
+            if self.tokens.is_empty() {
+                break;
             }
         }
 

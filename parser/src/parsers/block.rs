@@ -1,93 +1,26 @@
+use std::mem::replace;
+
 use boba_script_core::ast::StatementNode;
 
 use crate::{error::PError, stream::SourceSpan, ParseError, Token, TokenLine, TokenStream};
 
-use super::statement::{self, StatementParser};
-
-pub enum ParseState<Source: SourceSpan, Error> {
-    Complete(Vec<StatementNode<Source>>),
-    Incomplete(BlockParser<Source, Error>),
-}
-
-pub struct BlockParser<Source: SourceSpan, Error> {
-    pending: Vec<StatementParser<Source, Error>>,
-    errors: Vec<ParseError<Source, Error>>,
-    body: Vec<StatementNode<Source>>,
-    source: Source,
-}
-
-impl<Source: SourceSpan, Error> BlockParser<Source, Error> {
-    pub fn source(&self) -> Source {
-        self.source.clone()
-    }
-
-    pub fn parse_line<T: TokenStream<Source = Source, Error = Error>>(
-        mut self,
-        line: &mut TokenLine<T>,
-    ) -> Result<ParseState<Source, Error>, Vec<PError<T>>> {
-        // if the body is empty, ensure that it starts with an indent token
-        if self.body.is_empty() {
-            match line.peek_token() {
-                // consume indent if found
-                Some(Ok(Token::Indent)) => line.consume_token(),
-
-                // otherwise produce an empty body error
-                _ => {
-                    return Err(vec![ParseError::EmptyBlock {
-                        source: self.source.clone(),
-                    }])
-                }
-            }
-        }
-
-        // parse any pending statements
-        let state = match self.pending.pop() {
-            Some(parser) => parser.parse_line(line),
-
-            // if no more statements are pending check for dedent
-            None => match line.peek_token() {
-                // if we find a dedent, then end parsing and return the data
-                Some(Ok(Token::Dedent)) => match self.errors.is_empty() {
-                    true => return Ok(ParseState::Complete(self.body)),
-                    false => return Err(self.errors),
-                },
-
-                // if we find anything else, parse the line as a statement
-                _ => statement::start_parsing(line),
-            },
-        };
-
-        // store the statement data for later parsing
-        match state {
-            Ok(statement::ParseState::Complete(statement)) => self.body.push(statement),
-            Ok(statement::ParseState::Incomplete(parser)) => self.pending.push(parser),
-            Err(mut errors) => self.errors.append(&mut errors),
-        }
-
-        // if we get here then the parsing is incomplete
-        Ok(ParseState::Incomplete(self))
-    }
-}
+use super::statement::{self, StatementParser, StatementType};
 
 pub fn start_parsing<T: TokenStream>(
     line: &mut TokenLine<T>,
-) -> Result<BlockParser<T::Source, T::Error>, Vec<PError<T>>> {
+) -> Result<BlockParser<T::Source>, Vec<PError<T>>> {
     line.take_guard_else(
         |token, line| match token {
             // check for leading block colon
             Some(Token::Colon) => {
-                // get block source
-                let block_source = line.token_source();
-
                 // ensure end of line
                 line.take_exact(None).map_err(|e| vec![e])?;
 
                 // build block parser
                 Ok(BlockParser {
-                    pending: Vec::new(),
-                    errors: Vec::new(),
+                    pending: None,
                     body: Vec::new(),
-                    source: block_source,
+                    complete: false,
                 })
             }
 
@@ -100,4 +33,63 @@ pub fn start_parsing<T: TokenStream>(
         },
         |errors| errors.consume_line(),
     )
+}
+
+pub struct BlockParser<Source: SourceSpan> {
+    pending: Option<Box<StatementParser<Source>>>,
+    body: Vec<StatementNode<Source>>,
+    complete: bool,
+}
+
+impl<Source: SourceSpan> BlockParser<Source> {
+    pub fn is_complete(&self) -> bool {
+        self.complete
+    }
+
+    pub fn parse_line<T: TokenStream<Source = Source>>(
+        &mut self,
+        line: &mut TokenLine<T>,
+    ) -> Result<Option<Vec<StatementNode<Source>>>, Vec<PError<T>>> {
+        // check for complete block
+        if self.complete {
+            return Ok(None);
+        }
+
+        // if there is nothing pending and no body, then it is the start
+        if self.pending.is_none() && self.body.is_empty() {
+            match line.peek_token() {
+                // consume indent if found
+                Some(Ok(Token::Indent)) => line.consume_token(),
+
+                // otherwise return an empty body
+                _ => return Ok(Some(Vec::new())),
+            }
+        }
+
+        // parse any pending statements
+        match self.pending.take() {
+            Some(mut parser) => match parser.parse_line(line)? {
+                Some(statement) => self.body.push(statement),
+                None => self.pending = Some(parser),
+            },
+
+            // if no more statements are pending check for dedent
+            None => match line.peek_token() {
+                // if we find a dedent, then end parsing and return the data
+                Some(Ok(Token::Dedent)) => {
+                    let body = replace(&mut self.body, Vec::new());
+                    return Ok(Some(body));
+                }
+
+                // if we find anything else, parse the line as a statement
+                _ => match statement::start_parsing(line)? {
+                    StatementType::MultiLine(parser) => self.pending = Some(Box::new(parser)),
+                    StatementType::SingleLine(statement) => self.body.push(statement),
+                },
+            },
+        }
+
+        // return nothing if incomplete
+        Ok(None)
+    }
 }

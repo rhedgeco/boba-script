@@ -11,39 +11,59 @@ use super::{
     expr, line,
 };
 
-pub enum ParseState<Source: SourceSpan, Error> {
-    Complete(StatementNode<Source>),
-    Incomplete(StatementParser<Source, Error>),
+pub enum StatementType<Source: SourceSpan> {
+    SingleLine(StatementNode<Source>),
+    MultiLine(StatementParser<Source>),
 }
 
-pub enum StatementParser<Source: SourceSpan, Error> {
+enum ParseKind<Source: SourceSpan> {
     While {
         source: Source,
         cond: ExprNode<Source>,
-        block: BlockParser<Source, Error>,
+        block: BlockParser<Source>,
     },
 }
 
-impl<Source: SourceSpan, Error> StatementParser<Source, Error> {
-    pub fn parse_line<T: TokenStream<Source = Source, Error = Error>>(
-        self,
+pub struct StatementParser<Source: SourceSpan> {
+    kind: Option<ParseKind<Source>>,
+}
+
+impl<Source: SourceSpan> StatementParser<Source> {
+    pub fn is_none(&self) -> bool {
+        self.kind.is_none()
+    }
+
+    pub fn none() -> Self {
+        Self { kind: None }
+    }
+
+    pub fn parse_line<T: TokenStream<Source = Source>>(
+        &mut self,
         line: &mut TokenLine<T>,
-    ) -> Result<ParseState<Source, Error>, Vec<PError<T>>> {
-        match self {
-            StatementParser::While {
+    ) -> Result<Option<StatementNode<Source>>, Vec<PError<T>>> {
+        match self.kind.take() {
+            None => Ok(None),
+            Some(ParseKind::While {
                 source,
                 cond,
-                block,
-            } => match block.parse_line(line)? {
-                block::ParseState::Complete(body) => Ok(ParseState::Complete(
-                    Statement::While { cond, body }.build_node(source),
-                )),
-                block::ParseState::Incomplete(block) => {
-                    Ok(ParseState::Incomplete(StatementParser::While {
+                mut block,
+            }) => match block.parse_line(line) {
+                Ok(Some(body)) => Ok(Some(Statement::While { cond, body }.build_node(source))),
+                Ok(None) => {
+                    self.kind = Some(ParseKind::While {
                         source,
                         cond,
                         block,
-                    }))
+                    });
+                    Ok(None)
+                }
+                Err(errors) => {
+                    self.kind = Some(ParseKind::While {
+                        source,
+                        cond,
+                        block,
+                    });
+                    Err(errors)
                 }
             },
         }
@@ -52,7 +72,7 @@ impl<Source: SourceSpan, Error> StatementParser<Source, Error> {
 
 pub fn start_parsing<T: TokenStream>(
     line: &mut TokenLine<T>,
-) -> Result<ParseState<T::Source, T::Error>, Vec<PError<T>>> {
+) -> Result<StatementType<T::Source>, Vec<PError<T>>> {
     line.guard_else(
         |line| match line.peek_token() {
             // LET STATEMENTS
@@ -75,7 +95,7 @@ pub fn start_parsing<T: TokenStream>(
 
                 // create source and build statement
                 let source = line.build_source(start..rhs.source.end());
-                Ok(ParseState::Complete(
+                Ok(StatementType::SingleLine(
                     Statement::Assign {
                         init: true,
                         lhs,
@@ -101,10 +121,12 @@ pub fn start_parsing<T: TokenStream>(
                 let block = block::start_parsing(line)?;
 
                 // return the while parser
-                Ok(ParseState::Incomplete(StatementParser::While {
-                    source,
-                    cond,
-                    block,
+                Ok(StatementType::MultiLine(StatementParser {
+                    kind: Some(ParseKind::While {
+                        source,
+                        cond,
+                        block,
+                    }),
                 }))
             }
 
@@ -150,7 +172,7 @@ pub fn start_parsing<T: TokenStream>(
                     Some(Token::Newline) | None => {
                         // create source and build open expression
                         let source = line.build_source(expr.source.span());
-                        Ok(ParseState::Complete(
+                        Ok(StatementType::SingleLine(
                             Statement::Expr {
                                 expr,
                                 closed: false,
@@ -166,7 +188,7 @@ pub fn start_parsing<T: TokenStream>(
 
                         // create source and build closed expression
                         let source = line.build_source(expr.source.span());
-                        Ok(ParseState::Complete(
+                        Ok(StatementType::SingleLine(
                             Statement::Expr { expr, closed: true }.build_node(source),
                         ))
                     }
@@ -181,7 +203,7 @@ pub fn start_parsing<T: TokenStream>(
 
                         // create source and build assignment
                         let source = line.build_source(expr.source.start()..rhs.source.end());
-                        Ok(ParseState::Complete(
+                        Ok(StatementType::SingleLine(
                             Statement::Assign {
                                 init: false,
                                 lhs: expr,
