@@ -9,7 +9,7 @@ pub enum IndentType {
 }
 
 #[derive(Debug, Default, Display, Clone, Copy, PartialEq)]
-pub enum LexerError {
+pub enum LexError {
     #[default]
     #[display(fmt = "invalid symbol")]
     InvalidSymbol,

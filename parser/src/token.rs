@@ -3,7 +3,8 @@ use std::ops::Range;
 use boba_script_core::dashu::integer::IBig;
 use derive_more::Display;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[display(fmt = "{}..{}", start, end)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -145,7 +146,7 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn get_ident_or_keyword(str: impl AsRef<str>) -> Self {
+    pub fn parse_ident(str: impl AsRef<str>) -> Self {
         const KEYWORDS: phf::Map<&'static str, Token> = phf::phf_map! {
             "none" => Token::None,
             "true" => Token::Bool(true),

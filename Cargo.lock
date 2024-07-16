@@ -126,6 +126,7 @@ name = "boba"
 version = "0.1.0"
 dependencies = [
  "boba-script",
+ "boba-script-ariadne",
  "clap",
  "reedline",
 ]
@@ -137,6 +138,14 @@ dependencies = [
  "boba-script-core",
  "boba-script-lexer",
  "boba-script-parser",
+]
+
+[[package]]
+name = "boba-script-ariadne"
+version = "0.1.0"
+dependencies = [
+ "ariadne",
+ "boba-script",
 ]
 
 [[package]]

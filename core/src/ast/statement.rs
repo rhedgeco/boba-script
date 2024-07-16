@@ -1,97 +1,95 @@
-use derive_more::Display;
+use crate::{
+    engine::{value::ValueKind, EvalError, Value},
+    Engine,
+};
 
-use crate::{engine::Value, Engine};
+use super::{expr::ExprNode, node::EvalNode, Node};
 
-use super::{expr, Carrier, Expr};
+pub type StatementNode<Source> = Node<Statement<Source>, Source>;
 
-pub enum Kind<Data> {
-    Expr(Expr<Data>),
+#[derive(Debug, Clone)]
+pub enum Statement<Source> {
+    Expr {
+        expr: ExprNode<Source>,
+        closed: bool,
+    },
     Assign {
         init: bool,
-        lhs: Expr<Data>,
-        rhs: Expr<Data>,
+        lhs: ExprNode<Source>,
+        rhs: ExprNode<Source>,
     },
     While {
-        cond: Expr<Data>,
-        body: Vec<Statement<Data>>,
+        cond: ExprNode<Source>,
+        body: Vec<StatementNode<Source>>,
+    },
+    If {
+        cond: ExprNode<Source>,
+        pass: Vec<StatementNode<Source>>,
+        fail: Vec<StatementNode<Source>>,
     },
 }
 
-impl<Data> Kind<Data> {
-    pub fn carry(self, data: Data) -> Statement<Data> {
-        Statement { kind: self, data }
-    }
-}
+impl<Source: Clone> EvalNode<Source> for Statement<Source> {
+    fn eval_node(
+        node: &Node<Self, Source>,
+        engine: &mut Engine<Source>,
+    ) -> Result<Value<Source>, EvalError<Source>> {
+        match &node.item {
+            Statement::Expr { expr, closed } => {
+                let value = engine.eval(expr)?;
+                match closed {
+                    true => Ok(Value::None),
+                    false => Ok(value),
+                }
+            }
+            Statement::Assign { init, lhs, rhs } => {
+                match init {
+                    false => engine.assign(lhs, rhs)?,
+                    true => engine.init_assign(lhs, rhs)?,
+                }
 
-#[derive(Debug, Display, Clone)]
-pub enum EvalError<Data> {
-    #[display(fmt = "{}", _0)]
-    Expr(expr::EvalError<Data>),
-    #[display(fmt = "cannot assign to expression")]
-    AssignError { data: Data },
-    #[display(fmt = "unknown variable '{}'", name)]
-    UnknownVariable { name: String, data: Data },
-    #[display(fmt = "expected type '{}', found type '{}'", expect, found)]
-    UnexpectedType {
-        expect: String,
-        found: String,
-        data: Data,
-    },
-}
-
-impl<Data> From<expr::EvalError<Data>> for EvalError<Data> {
-    fn from(value: expr::EvalError<Data>) -> Self {
-        Self::Expr(value)
-    }
-}
-
-pub struct Statement<Data> {
-    pub kind: Kind<Data>,
-    pub data: Data,
-}
-
-impl<Data: Clone> Statement<Data> {
-    pub fn eval(&self, engine: &mut Engine) -> Result<Value, EvalError<Data>> {
-        match &self.kind {
-            Kind::Expr(expr) => Ok(expr.eval(engine)?),
-            Kind::Assign { init, lhs, rhs } => match &lhs.kind {
-                expr::Kind::Var(id) => {
-                    let value = rhs.eval(engine)?;
-                    match init {
-                        true => {
-                            engine.vars_mut().init(id, value);
-                            Ok(Value::None)
+                Ok(Value::None)
+            }
+            Statement::While { cond, body } => {
+                let mut output = Value::None;
+                loop {
+                    match engine.eval(cond)? {
+                        Value::Bool(true) => (),
+                        Value::Bool(false) => break Ok(output),
+                        value => {
+                            break Err(EvalError::UnexpectedType {
+                                expect: ValueKind::Bool,
+                                found: value.kind(),
+                                source: cond.source.clone(),
+                            })
                         }
-                        false => match engine.vars_mut().set(id, value) {
-                            Ok(_) => Ok(Value::None),
-                            Err(_) => Err(EvalError::UnknownVariable {
-                                name: id.clone(),
-                                data: lhs.data().clone(),
-                            }),
-                        },
+                    }
+
+                    for statement in body {
+                        output = engine.eval(statement)?;
                     }
                 }
-                _ => Err(EvalError::AssignError {
-                    data: lhs.data().clone(),
-                }),
-            },
-            Kind::While { cond, body } => loop {
-                match cond.eval(engine)? {
-                    Value::Bool(true) => (),
-                    Value::Bool(false) => break Ok(Value::None),
+            }
+            Statement::If { cond, pass, fail } => {
+                let mut output = Value::None;
+                let statements = match engine.eval(cond)? {
+                    Value::Bool(true) => pass,
+                    Value::Bool(false) => fail,
                     value => {
-                        break Err(EvalError::UnexpectedType {
-                            expect: "bool".into(),
-                            found: value.type_name(),
-                            data: cond.data().clone(),
+                        return Err(EvalError::UnexpectedType {
+                            expect: ValueKind::Bool,
+                            found: value.kind(),
+                            source: cond.source.clone(),
                         })
                     }
+                };
+
+                for statement in statements {
+                    output = engine.eval(statement)?;
                 }
 
-                for statement in body {
-                    statement.eval(engine)?;
-                }
-            },
+                Ok(output)
+            }
         }
     }
 }

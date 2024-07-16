@@ -1,203 +1,65 @@
-use crate::{error::SpanParseError, token::Span, ParseError, Token};
+use crate::{token::Span, Token};
 
-pub type StreamSpan<T> = <<T as TokenStream>::Source as Source>::Span;
-
-pub trait SourceSpan {
-    fn span(&self) -> Span;
+pub trait SourceSpan: Clone {
     fn start(&self) -> usize;
     fn end(&self) -> usize;
+    fn build(&self, span: impl Into<Span>) -> Self;
 }
 
-pub trait Source {
-    type Span: SourceSpan;
-    fn text(&self) -> &str;
-    fn span(&self, span: impl Into<Span>) -> Self::Span;
+impl<T: SourceSpan> SourceExt for T {}
+pub trait SourceExt: SourceSpan {
+    fn span(&self) -> Span {
+        (self.start()..self.end()).into()
+    }
+
+    fn start_span(&self) -> Span {
+        (self.start()..self.start()).into()
+    }
+
+    fn end_span(&self) -> Span {
+        (self.end()..self.end()).into()
+    }
+
+    fn start_source(&self) -> Self {
+        self.build(self.start_span())
+    }
+
+    fn end_source(&self) -> Self {
+        self.build(self.end_span())
+    }
 }
 
 pub trait TokenStream: Iterator<Item = Result<Token, Self::Error>> {
     type Error;
-    type Source: Source;
-    fn span(&self) -> Span;
-    fn source(&self) -> &Self::Source;
-    fn stream_parser(self) -> StreamParser<Self>
-    where
-        Self: Sized,
-    {
-        StreamParser::new(self)
-    }
+    type Source: SourceSpan;
+    fn token_start(&self) -> usize;
+    fn token_end(&self) -> usize;
+    fn build_source(&self, span: impl Into<Span>) -> Self::Source;
 }
 
-pub struct StreamParser<T: TokenStream> {
-    peeked: Option<(Token, Span)>,
-    span: Span,
-    stream: T,
-}
-
-impl<T: TokenStream> Iterator for StreamParser<T> {
-    type Item = Result<Token, ParseError<T>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some((token, span)) = self.peeked.take() {
-            self.span = span;
-            return Some(Ok(token));
-        };
-
-        let (result, span) = self.generate()?;
-        self.span = span;
-        Some(result)
-    }
-}
-
-impl<T: TokenStream> StreamParser<T> {
-    pub fn new(stream: T) -> Self {
-        Self {
-            peeked: None,
-            span: stream.span(),
-            stream,
-        }
+impl<T: TokenStream> StreamExt for T {}
+pub trait StreamExt: TokenStream {
+    fn token_span(&self) -> Span {
+        (self.token_start()..self.token_end()).into()
     }
 
-    pub fn source(&self) -> &T::Source {
-        self.stream.source()
+    fn token_start_span(&self) -> Span {
+        (self.token_start()..self.token_start()).into()
     }
 
-    pub fn stream(&self) -> &T {
-        &self.stream
+    fn token_end_span(&self) -> Span {
+        (self.token_end()..self.token_end()).into()
     }
 
-    pub fn token_span(&self) -> StreamSpan<T> {
-        self.source().span(self.span)
+    fn token_source(&self) -> Self::Source {
+        self.build_source(self.token_span())
     }
 
-    pub fn token_start(&self) -> StreamSpan<T> {
-        let start = self.span.start;
-        self.source().span(start..start)
+    fn token_start_source(&self) -> Self::Source {
+        self.build_source(self.token_start_span())
     }
 
-    pub fn token_end(&self) -> StreamSpan<T> {
-        let end = self.span.end;
-        self.source().span(end..end)
-    }
-
-    pub fn peek(&mut self) -> Option<Result<&Token, ParseError<T>>> {
-        Some(self.peek_spanned()?.map(|(token, _)| token))
-    }
-
-    pub fn peek_spanned(&mut self) -> Option<Result<(&Token, StreamSpan<T>), ParseError<T>>> {
-        if self.peeked.is_some() {
-            let (token, span) = self.peeked.as_ref().unwrap();
-            let span = self.source().span(span.clone());
-            return Some(Ok((token, span)));
-        }
-
-        let (result, span) = self.generate()?;
-        match result {
-            Ok(token) => {
-                let source_span = self.source().span(span.clone());
-                let (token, _) = self.peeked.insert((token, span));
-                Some(Ok((token, source_span)))
-            }
-            Err(error) => {
-                self.span = span;
-                Some(Err(error))
-            }
-        }
-    }
-
-    pub fn next_some(&mut self, expect: impl Into<String>) -> Result<Token, ParseError<T>> {
-        match self.next() {
-            Some(result) => result,
-            None => Err(SpanParseError::UnexpectedInput {
-                expect: expect.into(),
-                found: None,
-                span: self.token_end(),
-            }),
-        }
-    }
-
-    pub fn peek_some(&mut self, expect: impl Into<String>) -> Result<&Token, ParseError<T>> {
-        self.peek_some_spanned(expect).map(|(token, _)| token)
-    }
-
-    pub fn peek_some_spanned(
-        &mut self,
-        expect: impl Into<String>,
-    ) -> Result<(&Token, StreamSpan<T>), ParseError<T>> {
-        let end = self.token_end();
-        match self.peek_spanned() {
-            Some(result) => result,
-            None => Err(SpanParseError::UnexpectedInput {
-                expect: expect.into(),
-                found: None,
-                span: end,
-            }),
-        }
-    }
-
-    pub fn next_expect(&mut self, token: Option<&Token>) -> Result<(), ParseError<T>> {
-        match self.next() {
-            Some(Err(error)) => Err(error),
-            Some(Ok(found)) => match Some(&found) == token {
-                true => Ok(()),
-                false => Err(SpanParseError::UnexpectedInput {
-                    expect: match token {
-                        Some(token) => format!("{token}"),
-                        None => format!("end of input"),
-                    },
-                    found: Some(found),
-                    span: self.token_span(),
-                }),
-            },
-            None => match token {
-                None => Ok(()),
-                Some(token) => Err(SpanParseError::UnexpectedInput {
-                    expect: format!("{token}"),
-                    found: None,
-                    span: self.token_end(),
-                }),
-            },
-        }
-    }
-
-    pub fn peek_expect(&mut self, token: Option<&Token>) -> Result<(), ParseError<T>> {
-        match self.peek_spanned() {
-            Some(Err(error)) => Err(error),
-            Some(Ok((found, span))) => match Some(found) == token {
-                true => Ok(()),
-                false => Err(SpanParseError::UnexpectedInput {
-                    expect: match token {
-                        Some(token) => format!("{token}"),
-                        None => format!("end of input"),
-                    },
-                    found: Some(found.clone()),
-                    span,
-                }),
-            },
-            None => match token {
-                None => Ok(()),
-                Some(token) => Err(SpanParseError::UnexpectedInput {
-                    expect: format!("{token}"),
-                    found: None,
-                    span: self.token_end(),
-                }),
-            },
-        }
-    }
-
-    // keep private, only used for internal token generation
-    fn generate(&mut self) -> Option<(Result<Token, ParseError<T>>, Span)> {
-        match self.stream.next()? {
-            Ok(token) => Some((Ok(token), self.stream.span())),
-            Err(error) => {
-                let span = self.stream.span();
-                Some((
-                    Err(SpanParseError::TokenError {
-                        error,
-                        span: self.token_span(),
-                    }),
-                    span,
-                ))
-            }
-        }
+    fn token_end_source(&self) -> Self::Source {
+        self.build_source(self.token_end_span())
     }
 }
