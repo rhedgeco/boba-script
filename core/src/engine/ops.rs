@@ -1,18 +1,27 @@
+use std::marker::PhantomData;
+
 use dashu::base::Sign;
 
 use super::Value;
 
-#[derive(Debug, Default)]
-pub struct OpManager {
-    _source: (),
+pub struct OpManager<Source> {
+    _source: PhantomData<*const Source>,
 }
 
-impl OpManager {
+impl<Source> Default for OpManager<Source> {
+    fn default() -> Self {
+        Self {
+            _source: Default::default(),
+        }
+    }
+}
+
+impl<Source> OpManager<Source> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn pos(&self, v: &Value) -> Option<Value> {
+    pub fn pos(&self, v: &Value<Source>) -> Option<Value<Source>> {
         match v {
             Value::Int(v) => Some(Value::Int(v.clone())),
             Value::Float(v) => Some(Value::Float(v.clone())),
@@ -20,7 +29,7 @@ impl OpManager {
         }
     }
 
-    pub fn neg(&self, v: &Value) -> Option<Value> {
+    pub fn neg(&self, v: &Value<Source>) -> Option<Value<Source>> {
         match v {
             Value::Int(v) => Some(Value::Int(-v)),
             Value::Float(v) => Some(Value::Float(-v)),
@@ -28,14 +37,14 @@ impl OpManager {
         }
     }
 
-    pub fn not(&self, v: &Value) -> Option<Value> {
+    pub fn not(&self, v: &Value<Source>) -> Option<Value<Source>> {
         match v {
             Value::Bool(v) => Some(Value::Bool(!v)),
             _ => None,
         }
     }
 
-    pub fn add(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn add(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Int(v1 + v2)),
@@ -56,7 +65,7 @@ impl OpManager {
         }
     }
 
-    pub fn sub(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn sub(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Int(v1 - v2)),
@@ -71,7 +80,7 @@ impl OpManager {
         }
     }
 
-    pub fn mul(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn mul(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Int(v1 * v2)),
@@ -105,7 +114,7 @@ impl OpManager {
         }
     }
 
-    pub fn div(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn div(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => {
@@ -122,7 +131,7 @@ impl OpManager {
         }
     }
 
-    pub fn modulo(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn modulo(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Int(v1 % v2)),
@@ -137,7 +146,7 @@ impl OpManager {
         }
     }
 
-    pub fn pow(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn pow(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Float(
@@ -156,7 +165,7 @@ impl OpManager {
         }
     }
 
-    pub fn eq(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn eq(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Bool(v1 == v2)),
@@ -177,7 +186,7 @@ impl OpManager {
         }
     }
 
-    pub fn lt(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn lt(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Bool(v1 < v2)),
@@ -198,7 +207,7 @@ impl OpManager {
         }
     }
 
-    pub fn gt(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn gt(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Bool(v1 > v2)),
@@ -219,7 +228,7 @@ impl OpManager {
         }
     }
 
-    pub fn neq(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn neq(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Bool(v1 != v2)),
@@ -240,7 +249,7 @@ impl OpManager {
         }
     }
 
-    pub fn lteq(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn lteq(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Bool(v1 <= v2)),
@@ -261,7 +270,7 @@ impl OpManager {
         }
     }
 
-    pub fn gteq(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn gteq(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // INT
             (Value::Int(v1), Value::Int(v2)) => Some(Value::Bool(v1 >= v2)),
@@ -282,7 +291,7 @@ impl OpManager {
         }
     }
 
-    pub fn and(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn and(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // BOOLEAN
             (Value::Bool(v1), Value::Bool(v2)) => Some(Value::Bool(*v1 && *v2)),
@@ -292,7 +301,7 @@ impl OpManager {
         }
     }
 
-    pub fn or(&self, v1: &Value, v2: &Value) -> Option<Value> {
+    pub fn or(&self, v1: &Value<Source>, v2: &Value<Source>) -> Option<Value<Source>> {
         match (v1, v2) {
             // BOOLEAN
             (Value::Bool(v1), Value::Bool(v2)) => Some(Value::Bool(*v1 || *v2)),

@@ -1,11 +1,14 @@
 use std::ops::{Deref, DerefMut};
 
+use derive_more::Display;
+
 use crate::{
     engine::{EvalError, Value},
     Engine,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[display(fmt = "{}", item)]
 pub struct Node<Item, Source> {
     pub item: Item,
     pub source: Source,
@@ -41,7 +44,7 @@ pub trait EvalNode<Source: Clone>: Sized {
     fn eval_node(
         node: &Node<Self, Source>,
         engine: &mut Engine<Source>,
-    ) -> Result<Value, EvalError<Source>>;
+    ) -> Result<Value<Source>, EvalError<Source>>;
 }
 
 pub trait Builder<Source>: Sized {

@@ -36,4 +36,22 @@ pub enum EvalError<Source> {
         found: ValueKind,
         source: Source,
     },
+    InvalidParameters {
+        found: usize,
+        expect: usize,
+        source: Source,
+    },
+    NativeCall {
+        message: String,
+        source: Source,
+    },
+    UnknownFunction {
+        name: String,
+        source: Source,
+    },
+    NotAFunction {
+        name: String,
+        found: ValueKind,
+        source: Source,
+    },
 }

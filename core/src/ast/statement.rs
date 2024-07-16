@@ -33,7 +33,7 @@ impl<Source: Clone> EvalNode<Source> for Statement<Source> {
     fn eval_node(
         node: &Node<Self, Source>,
         engine: &mut Engine<Source>,
-    ) -> Result<Value, EvalError<Source>> {
+    ) -> Result<Value<Source>, EvalError<Source>> {
         match &node.item {
             Statement::Expr { expr, closed } => {
                 let value = engine.eval(expr)?;

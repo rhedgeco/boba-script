@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use dashu::integer::IBig;
 
 use crate::{
@@ -48,13 +50,19 @@ pub enum Expr<Source> {
         pass: Box<ExprNode<Source>>,
         fail: Box<ExprNode<Source>>,
     },
+
+    // FUNCTION CALL
+    Call {
+        name: String,
+        params: Vec<ExprNode<Source>>,
+    },
 }
 
 impl<Source: Clone> EvalNode<Source> for Expr<Source> {
     fn eval_node(
         node: &Node<Self, Source>,
         engine: &mut Engine<Source>,
-    ) -> Result<Value, EvalError<Source>> {
+    ) -> Result<Value<Source>, EvalError<Source>> {
         match &node.item {
             // SIMPLE VALUES
             Expr::None => Ok(Value::None),
@@ -67,7 +75,7 @@ impl<Source: Clone> EvalNode<Source> for Expr<Source> {
                 for expr in exprs {
                     values.push(engine.eval(expr)?);
                 }
-                Ok(Value::Tuple(values))
+                Ok(Value::Tuple(values.into_iter().collect()))
             }
 
             // VARIABLES
@@ -76,6 +84,27 @@ impl<Source: Clone> EvalNode<Source> for Expr<Source> {
                 None => Err(EvalError::UnknownVariable {
                     source: node.source.clone(),
                     name: id.clone(),
+                }),
+            },
+
+            // FUNCTION CALL
+            Expr::Call { name, params } => match engine.vars().get(name.deref()) {
+                Some(Value::Func(func)) => {
+                    let func = func.clone();
+                    let mut values = Vec::new();
+                    for expr in params.iter() {
+                        values.push(engine.eval(expr)?)
+                    }
+                    func.call(&node.source, &values)
+                }
+                Some(value) => Err(EvalError::NotAFunction {
+                    name: name.clone(),
+                    found: value.kind(),
+                    source: node.source.clone(),
+                }),
+                None => Err(EvalError::UnknownFunction {
+                    source: node.source.clone(),
+                    name: name.to_string(),
                 }),
             },
 

@@ -131,8 +131,7 @@ impl<S: Span> ToAriadne<S> for EvalError<S> {
                     .with_message(format!("expected '{}', found '{}'", expect, found))
                     .with_color(Color::Red),
             ),
-            EvalError::ParameterCount {
-                name,
+            EvalError::InvalidParameters {
                 found,
                 expect,
                 source,
@@ -146,7 +145,7 @@ impl<S: Span> ToAriadne<S> for EvalError<S> {
             .with_label(
                 Label::new(source)
                     .with_message(format!(
-                        "function '{name}' needs {expect} param(s). only {found} are provided"
+                        "function expects {expect} param(s). only {found} were provided"
                     ))
                     .with_color(Color::Red),
             ),
@@ -172,6 +171,24 @@ impl<S: Span> ToAriadne<S> for EvalError<S> {
             .with_label(
                 Label::new(source)
                     .with_message(format!("unknown function {name}"))
+                    .with_color(Color::Red),
+            ),
+            EvalError::NotAFunction {
+                name,
+                found,
+                source,
+            } => Report::build(
+                ReportKind::Error,
+                source.source().to_owned(),
+                source.start(),
+            )
+            .with_code("R-011")
+            .with_message("Not A Function")
+            .with_label(
+                Label::new(source)
+                    .with_message(format!(
+                        "cannot call function '{name}'. '{name}' is a variable with type '{found}'"
+                    ))
                     .with_color(Color::Red),
             ),
         }

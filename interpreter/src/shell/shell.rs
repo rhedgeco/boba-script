@@ -7,6 +7,7 @@ use boba_script::{
         TokenLine,
     },
 };
+use boba_script_ariadne::ToAriadne;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 use super::{stream::ShellSource, ShellStream};
@@ -103,11 +104,15 @@ impl Shell {
                 Ok(statement) => match self.engine.eval(statement) {
                     Ok(Value::None) => {} // do nothing
                     Ok(value) => println!("{value}"),
-                    Err(error) => eprintln!("{error:?}"),
+                    Err(error) => error
+                        .to_ariadne()
+                        .eprint(self.tokens.build_cache())
+                        .unwrap(),
                 },
                 Err(errors) => {
+                    let mut cache = self.tokens.build_cache();
                     for error in errors {
-                        eprintln!("{error:?}");
+                        error.to_ariadne().eprint(&mut cache).unwrap();
                     }
                 }
             }

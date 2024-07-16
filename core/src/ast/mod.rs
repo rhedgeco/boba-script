@@ -1,4 +1,5 @@
 pub mod expr;
+pub mod func;
 pub mod node;
 pub mod statement;
 

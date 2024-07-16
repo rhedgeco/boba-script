@@ -1,52 +1,45 @@
-use std::{fmt::Debug, marker::PhantomData};
-
 use crate::{
     ast::{expr::ExprNode, node::EvalNode, Expr, Node},
     engine::Value,
 };
 
-use super::{ops::OpManager, EvalError, ScopeStack};
+use super::{builtins, ops::OpManager, value::ValueStore, EvalError};
 
 pub struct Engine<Source> {
-    _source: PhantomData<*const Source>,
-    vars: ScopeStack,
-    ops: OpManager,
-}
-
-impl<Source> Debug for Engine<Source> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Engine")
-            .field("vars", &self.vars)
-            .field("ops", &self.ops)
-            .finish()
-    }
+    values: ValueStore<Source>,
+    ops: OpManager<Source>,
 }
 
 impl<Source> Default for Engine<Source> {
     fn default() -> Self {
-        Self {
-            _source: Default::default(),
-            vars: Default::default(),
-            ops: Default::default(),
-        }
+        let mut engine = Self::empty();
+        builtins::load_into(&mut engine);
+        engine
     }
 }
 
 impl<Source> Engine<Source> {
+    pub fn empty() -> Self {
+        Self {
+            values: Default::default(),
+            ops: Default::default(),
+        }
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn ops(&self) -> &OpManager {
+    pub fn ops(&self) -> &OpManager<Source> {
         &self.ops
     }
 
-    pub fn vars(&self) -> &ScopeStack {
-        &self.vars
+    pub fn vars(&self) -> &ValueStore<Source> {
+        &self.values
     }
 
-    pub fn vars_mut(&mut self) -> &mut ScopeStack {
-        &mut self.vars
+    pub fn vars_mut(&mut self) -> &mut ValueStore<Source> {
+        &mut self.values
     }
 }
 
@@ -54,7 +47,7 @@ impl<Source: Clone> Engine<Source> {
     pub fn eval<T: EvalNode<Source>>(
         &mut self,
         node: impl AsRef<Node<T, Source>>,
-    ) -> Result<Value, EvalError<Source>> {
+    ) -> Result<Value<Source>, EvalError<Source>> {
         T::eval_node(node.as_ref(), self)
     }
 
@@ -65,7 +58,7 @@ impl<Source: Clone> Engine<Source> {
     ) -> Result<(), EvalError<Source>> {
         let store = self.destructure(lhs, rhs)?;
         for (id, value, source) in store {
-            if let Err(_) = self.vars.set(id, value) {
+            if let Err(_) = self.values.set(id, value) {
                 return Err(EvalError::UnknownVariable {
                     name: id.to_string(),
                     source: source.clone(),
@@ -83,7 +76,7 @@ impl<Source: Clone> Engine<Source> {
     ) -> Result<(), EvalError<Source>> {
         let store = self.destructure(lhs, rhs)?;
         for (id, value, _) in store {
-            self.vars.init(id, value);
+            self.values.init(id, value);
         }
         Ok(())
     }
@@ -92,12 +85,12 @@ impl<Source: Clone> Engine<Source> {
         &mut self,
         lhs: &'a ExprNode<Source>,
         rhs: &'b ExprNode<Source>,
-    ) -> Result<Vec<(&'a str, Value, &'b Source)>, EvalError<Source>> {
+    ) -> Result<Vec<(&'a str, Value<Source>, &'b Source)>, EvalError<Source>> {
         fn recurse<'a, 'b, Source: Clone>(
             lhs: &'a ExprNode<Source>,
             rhs: &'b ExprNode<Source>,
             engine: &mut Engine<Source>,
-            store: &mut Vec<(&'a str, Value, &'b Source)>,
+            store: &mut Vec<(&'a str, Value<Source>, &'b Source)>,
         ) -> Result<(), EvalError<Source>> {
             match &lhs.item {
                 // if the lhs is a variable, then directly assign to it

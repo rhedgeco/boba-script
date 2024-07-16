@@ -23,8 +23,65 @@ pub fn parse_atom<T: TokenStream>(
         Some(Token::Float(value)) => Ok(Expr::Float(value).build_node(line.token_source())),
         Some(Token::String(value)) => Ok(Expr::String(value).build_node(line.token_source())),
 
-        // VARS / CALLS
-        Some(Token::Ident(ident)) => Ok(Expr::Var(ident).build_node(line.token_source())),
+        // VARS / FUNCTION CALLS
+        Some(Token::Ident(ident)) => {
+            let source = line.token_source();
+            let start = match line.peek_token() {
+                Some(Ok(Token::OpenParen)) => {
+                    line.consume_token();
+                    line.token_start()
+                }
+                _ => return Ok(Expr::Var(ident).build_node(line.token_source())),
+            };
+
+            let mut params = Vec::new();
+            line.guard_else(
+                |line| loop {
+                    // parse closing paren or expression
+                    match line.peek_token() {
+                        Some(Ok(Token::CloseParen)) => {
+                            line.consume_token();
+                            break Ok(());
+                        }
+                        _ => params.push(parse(line)?),
+                    }
+
+                    // parse comma or closing paren
+                    match line.take_some("',' or ')'").map_err(|e| vec![e])? {
+                        Token::Comma => continue,
+                        Token::CloseParen => break Ok(()),
+                        token => {
+                            break Err(vec![ParseError::UnexpectedInput {
+                                expect: "',' or ')'".into(),
+                                found: Some(token),
+                                source: line.token_source(),
+                            }])
+                        }
+                    }
+                },
+                |errors| {
+                    // consume until the end of braces
+                    match errors.consume_until(|t| match t {
+                        Token::CloseParen => ConsumeFlag::Inclusive,
+                        _ => ConsumeFlag::Ignore,
+                    }) {
+                        // if the error found a closing paren, then finish
+                        ConsumeEnd::Inclusive(_) => {}
+                        // otherwise, push an unclosed brace error too
+                        _ => errors.push(ParseError::UnclosedBrace {
+                            open: errors.line().build_source(start..start + 1),
+                            end: errors.line().token_end_source(),
+                        }),
+                    }
+                },
+            )?;
+
+            Ok(Expr::Call {
+                name: ident,
+                params,
+            }
+            .build_node(source))
+        }
 
         // PARENTHESIS AND TUPLES
         Some(Token::OpenParen) => {
@@ -59,7 +116,6 @@ pub fn parse_atom<T: TokenStream>(
                     },
                     |errors| {
                         // consume until the end of the inner expression
-
                         match errors.consume_until(|t| match t {
                             Token::CloseParen => ConsumeFlag::Inclusive,
                             _ => ConsumeFlag::Ignore,
