@@ -1,16 +1,12 @@
 use std::fmt::Display;
 
-use crate::{
-    engine::{EvalError, Value},
-    Engine,
-};
+use super::{Node, StatementNode};
 
-use super::{node::EvalNode, Node, StatementNode};
+pub type NodeFunc<Source> = Node<Func<Source>, Source>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Func<Source> {
-    pub name: Node<String, Source>,
-    pub params: Vec<Node<String, Source>>,
+    pub params: Vec<String>,
     pub body: Vec<StatementNode<Source>>,
 }
 
@@ -23,15 +19,6 @@ impl<Source> Display for Func<Source> {
             .collect::<Vec<_>>()
             .join(", ");
 
-        write!(f, "fn {}{params}", self.name)
-    }
-}
-
-impl<Source: Clone> EvalNode<Source> for Func<Source> {
-    fn eval_node(
-        _node: &Node<Self, Source>,
-        _: &mut Engine<Source>,
-    ) -> Result<Value<Source>, EvalError<Source>> {
-        todo!()
+        write!(f, "fn({params})")
     }
 }

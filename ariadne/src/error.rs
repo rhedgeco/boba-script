@@ -187,7 +187,7 @@ impl<S: Span> ToAriadne<S> for EvalError<S> {
             .with_label(
                 Label::new(source)
                     .with_message(format!(
-                        "cannot call function '{name}'. '{name}' is a variable with type '{found}'"
+                        "'{name}' is not a function, it is a value with type '{found}'"
                     ))
                     .with_color(Color::Red),
             ),

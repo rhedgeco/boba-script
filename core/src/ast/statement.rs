@@ -7,7 +7,7 @@ use super::{expr::ExprNode, node::EvalNode, Node};
 
 pub type StatementNode<Source> = Node<Statement<Source>, Source>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement<Source> {
     Expr {
         expr: ExprNode<Source>,

@@ -3,15 +3,18 @@ use std::ops::Deref;
 use dashu::integer::IBig;
 
 use crate::{
-    engine::{value::ValueKind, EvalError, Value},
+    engine::{
+        value::{FuncPtr, ValueKind},
+        EvalError, Value,
+    },
     Engine,
 };
 
-use super::{node::EvalNode, Node};
+use super::{func::NodeFunc, node::EvalNode, Node};
 
 pub type ExprNode<Source> = Node<Expr<Source>, Source>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr<Source> {
     // VALUES
     None,
@@ -21,6 +24,7 @@ pub enum Expr<Source> {
     String(String),
     Var(String),
     Tuple(Vec<ExprNode<Source>>),
+    Func(NodeFunc<Source>),
 
     // UNARY OPS
     Pos(Box<ExprNode<Source>>),
@@ -70,6 +74,7 @@ impl<Source: Clone> EvalNode<Source> for Expr<Source> {
             Expr::Int(value) => Ok(Value::Int(value.clone())),
             Expr::Float(value) => Ok(Value::Float(*value)),
             Expr::String(value) => Ok(Value::String(value.clone())),
+            Expr::Func(func) => Ok(Value::Func(FuncPtr::custom(func.deref().clone()))),
             Expr::Tuple(exprs) => {
                 let mut values = Vec::with_capacity(exprs.len());
                 for expr in exprs {
@@ -95,7 +100,7 @@ impl<Source: Clone> EvalNode<Source> for Expr<Source> {
                     for expr in params.iter() {
                         values.push(engine.eval(expr)?)
                     }
-                    func.call(&node.source, &values)
+                    func.call(&node.source, values, engine)
                 }
                 Some(value) => Err(EvalError::NotAFunction {
                     name: name.clone(),
