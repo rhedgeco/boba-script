@@ -1,11 +1,11 @@
 use crate::Engine;
 
-use super::{value::func::NativeFunc, Value};
+use super::{value::FuncPtr, Value};
 
 pub fn load_into<Source>(engine: &mut Engine<Source>) {
-    engine.vars_mut().init(
+    engine.vars_mut().init_global(
         "print",
-        Value::Func(NativeFunc::new(1, |values| {
+        Value::Func(FuncPtr::native(1, |values| {
             println!("{}", values[0]);
             Ok(Value::None)
         })),

@@ -1,9 +1,11 @@
-use boba_script_core::ast::{node::Builder, ExprNode, Statement, StatementNode};
+use boba_script_core::ast::{
+    func::Func, node::Builder, Expr, ExprNode, Node, Statement, StatementNode,
+};
 
 use crate::{
     error::PError,
     stream::{SourceExt, SourceSpan},
-    ParseError, Token, TokenLine, TokenStream,
+    ConsumeEnd, ConsumeFlag, ParseError, Token, TokenLine, TokenStream,
 };
 
 use super::{
@@ -20,6 +22,12 @@ enum ParseKind<Source: SourceSpan> {
     While {
         source: Source,
         cond: ExprNode<Source>,
+        block: BlockParser<Source>,
+    },
+    Func {
+        source: Source,
+        name: String,
+        params: Vec<String>,
         block: BlockParser<Source>,
     },
 }
@@ -66,6 +74,37 @@ impl<Source: SourceSpan> StatementParser<Source> {
                     Err(errors)
                 }
             },
+            Some(ParseKind::Func {
+                source,
+                name,
+                params,
+                mut block,
+            }) => {
+                let result = match block.parse_line(line) {
+                    Ok(None) => Ok(None),
+                    Err(errors) => Err(errors),
+                    Ok(Some(body)) => {
+                        let func = Func { params, body }.build_node(source.clone());
+                        return Ok(Some(
+                            Statement::Assign {
+                                init: true,
+                                lhs: Node::new(Expr::Var(name), source.clone()),
+                                rhs: Node::new(Expr::Func(func), source.clone()),
+                            }
+                            .build_node(source),
+                        ));
+                    }
+                };
+
+                self.kind = Some(ParseKind::Func {
+                    source,
+                    name,
+                    params,
+                    block,
+                });
+
+                result
+            }
         }
     }
 }
@@ -159,6 +198,91 @@ pub fn start_parsing<T: TokenStream>(
                 // }
 
                 todo!()
+            }
+
+            Some(Ok(Token::Fn)) => {
+                // consume the fn token
+                line.consume_token();
+                let start = line.token_start();
+
+                // parse the function ident
+                let name = match line.take_some("identifier").map_err(|e| vec![e])? {
+                    Token::Ident(ident) => ident,
+                    token => {
+                        return Err(vec![ParseError::UnexpectedInput {
+                            expect: "identifier".into(),
+                            found: Some(token),
+                            source: line.token_source(),
+                        }])
+                    }
+                };
+
+                // parse the open paren
+                line.take_exact(Some(&Token::OpenParen))
+                    .map_err(|e| vec![e])?;
+
+                // parse the parameters
+                let mut params = Vec::new();
+                let end = line.guard_else(
+                    |line| loop {
+                        // parse closing paren or ident
+                        match line.take_some("identifier or ')'").map_err(|e| vec![e])? {
+                            Token::CloseParen => break Ok(line.token_end()),
+                            Token::Ident(ident) => params.push(ident),
+                            token => {
+                                return Err(vec![ParseError::UnexpectedInput {
+                                    expect: "identifier or ')'".into(),
+                                    found: Some(token),
+                                    source: line.token_source(),
+                                }])
+                            }
+                        }
+
+                        // parse comma or closing paren
+                        match line.take_some("',' or ')'").map_err(|e| vec![e])? {
+                            Token::Comma => continue,
+                            Token::CloseParen => break Ok(line.token_end()),
+                            token => {
+                                break Err(vec![ParseError::UnexpectedInput {
+                                    expect: "',' or ')'".into(),
+                                    found: Some(token),
+                                    source: line.token_source(),
+                                }])
+                            }
+                        }
+                    },
+                    |errors| {
+                        // consume until the end of braces
+                        match errors.consume_until(|t| match t {
+                            Token::CloseParen => ConsumeFlag::Inclusive,
+                            _ => ConsumeFlag::Ignore,
+                        }) {
+                            // if the error found a closing paren, then finish
+                            ConsumeEnd::Inclusive(_) => {}
+                            // otherwise, push an unclosed brace error too
+                            _ => errors.push(ParseError::UnclosedBrace {
+                                open: errors.line().build_source(start..start + 1),
+                                end: errors.line().token_end_source(),
+                            }),
+                        }
+                    },
+                )?;
+
+                // build source for function header
+                let source = line.build_source(start..end);
+
+                // parse the block header
+                let block = block::start_parsing(line)?;
+
+                // return the function parser
+                Ok(StatementType::MultiLine(StatementParser {
+                    kind: Some(ParseKind::Func {
+                        source,
+                        name,
+                        params,
+                        block,
+                    }),
+                }))
             }
 
             // ASSIGNMENT OR EXPRESSION

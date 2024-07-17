@@ -76,7 +76,7 @@ impl<Source: Clone> Engine<Source> {
     ) -> Result<(), EvalError<Source>> {
         let store = self.destructure(lhs, rhs)?;
         for (id, value, _) in store {
-            self.values.init(id, value);
+            self.values.init_local(id, value);
         }
         Ok(())
     }
