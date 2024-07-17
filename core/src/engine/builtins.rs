@@ -9,5 +9,5 @@ pub fn load_into<Source>(engine: &mut Engine<Source>) {
             println!("{}", values[0]);
             Ok(Value::None)
         })),
-    )
+    );
 }
