@@ -1,7 +1,8 @@
 use std::fmt::Display;
 
 use ariadne::{Color, Label, Report, ReportKind, Span};
-use boba_script::{core::engine::EvalError, parser::error::ParseError};
+use boba_script_core::engine::EvalError;
+use boba_script_parser::error::ParseError;
 
 pub trait ToAriadne<S: Span> {
     fn to_ariadne<'a>(self) -> Report<'a, S>;

@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 
 use boba_script::{
+    ariadne,
     lexer::{LexError, Lexer},
     parser::{stream::SourceSpan, token::Span, Token, TokenStream},
 };
-use boba_script_ariadne as ariadne;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShellId;
@@ -150,7 +150,7 @@ impl<'a> ariadne::Cache<ShellId> for AriadneCache<'a> {
     fn fetch(
         &mut self,
         _: &ShellId,
-    ) -> Result<&boba_script_ariadne::Source<Self::Storage>, Box<dyn std::fmt::Debug + '_>> {
+    ) -> Result<&ariadne::Source<Self::Storage>, Box<dyn std::fmt::Debug + '_>> {
         Ok(&self.source)
     }
 

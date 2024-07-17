@@ -6,5 +6,4 @@ edition = "2021"
 [dependencies]
 reedline = "0.32.0"
 boba-script = { path = "../" }
-boba-script-ariadne = { path = "../ariadne" }
 clap = { version = "4.5.4", features = ["derive"] }
