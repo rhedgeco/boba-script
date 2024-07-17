@@ -9,3 +9,7 @@ pub mod parser {
 pub mod lexer {
     pub use boba_script_lexer::*;
 }
+
+pub mod ariadne {
+    pub use boba_script_ariadne::*;
+}

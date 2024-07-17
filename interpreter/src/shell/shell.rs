@@ -1,5 +1,6 @@
 use std::io;
 
+use boba_script::ariadne::ToAriadne;
 use boba_script::{
     core::{engine::Value, Engine},
     parser::{
@@ -7,7 +8,6 @@ use boba_script::{
         TokenLine,
     },
 };
-use boba_script_ariadne::ToAriadne;
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
 
 use super::{stream::ShellSource, ShellStream};

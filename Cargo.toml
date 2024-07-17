@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["core", "parser", "lexer", "interpreter", "ariadne"]
+members = ["crates/*", "interpreter"]
 
 [dependencies]
-boba-script-core = { path = "./core" }
-boba-script-parser = { path = "./parser" }
-boba-script-lexer = { path = "./lexer" }
+boba-script-core = { path = "./crates/core" }
+boba-script-parser = { path = "./crates/parser" }
+boba-script-lexer = { path = "./crates/lexer" }
+boba-script-ariadne = { path = "./crates/ariadne" }

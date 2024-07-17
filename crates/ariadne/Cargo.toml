@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 ariadne = "0.4.1"
-boba-script = { path = "../" }
+boba-script-core = { path = "../core" }
+boba-script-parser = { path = "../parser" }
