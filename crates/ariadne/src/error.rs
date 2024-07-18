@@ -242,7 +242,7 @@ impl<S: Span, T: Display> ToAriadne<S> for ParseError<S, T> {
                     )
                     .with_label(
                         Label::new(end)
-                            .with_message(format!("expected closing brace by this point"))
+                            .with_message(format!("expected closing brace before by this point"))
                             .with_color(Color::Cyan),
                     )
             }

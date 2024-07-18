@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, iter::Peekable};
+use std::{cmp::Ordering, iter::Peekable, ops::AddAssign};
 
 use boba_script_parser::{core::dashu::integer::IBig, token::Span, Token};
 use unicode_segmentation::{Graphemes, UnicodeSegmentation};
@@ -10,6 +10,34 @@ enum TabStyle {
     Spaces,
     Tabs,
     None,
+}
+
+struct IndentTracker {
+    result: Result<usize, IndentType>,
+}
+
+impl IndentTracker {
+    pub fn new() -> Self {
+        Self { result: Ok(0) }
+    }
+
+    pub fn reset(&mut self) {
+        self.result = Ok(0)
+    }
+
+    pub fn increment(&mut self) {
+        if let Ok(indent) = &mut self.result {
+            indent.add_assign(1);
+        }
+    }
+
+    pub fn set_error(&mut self, ty: IndentType) {
+        self.result = Err(ty);
+    }
+
+    pub fn result(self) -> Result<usize, IndentType> {
+        self.result
+    }
 }
 
 pub struct Lexer {
@@ -77,13 +105,11 @@ impl Iterator for LexTokens<'_, '_> {
             self.span.start = self.span.end;
 
             // scan all indent tokens
-            let mut new_level = 0;
+            let mut indent = IndentTracker::new();
             loop {
                 // peek the next symbol
                 let Some(symbol) = self.peek_symbol() else {
-                    // if there is none, consume the lin and dont update indent
-                    // indent/dedent/newline tokens should not be sent on blank lines
-                    self.consume_line();
+                    self.take_symbol();
                     return None;
                 };
 
@@ -91,10 +117,12 @@ impl Iterator for LexTokens<'_, '_> {
                 match symbol {
                     // EMPTY LINE CASE
                     // if a newline or comment is found
-                    // consume the rest of the line
+                    // consume the rest of the line and restart the indent count
                     "\n" | "\r" | "\r\n" | "#" => {
-                        self.consume_line();
-                        return None;
+                        self.consume_line(); // consume line
+                        self.consume_symbol(); // consume newline token
+                        self.span.start = self.span.end; // reset indent span
+                        indent.reset(); // reset indent tracker
                     }
 
                     // ARBITRARY STYLE CASES
@@ -103,12 +131,12 @@ impl Iterator for LexTokens<'_, '_> {
                     " " if self.lexer.style == TabStyle::None => {
                         self.lexer.style = TabStyle::Spaces;
                         self.consume_symbol();
-                        new_level += 1;
+                        indent.increment();
                     }
                     "\t" if self.lexer.style == TabStyle::None => {
                         self.lexer.style = TabStyle::Tabs;
                         self.consume_symbol();
-                        new_level += 1;
+                        indent.increment();
                     }
 
                     // CORRECT STYLE CASES
@@ -116,20 +144,20 @@ impl Iterator for LexTokens<'_, '_> {
                     // then just consume the token and increment the level
                     " " if self.lexer.style == TabStyle::Spaces => {
                         self.consume_symbol();
-                        new_level += 1;
+                        indent.increment();
                     }
                     "\t" if self.lexer.style == TabStyle::Tabs => {
                         self.consume_symbol();
-                        new_level += 1;
+                        indent.increment();
                     }
 
                     // INVALID STYLE CASES
-                    // if the indent character doesnt match the internal style, return a tab error
+                    // if the indent character doesnt match, store an error for later
                     " " if self.lexer.style == TabStyle::Tabs => {
-                        return self.tab_error(true);
+                        indent.set_error(IndentType::Space);
                     }
                     "\t" if self.lexer.style == TabStyle::Spaces => {
-                        return self.tab_error(false);
+                        indent.set_error(IndentType::Tab);
                     }
 
                     // END CASE
@@ -138,8 +166,11 @@ impl Iterator for LexTokens<'_, '_> {
                 }
             }
 
-            // then update the internal level
-            self.lexer.level = new_level;
+            // then update the internal indent level
+            match indent.result() {
+                Ok(indent) => self.lexer.level = indent,
+                Err(ty) => return Some(Err(LexError::InvalidIndent(ty))),
+            }
         }
 
         // check if indent/dedent tokens need to be sent
@@ -167,7 +198,6 @@ impl Iterator for LexTokens<'_, '_> {
             // get the next symbol
             self.span.start = self.span.end;
             let Some(symbol) = self.take_symbol() else {
-                self.consume_line();
                 return None;
             };
 
@@ -179,8 +209,10 @@ impl Iterator for LexTokens<'_, '_> {
                 // NEWLINE / COMMENT
                 // if a comment or newline is found, consume the line
                 "\n" | "\r" | "\r\n" | "#" => {
-                    self.consume_line();
-                    return None;
+                    self.consume_line(); // consume line
+                    self.consume_symbol(); // consume newline token
+                    self.lexer.indent = true;
+                    return Some(Ok(Token::Newline));
                 }
 
                 // SIMPLE TOKENS
@@ -326,22 +358,18 @@ impl Iterator for LexTokens<'_, '_> {
                 // STRINGS
                 "'" | "\"" => loop {
                     let Some(next_symbol) = self.peek_symbol() else {
-                        // if there is no symbol, then the string is unclosed
-                        self.consume_line(); // consume line first
                         return Some(Err(LexError::UnclosedString));
                     };
 
                     match symbol {
                         // if a newline is found, then the string is unclosed
                         "\n" | "\r" | "\r\n" => {
-                            self.consume_line(); // consume line first
                             return Some(Err(LexError::UnclosedString));
                         }
                         // if an escape character is found, skip the next symbol
                         "\\" => {
                             self.consume_symbol();
                             if let None = self.take_symbol() {
-                                self.consume_line(); // consume line first
                                 return Some(Err(LexError::UnclosedString));
                             }
                         }
@@ -384,9 +412,17 @@ impl<'source> LexTokens<'_, 'source> {
     }
 
     fn take_symbol(&mut self) -> Option<&'source str> {
-        let symbol = self.symbols.next()?;
-        self.span.end += symbol.len();
-        Some(symbol)
+        match self.symbols.next() {
+            Some(symbol) => {
+                self.span.end += symbol.len();
+                Some(symbol)
+            }
+            None => {
+                self.span.start = self.span.end;
+                self.lexer.indent = true;
+                None
+            }
+        }
     }
 
     fn peek_symbol(&mut self) -> Option<&'source str> {
@@ -394,28 +430,18 @@ impl<'source> LexTokens<'_, 'source> {
     }
 
     fn consume_line(&mut self) {
-        self.lexer.indent = true;
         self.span.start = self.span.end;
-        while let Some(_) = self.symbols.next() {}
-    }
+        loop {
+            let Some(symbol) = self.peek_symbol() else {
+                break;
+            };
 
-    fn tab_error(&mut self, space: bool) -> Option<Result<Token, LexError>> {
-        while let Some(symbol) = self.peek_symbol() {
             match symbol {
-                " " | "\t" => {
-                    self.consume_symbol();
+                "\n" | "\r" | "\r\n" => break,
+                _ => {
+                    self.symbols.next();
                 }
-                "\n" | "\r" | "\r\n" | "#" => {
-                    self.consume_line();
-                    return None;
-                }
-                _ => break,
             }
-        }
-
-        match space {
-            false => Some(Err(LexError::InvalidIndent(IndentType::Tab))),
-            true => Some(Err(LexError::InvalidIndent(IndentType::Space))),
         }
     }
 }
