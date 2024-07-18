@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-logos = "0.14.0"
-derive_more = "0.99.18"
-unicode-segmentation = "1.10.1"
+logos = "0.14"
+derive_more = "0.99"
+unicode-segmentation = "1.10"
 boba-script-parser = { path = "../parser" }
-ariadne = { version = "0.4.1", features = ["auto-color"] }
+ariadne = { version = "0.4", features = ["auto-color"] }

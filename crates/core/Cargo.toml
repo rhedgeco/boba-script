@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-dashu = "0.4.2"
-hashbrown = "0.14.5"
-thiserror = "1.0.61"
-derive_more = "0.99.17"
+dashu = "0.4"
+fxhash = "0.2"
+indexmap = "2.2"
+hashbrown = "0.14"
+thiserror = "1.0"
+derive_more = "0.99"
+ptr-vec = { path = "../ptr-vec" }
