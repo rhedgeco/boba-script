@@ -1,2 +1,2 @@
-dev:
+code:
     nix develop --command code .
