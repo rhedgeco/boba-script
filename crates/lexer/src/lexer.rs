@@ -1,59 +1,80 @@
 use std::{cmp::Ordering, iter::Peekable};
 
-use boba_script_parser::{core::dashu::integer::IBig, token::Span, Token};
 use unicode_segmentation::{Graphemes, UnicodeSegmentation};
 
-use crate::{error::IndentType, LexError};
+use crate::{
+    error::LexerError,
+    token::{
+        build::{FloatBuilder, IntBuilder, StrFormat},
+        Span,
+    },
+    LexFilter, Token,
+};
 
-#[derive(PartialEq)]
-enum TabStyle {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum IndentStyle {
     Spaces,
     Tabs,
-    None,
 }
 
-pub struct Lexer {
-    levels: Vec<usize>,
-    style: TabStyle,
-    level: usize,
-    indent: bool,
+pub struct LexerState {
+    indent_levels: Vec<usize>,
+    indent_style: Option<IndentStyle>,
+    line_level: Option<usize>,
 }
 
-impl Lexer {
-    pub fn new() -> Self {
+impl Default for LexerState {
+    fn default() -> Self {
         Self {
-            levels: Vec::new(),
-            style: TabStyle::None,
-            level: 0,
-            indent: true,
+            indent_levels: Vec::new(),
+            indent_style: None,
+            line_level: None,
+        }
+    }
+}
+
+impl LexerState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_style(style: IndentStyle) -> Self {
+        Self {
+            indent_style: Some(style),
+            ..Default::default()
         }
     }
 
-    pub fn close_blocks(&mut self) -> usize {
-        let levels = self.levels.len();
-        self.levels.clear();
-        self.level = 0;
-        levels
+    pub fn indent_depth(&self) -> usize {
+        self.indent_levels.len()
     }
 
-    pub fn lex<'source>(&mut self, source: &'source str) -> LexTokens<'_, 'source> {
-        LexTokens {
-            lexer: self,
+    pub fn indent_style(&self) -> Option<IndentStyle> {
+        self.indent_style
+    }
+
+    pub fn close_blocks(&mut self) {
+        self.line_level = Some(0);
+    }
+
+    pub fn lex<'source, 'state: 'source>(&'state mut self, source: &'source str) -> Lexer<'source> {
+        Lexer {
+            state: self,
             symbols: source.graphemes(true).peekable(),
             source,
-            span: Span::from(0..0),
+            span: Span::new(0, 0),
         }
     }
 }
 
-pub struct LexTokens<'lexer, 'source> {
-    lexer: &'lexer mut Lexer,
+pub struct Lexer<'source> {
+    state: &'source mut LexerState,
     symbols: Peekable<Graphemes<'source>>,
     source: &'source str,
     span: Span,
 }
 
-impl LexTokens<'_, '_> {
+impl<'source> Lexer<'source> {
     pub fn token_start(&self) -> usize {
         self.span.start
     }
@@ -63,149 +84,172 @@ impl LexTokens<'_, '_> {
     }
 
     pub fn token_span(&self) -> Span {
-        (self.token_start()..self.token_end()).into()
+        self.span
+    }
+
+    pub fn token_start_span(&self) -> Span {
+        let start = self.span.start;
+        Span::new(start, start)
+    }
+
+    pub fn token_end_span(&self) -> Span {
+        let end = self.span.end;
+        Span::new(end, end)
+    }
+
+    pub fn filtered(self) -> LexFilter<'source> {
+        LexFilter::new(self)
     }
 }
 
-impl Iterator for LexTokens<'_, '_> {
-    type Item = Result<Token, LexError>;
+impl<'source> Iterator for Lexer<'source> {
+    type Item = Result<Token<'source>, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // check if an indent has to be scanned
-        if self.lexer.indent {
-            self.lexer.indent = false;
-            self.span.start = self.span.end;
+        // get the current line level
+        let line_level = match &self.state.line_level {
+            // if its already set, just use the value
+            Some(level) => level,
 
-            // scan all indent tokens
-            let mut new_level = 0;
-            loop {
-                // peek the next symbol
-                let Some(symbol) = self.peek_symbol() else {
-                    // if there is none, consume the lin and dont update indent
-                    // indent/dedent/newline tokens should not be sent on blank lines
-                    self.consume_line();
-                    return None;
-                };
-
-                // match the symbol with the stored indent style
-                match symbol {
-                    // EMPTY LINE CASE
-                    // if a newline or comment is found
-                    // consume the rest of the line
-                    "\n" | "\r" | "\r\n" | "#" => {
-                        self.consume_line();
+            // otherwise calculate the new indent level
+            None => {
+                let mut tabs = 0;
+                let mut spaces = 0;
+                self.span.start = self.span.end;
+                loop {
+                    // peek at the next symbol
+                    let Some(symbol) = self.peek_symbol() else {
+                        // if its none, end the span and return none
+                        self.span.start = self.span.end;
                         return None;
-                    }
+                    };
 
-                    // ARBITRARY STYLE CASES
-                    // if the indent style has not been decided yet
-                    // define the indent style, consume the symbol, and increment the level
-                    " " if self.lexer.style == TabStyle::None => {
-                        self.lexer.style = TabStyle::Spaces;
-                        self.consume_symbol();
-                        new_level += 1;
-                    }
-                    "\t" if self.lexer.style == TabStyle::None => {
-                        self.lexer.style = TabStyle::Tabs;
-                        self.consume_symbol();
-                        new_level += 1;
-                    }
+                    // check the symbol for indent characters
+                    match symbol {
+                        // TAB/SPACE CASE
+                        // if a tab or space is found, then increment its value
+                        " " => {
+                            spaces += 1;
+                            self.consume_symbol();
+                        }
+                        "\t" => {
+                            tabs += 1;
+                            self.consume_symbol();
+                        }
 
-                    // CORRECT STYLE CASES
-                    // if the indent character matches the internal style
-                    // then just consume the token and increment the level
-                    " " if self.lexer.style == TabStyle::Spaces => {
-                        self.consume_symbol();
-                        new_level += 1;
-                    }
-                    "\t" if self.lexer.style == TabStyle::Tabs => {
-                        self.consume_symbol();
-                        new_level += 1;
-                    }
+                        // NEWLINE CASE
+                        // if a newline is found, then produce a newline token
+                        // empty lines should not change indent levels
+                        "\r" | "\n" | "\r\n" => {
+                            self.span.start = self.span.end;
+                            self.consume_symbol();
+                            return Some(Ok(Token::Newline));
+                        }
 
-                    // INVALID STYLE CASES
-                    // if the indent character doesnt match the internal style, return a tab error
-                    " " if self.lexer.style == TabStyle::Tabs => {
-                        return self.tab_error(true);
-                    }
-                    "\t" if self.lexer.style == TabStyle::Spaces => {
-                        return self.tab_error(false);
-                    }
+                        // COMMENT CASE
+                        // if a comment is found, then produce the comment token
+                        // empty lines should not change indent levels
+                        "#" => {
+                            self.span.start = self.span.end;
+                            self.consume_symbol();
+                            return Some(Ok(self.build_comment()));
+                        }
 
-                    // END CASE
-                    // symbol is not an indent symbol
-                    _ => break,
+                        // END CASE
+                        // if any other symbol is found, then the indent is complete
+                        _ => break,
+                    }
                 }
+
+                // ensure indent character match the style
+                self.state.line_level.insert(match self.state.indent_style {
+                    // ERROR CASES
+                    Some(IndentStyle::Spaces) if tabs > 0 => {
+                        return Some(Err(LexerError::MixedIndent));
+                    }
+                    Some(IndentStyle::Tabs) if spaces > 0 => {
+                        return Some(Err(LexerError::MixedIndent));
+                    }
+
+                    // SUCCESS CASES
+                    Some(IndentStyle::Tabs) => tabs,
+                    Some(IndentStyle::Spaces) => spaces,
+                    None => match (spaces, tabs) {
+                        (0, 0) => 0,
+                        (0, _) => {
+                            self.state.indent_style = Some(IndentStyle::Tabs);
+                            tabs
+                        }
+                        (_, 0) => {
+                            self.state.indent_style = Some(IndentStyle::Spaces);
+                            spaces
+                        }
+                        _ => {
+                            return Some(Err(LexerError::MixedIndent));
+                        }
+                    },
+                })
             }
+        };
 
-            // then update the internal level
-            self.lexer.level = new_level;
-        }
-
-        // check if indent/dedent tokens need to be sent
-        let last_level = self.lexer.levels.last().unwrap_or(&0);
-        match self.lexer.level.cmp(last_level) {
-            // if the levels are equal, then do nothing and continue
+        // check if indent or dedent tokens need to be emitted
+        let last_level = self.state.indent_levels.last().cloned().unwrap_or(0);
+        match last_level.cmp(line_level) {
+            // if the levels are equal, then no indent/dedent is needed
             Ordering::Equal => {}
-            // if the indent level is less than the last
-            // then pop the last level and produce a dedent token
-            Ordering::Less => {
-                self.lexer.levels.pop();
+            // if the last level is larger, then pop it and emit a dedent
+            Ordering::Greater => {
+                self.state.indent_levels.pop();
                 return Some(Ok(Token::Dedent));
             }
-            // if the indent level is greater than the last
-            // then store the new level and produce an indent token
-            Ordering::Greater => {
-                self.lexer.levels.push(self.lexer.level);
+            // if the last level is smaller, then push the new level and emit an indent
+            Ordering::Less => {
+                self.state.indent_levels.push(*line_level);
                 return Some(Ok(Token::Indent));
             }
         }
 
-        // if all indentation has been handled,
-        // then we can move onto the rest of the regular tokens
+        // parse other tokens
         loop {
-            // get the next symbol
+            // peek the next symbol
             self.span.start = self.span.end;
             let Some(symbol) = self.take_symbol() else {
-                self.consume_line();
+                // if its none, end the span and return none
+                self.span.start = self.span.end;
+                self.state.line_level = None;
                 return None;
             };
 
-            // then match the symbol to a token
+            // match the peeked symbol
             return match symbol {
                 // WHITESPACE
-                " " | "\t" => continue, // skip whitespace
+                // if whitespace is found, skip it and try again
+                " " | "\t" => continue,
 
-                // NEWLINE / COMMENT
-                // if a comment or newline is found, consume the line
-                "\n" | "\r" | "\r\n" | "#" => {
-                    self.consume_line();
-                    return None;
+                // COMMENT CASE
+                // if a comment is found, build it and return
+                "#" => Some(Ok(self.build_comment())),
+
+                // NEWLINE
+                // if a newline is found, reset the line level and return a newline
+                "\r" | "\n" | "\r\n" => {
+                    self.state.line_level = None;
+                    Some(Ok(Token::Newline))
                 }
 
-                // SIMPLE TOKENS
+                // SINGLE SYMBOL TOKENS
+                "." => Some(Ok(Token::Dot)),
                 "+" => Some(Ok(Token::Add)),
+                "-" => Some(Ok(Token::Sub)),
                 "/" => Some(Ok(Token::Div)),
-                "%" => Some(Ok(Token::Modulo)),
-                "." => Some(Ok(Token::Period)),
-                "," => Some(Ok(Token::Comma)),
-                ";" => Some(Ok(Token::SemiColon)),
-                "?" => Some(Ok(Token::Question)),
+                "%" => Some(Ok(Token::Mod)),
                 "(" => Some(Ok(Token::OpenParen)),
                 ")" => Some(Ok(Token::CloseParen)),
-                "{" => Some(Ok(Token::OpenCurly)),
-                "}" => Some(Ok(Token::CloseCurly)),
                 "[" => Some(Ok(Token::OpenSquare)),
                 "]" => Some(Ok(Token::CloseSquare)),
+                "?" => Some(Ok(Token::Question)),
 
-                // MULTI TOKENS
-                "-" => match self.peek_symbol() {
-                    Some(">") => {
-                        self.consume_symbol();
-                        Some(Ok(Token::Arrow))
-                    }
-                    _ => Some(Ok(Token::Sub)),
-                },
+                // MULTI SYMBOL TOKENS
                 "*" => match self.peek_symbol() {
                     Some("*") => {
                         self.consume_symbol();
@@ -218,11 +262,14 @@ impl Iterator for LexTokens<'_, '_> {
                         self.consume_symbol();
                         Some(Ok(Token::Eq))
                     }
-                    Some(">") => {
-                        self.consume_symbol();
-                        Some(Ok(Token::FatArrow))
-                    }
                     _ => Some(Ok(Token::Assign)),
+                },
+                "!" => match self.peek_symbol() {
+                    Some("=") => {
+                        self.consume_symbol();
+                        Some(Ok(Token::NEq))
+                    }
+                    _ => Some(Ok(Token::Not)),
                 },
                 "<" => match self.peek_symbol() {
                     Some("=") => {
@@ -238,63 +285,110 @@ impl Iterator for LexTokens<'_, '_> {
                     }
                     _ => Some(Ok(Token::Gt)),
                 },
-                "!" => match self.peek_symbol() {
-                    Some("=") => {
+                "&" => match self.peek_symbol() {
+                    Some("&") => {
                         self.consume_symbol();
-                        Some(Ok(Token::NEq))
+                        Some(Ok(Token::And))
                     }
-                    _ => Some(Ok(Token::Not)),
+                    _ => Some(Err(LexerError::InvalidSymbol)),
+                },
+                "|" => match self.peek_symbol() {
+                    Some("|") => {
+                        self.consume_symbol();
+                        Some(Ok(Token::Or))
+                    }
+                    _ => Some(Err(LexerError::InvalidSymbol)),
                 },
                 ":" => match self.peek_symbol() {
-                    Some("=") => {
+                    Some(":") => {
                         self.consume_symbol();
-                        Some(Ok(Token::Walrus))
+                        Some(Ok(Token::DoubleColon))
                     }
                     _ => Some(Ok(Token::Colon)),
                 },
 
+                // STRINGS
+                quote @ "'" | quote @ "\"" => loop {
+                    let Some(symbol) = self.peek_symbol() else {
+                        // if a none is reached, then the string is unclosed
+                        return Some(Err(LexerError::UnclosedString));
+                    };
+
+                    match symbol {
+                        // if a newline is found, then the string is unclosed
+                        "\r" | "\n" | "\r\n" => {
+                            return Some(Err(LexerError::UnclosedString));
+                        }
+
+                        // if a matching quote is found, then end the string and return
+                        _ if symbol == quote => {
+                            self.consume_symbol();
+                            let str_range = self.span.start + 1..self.span.end - 1;
+                            let content = &self.source[str_range];
+                            return Some(Ok(Token::Str(StrFormat::new(content))));
+                        }
+
+                        // if anything else is found, its just a part of the string
+                        _ => self.consume_symbol(),
+                    }
+                },
+
                 // IDENTIFIERS
-                symbol if is_ident_start(symbol) => {
-                    loop {
-                        match self.peek_symbol() {
-                            Some(symbol) if is_ident_end(symbol) => {
-                                self.consume_symbol(); // consume symbol
-                            }
-                            _ => {
-                                let ident = &self.source[self.span.range()];
-                                return Some(Ok(Token::parse_ident(ident)));
-                            }
+                // if the symbol is an underscore or alphabetic, then it the token is an identifier
+                symbol if symbol.chars().all(|c| c == '_' || c.is_ascii_alphabetic()) => loop {
+                    match self.peek_symbol() {
+                        // if the next symbol is a valid identifier symbol, consume it and continue
+                        Some(symbol)
+                            if symbol
+                                .chars()
+                                .all(|c| c == '_' || c.is_ascii_alphanumeric()) =>
+                        {
+                            self.consume_symbol();
+                        }
+
+                        // otherwise build the identifier
+                        _ => {
+                            let content = &self.source[self.span.range()];
+                            break Some(Ok(match content {
+                                "none" => Token::None,
+                                "true" => Token::Bool(true),
+                                "false" => Token::Bool(false),
+                                "if" => Token::If,
+                                "while" => Token::While,
+                                _ => Token::Ident(content),
+                            }));
                         }
                     }
-                }
+                },
 
                 // NUMBERS
-                symbol if is_digit(symbol) => {
-                    // start parsing an integer
+                // if the symbol is a number, then the token is either an int or float
+                symbol if symbol.chars().all(|c| c.is_ascii_digit()) => {
+                    // start trying to parse an integer
                     loop {
                         match self.peek_symbol() {
-                            // if a period is found then we can break and parse the float
+                            // if a period is found, then break and parse the float
                             Some(".") => {
                                 self.consume_symbol();
                                 break;
                             }
 
-                            // if an f is found, then we can build and return the float early
+                            // if an f is found, then build and return the float early
                             Some("f") => {
-                                let float = &self.source[self.span.range()];
-                                let float = float.parse::<f64>().expect("valid float");
-                                self.consume_symbol(); // take after so 'f' is not included in parsing
-                                return Some(Ok(Token::Float(float)));
+                                let content = &self.source[self.span.range()];
+                                self.consume_symbol(); // consume after so 'f' is not included in parsing
+                                return Some(Ok(Token::Float(FloatBuilder::new(content))));
                             }
 
-                            // if a digit is found then just increment the end location and continue
-                            Some(symbol) if is_digit(symbol) => self.consume_symbol(),
+                            // if a digit is found, then consume the symbol and continue
+                            Some(symbol) if symbol.chars().all(|c| c.is_ascii_digit()) => {
+                                self.consume_symbol()
+                            }
 
                             // if anything else is found, then build the integer and return
                             _ => {
-                                let int = &self.source[self.span.range()];
-                                let int = int.parse::<IBig>().expect("valid integer");
-                                return Some(Ok(Token::Int(int)));
+                                let content = &self.source[self.span.range()];
+                                return Some(Ok(Token::Int(IntBuilder::new(content))));
                             }
                         }
                     }
@@ -304,83 +398,37 @@ impl Iterator for LexTokens<'_, '_> {
                         match self.peek_symbol() {
                             // if an f is found, then we can build and return the float
                             Some("f") => {
-                                let float = &self.source[self.span.range()];
-                                let float = float.parse::<f64>().expect("valid float");
+                                let content = &self.source[self.span.range()];
                                 self.consume_symbol(); // consume after so 'f' is not included in parsing
-                                return Some(Ok(Token::Float(float)));
+                                return Some(Ok(Token::Float(FloatBuilder::new(content))));
                             }
 
-                            // if a digit is found then just increment the end location and continue
-                            Some(symbol) if is_digit(symbol) => self.consume_symbol(),
+                            // if a digit is found, then consume the symbol and continue
+                            Some(symbol) if symbol.chars().all(|c| c.is_ascii_digit()) => {
+                                self.consume_symbol()
+                            }
 
                             // if anything else is found, then build the float and return
                             _ => {
-                                let float = &self.source[self.span.range()];
-                                let float = float.parse::<f64>().expect("valid float");
-                                return Some(Ok(Token::Float(float)));
+                                let content = &self.source[self.span.range()];
+                                return Some(Ok(Token::Float(FloatBuilder::new(content))));
                             }
                         }
                     }
                 }
 
-                // STRINGS
-                "'" | "\"" => loop {
-                    let Some(next_symbol) = self.peek_symbol() else {
-                        // if there is no symbol, then the string is unclosed
-                        self.consume_line(); // consume line first
-                        return Some(Err(LexError::UnclosedString));
-                    };
-
-                    match symbol {
-                        // if a newline is found, then the string is unclosed
-                        "\n" | "\r" | "\r\n" => {
-                            self.consume_line(); // consume line first
-                            return Some(Err(LexError::UnclosedString));
-                        }
-                        // if an escape character is found, skip the next symbol
-                        "\\" => {
-                            self.consume_symbol();
-                            if let None = self.take_symbol() {
-                                self.consume_line(); // consume line first
-                                return Some(Err(LexError::UnclosedString));
-                            }
-                        }
-                        // if a matching symbol is found, then it is the end quote
-                        _ if next_symbol == symbol => {
-                            self.consume_symbol();
-                            let str_range = self.span.start + 1..self.span.end - 1;
-                            let string = self.source[str_range].to_string();
-                            return Some(Ok(Token::String(string)));
-                        }
-                        // otherwise the symbol is just part of the string
-                        _ => self.consume_symbol(),
-                    }
-                },
-
                 // INVALID SYMBOL
-                _ => Some(Err(LexError::InvalidSymbol)),
+                // if any other symbol is found, then it is invalid
+                _ => Some(Err(LexerError::InvalidSymbol)),
             };
-        }
-
-        // HELPER FUNCTIONS
-        fn is_ident_start(s: &str) -> bool {
-            s.chars().all(|c| c == '_' || c.is_ascii_alphabetic())
-        }
-
-        fn is_ident_end(s: &str) -> bool {
-            s.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
-        }
-
-        fn is_digit(s: &str) -> bool {
-            s.chars().all(|c| c.is_ascii_digit())
         }
     }
 }
 
-// PRIVATE HELPER METHODS
-impl<'source> LexTokens<'_, 'source> {
-    fn consume_symbol(&mut self) {
-        self.take_symbol();
+// HELPER METHODS
+impl<'source> Lexer<'source> {
+    fn peek_symbol(&mut self) -> Option<&'source str> {
+        Some(*self.symbols.peek()?)
     }
 
     fn take_symbol(&mut self) -> Option<&'source str> {
@@ -389,33 +437,21 @@ impl<'source> LexTokens<'_, 'source> {
         Some(symbol)
     }
 
-    fn peek_symbol(&mut self) -> Option<&'source str> {
-        Some(*self.symbols.peek()?)
+    fn consume_symbol(&mut self) {
+        if let Some(symbol) = self.symbols.next() {
+            self.span.end += symbol.len();
+        }
     }
 
-    fn consume_line(&mut self) {
-        self.lexer.indent = true;
-        self.span.start = self.span.end;
-        while let Some(_) = self.symbols.next() {}
-    }
-
-    fn tab_error(&mut self, space: bool) -> Option<Result<Token, LexError>> {
+    fn build_comment(&mut self) -> Token<'source> {
         while let Some(symbol) = self.peek_symbol() {
             match symbol {
-                " " | "\t" => {
-                    self.consume_symbol();
-                }
-                "\n" | "\r" | "\r\n" | "#" => {
-                    self.consume_line();
-                    return None;
-                }
-                _ => break,
+                "\r" | "\n" | "\r\n" => break,
+                _ => self.consume_symbol(),
             }
         }
 
-        match space {
-            false => Some(Err(LexError::InvalidIndent(IndentType::Tab))),
-            true => Some(Err(LexError::InvalidIndent(IndentType::Space))),
-        }
+        let content = &self.source[self.span.range()];
+        Token::Comment(content)
     }
 }

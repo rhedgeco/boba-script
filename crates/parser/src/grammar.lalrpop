@@ -1,0 +1,108 @@
+use boba_script_ast::{
+    Expr,
+    Statement,
+};
+use boba_script_lexer::{
+    Token,
+    LexerError,
+    token::build::{
+        IntBuilder,
+        FloatBuilder,
+        StrFormat,
+    },
+};
+
+grammar<'input>(input: &'input str);
+
+Atom: Expr = {
+    none => Expr::none(),
+    <v:bool> => Expr::bool(v),
+    <v:int> => Expr::int(v.build()),
+    <v:float> => Expr::float(v.build()),
+    <v:str> => Expr::str(v.format()),
+    <v:ident> => Expr::var(v.to_string()),
+    "(" <Expr> ")",
+};
+
+pub Expr: Expr = {
+    #[precedence(level="0")]
+    <Atom>,
+
+    #[precedence(level="1")] #[assoc(side="right")]
+    <l:Expr> "**" <r:Expr> => l.pow(r),
+
+    #[precedence(level="2")] #[assoc(side="right")]
+    "+" <e: Expr> => e.pos(),
+    "-" <e: Expr> => e.neg(),
+    "!" <e: Expr> => e.not(),
+
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:Expr> "+" <r:Expr> => l.add(r),
+    <l:Expr> "-" <r:Expr> => l.sub(r),
+
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expr> "*" <r:Expr> => l.mul(r),
+    <l:Expr> "/" <r:Expr> => l.div(r),
+    <l:Expr> "%" <r:Expr> => l._mod(r),
+}
+
+pub Statement: Statement = {
+    <Expr> => Statement::expr(<>),
+    <l:Expr> "=" <r:Expr> => Statement::assign(l, r),
+    "if" <cond:Expr> ":" => Statement::_if(cond, Vec::new()),
+    "while" <cond:Expr> ":" => Statement::_while(cond, Vec::new()),
+};
+
+extern {
+    type Location = usize;
+    type Error = LexerError;
+
+    enum Token<'input> {
+        // WHITESPACE
+        "\n" => Token::Newline,
+        indent => Token::Indent,
+        dedent => Token::Dedent,
+
+        // VALUES
+        none => Token::None,
+        bool => Token::Bool(<bool>),
+        int => Token::Int(<IntBuilder<'input>>),
+        float => Token::Float(<FloatBuilder<'input>>),
+        str => Token::Str(<StrFormat<'input>>),
+        ident => Token::Ident(<&'input str>),
+
+        // KEYWORDS
+        "if" => Token::If,
+        "while" => Token::While,
+
+        // BRACES
+        "(" => Token::OpenParen,
+        ")" => Token::CloseParen,
+        "[" => Token::OpenSquare,
+        "]" => Token::CloseSquare,
+
+        // CONTROL
+        "." => Token::Dot,
+        "=" => Token::Assign,
+        "?" => Token::Question,
+        ":" => Token::Colon,
+        "::" => Token::DoubleColon,
+
+        // OPERATORS
+        "+" => Token::Add,
+        "-" => Token::Sub,
+        "!" => Token::Not,
+        "*" => Token::Mul,
+        "/" => Token::Div,
+        "%" => Token::Mod,
+        "**" => Token::Pow,
+        "==" => Token::Eq,
+        "<" => Token::Lt,
+        ">" => Token::Gt,
+        "!=" => Token::NEq,
+        "<=" => Token::LtEq,
+        ">=" => Token::GtEq,
+        "&&" => Token::And,
+        "||" => Token::Or,
+    }
+}

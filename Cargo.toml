@@ -7,7 +7,7 @@ edition = "2021"
 members = ["crates/*", "interpreter"]
 
 [dependencies]
-boba-script-core = { path = "./crates/core" }
+boba-script-ast = { path = "./crates/ast" }
+boba-script-engine = { path = "./crates/engine" }
 boba-script-parser = { path = "./crates/parser" }
 boba-script-lexer = { path = "./crates/lexer" }
-boba-script-ariadne = { path = "./crates/ariadne" }

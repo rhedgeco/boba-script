@@ -1,9 +1,8 @@
 [package]
-name = "boba-script-lexer"
+name = "boba-script-ast"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-unicode-segmentation = "1.10"
 derive_more = { version = "1.0", features = ["display"] }
-boba-script-ast = { path = "../ast" }
+dashu-int = { version = "0.4", features = ["num-traits"] }

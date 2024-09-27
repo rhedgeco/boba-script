@@ -1,16 +1,11 @@
 use std::io;
 
-use boba_script::ariadne::ToAriadne;
 use boba_script::{
-    core::{engine::Value, Engine},
-    parser::{
-        parsers::statement::{self, StatementParser, StatementType},
-        TokenLine,
-    },
+    engine::{scope::LocalScope, Eval, Value},
+    lexer::LexerState,
+    parser::{grammar, spanned::SpannedLexer},
 };
 use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
-
-use super::{stream::ShellSource, ShellStream};
 
 pub enum RunState {
     Parsed,
@@ -19,29 +14,22 @@ pub enum RunState {
 }
 
 pub struct Shell {
+    scope: LocalScope,
     editor: Reedline,
     normal_prompt: DefaultPrompt,
-    pending_prompt: DefaultPrompt,
-    tokens: ShellStream,
-    engine: Engine<ShellSource>,
-    pending: StatementParser<ShellSource>,
+    lexer: LexerState,
 }
 
 impl Default for Shell {
     fn default() -> Self {
         Self {
+            scope: LocalScope::default(),
             editor: Reedline::create(),
             normal_prompt: DefaultPrompt::new(
                 DefaultPromptSegment::Basic(format!("boba ")),
                 DefaultPromptSegment::Empty,
             ),
-            pending_prompt: DefaultPrompt::new(
-                DefaultPromptSegment::Basic(format!("  ...")),
-                DefaultPromptSegment::Empty,
-            ),
-            tokens: ShellStream::new(),
-            engine: Engine::new(),
-            pending: StatementParser::none(),
+            lexer: LexerState::new(),
         }
     }
 }
@@ -53,10 +41,7 @@ impl Shell {
 
     pub fn read_line(&mut self) -> io::Result<RunState> {
         // choose a prompt
-        let prompt = match self.pending.is_none() {
-            false => &self.pending_prompt,
-            true => &self.normal_prompt,
-        };
+        let prompt = &self.normal_prompt;
 
         // get the text
         let text = match self.editor.read_line(prompt)? {
@@ -69,60 +54,28 @@ impl Shell {
             }
         };
 
-        // load the tokens
-        self.tokens.load(text);
-
-        loop {
-            // get the next line of tokens
-            let mut line = TokenLine::new(&mut self.tokens);
-
-            // get pending or create the next statement
-            let statement = match self.pending.is_none() {
-                false => match self.pending.parse_line(&mut line) {
-                    Err(errors) => Err(errors),
-                    Ok(Some(statement)) => Ok(statement),
-                    Ok(None) => match self.tokens.is_empty() {
-                        false => continue,
-                        true => break,
-                    },
-                },
-                true => match statement::start_parsing(&mut line) {
-                    Err(errors) => Err(errors),
-                    Ok(StatementType::SingleLine(statement)) => Ok(statement),
-                    Ok(StatementType::MultiLine(parser)) => {
-                        self.pending = parser;
-                        match self.tokens.is_empty() {
-                            false => continue,
-                            true => break,
-                        }
-                    }
-                },
-            };
-
-            // execute the completed statement
-            match statement {
-                Ok(statement) => match self.engine.eval(statement) {
-                    Ok(Value::None) => {} // do nothing
-                    Ok(value) => println!("{value}"),
-                    Err(error) => error
-                        .to_ariadne()
-                        .eprint(self.tokens.build_cache())
-                        .unwrap(),
-                },
-                Err(errors) => {
-                    let mut cache = self.tokens.build_cache();
-                    for error in errors {
-                        error.to_ariadne().eprint(&mut cache).unwrap();
-                    }
-                }
-            }
-
-            // break if there are no more tokens
-            if self.tokens.is_empty() {
-                break;
+        // if no input is found, close all indent blocks or return
+        if text.trim().len() == 0 {
+            match self.lexer.indent_depth() {
+                0 => return Ok(RunState::Parsed),
+                _ => self.lexer.close_blocks(),
             }
         }
 
+        // parse the text
+        let spanned = SpannedLexer::new(self.lexer.lex(&text));
+        match grammar::StatementParser::new().parse(&text, spanned) {
+            Err(error) => eprintln!("{error}"),
+            Ok(statement) => match statement.eval(&mut self.scope) {
+                Err(error) => eprintln!("{error}"),
+                Ok(value) => match value {
+                    Value::None => (), // do nothing
+                    _ => println!("{value}"),
+                },
+            },
+        }
+
+        // return successful parse
         Ok(RunState::Parsed)
     }
 }

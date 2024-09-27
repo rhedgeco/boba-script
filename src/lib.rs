@@ -1,5 +1,9 @@
-pub mod core {
-    pub use boba_script_core::*;
+pub mod ast {
+    pub use boba_script_ast::*;
+}
+
+pub mod engine {
+    pub use boba_script_engine::*;
 }
 
 pub mod parser {
@@ -8,8 +12,4 @@ pub mod parser {
 
 pub mod lexer {
     pub use boba_script_lexer::*;
-}
-
-pub mod ariadne {
-    pub use boba_script_ariadne::*;
 }

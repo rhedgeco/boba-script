@@ -1,9 +1,9 @@
 [package]
-name = "boba-script-lexer"
+name = "boba-script-engine"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-unicode-segmentation = "1.10"
+num-traits = "0.2"
 derive_more = { version = "1.0", features = ["display"] }
 boba-script-ast = { path = "../ast" }
