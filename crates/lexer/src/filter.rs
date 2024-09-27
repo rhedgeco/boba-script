@@ -44,7 +44,13 @@ impl<'source> Iterator for LexFilter<'source> {
                 Ok(Token::Comment(_)) => continue,
 
                 // skip any newlines that come after previous newlines
-                Ok(Token::Newline) if !self.newline => continue,
+                Ok(Token::Newline) => match self.newline {
+                    true => continue,
+                    false => {
+                        self.newline = true;
+                        Ok(Token::Newline)
+                    }
+                },
 
                 // otherwise reset the newline count and return the token
                 result => {

@@ -6,7 +6,11 @@ impl Eval for Statement {
     fn eval(&self, scope: &mut impl Scope) -> Result<Value, EvalError> {
         match &self.kind {
             StatementKind::Invalid => Err(EvalError::InvalidNode(self.id())),
-            StatementKind::Expr(expr) => expr.eval(scope),
+            StatementKind::Expr(expr) => {
+                let value = expr.eval(scope)?;
+                println!("{value}");
+                Ok(value)
+            }
             StatementKind::Assign(lhs, rhs) => {
                 let value = rhs.eval(scope)?;
                 match &lhs.kind {

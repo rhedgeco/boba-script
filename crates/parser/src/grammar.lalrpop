@@ -14,13 +14,17 @@ use boba_script_lexer::{
 
 grammar<'input>(input: &'input str);
 
+pub File: Vec<Statement> = {
+    <(<Statement>)*>
+}
+
 Atom: Expr = {
-    none => Expr::none(),
-    <v:bool> => Expr::bool(v),
-    <v:int> => Expr::int(v.build()),
-    <v:float> => Expr::float(v.build()),
-    <v:str> => Expr::str(v.format()),
-    <v:ident> => Expr::var(v.to_string()),
+    None => Expr::none(),
+    <v:Bool> => Expr::bool(v),
+    <v:Int> => Expr::int(v.build()),
+    <v:Float> => Expr::float(v.build()),
+    <v:Str> => Expr::str(v.format()),
+    <v:Ident> => Expr::var(v.to_string()),
     "(" <Expr> ")",
 };
 
@@ -44,14 +48,35 @@ pub Expr: Expr = {
     <l:Expr> "*" <r:Expr> => l.mul(r),
     <l:Expr> "/" <r:Expr> => l.div(r),
     <l:Expr> "%" <r:Expr> => l._mod(r),
+
+    #[precedence(level="5")] #[assoc(side="left")]
+    <l:Expr> "&&" <r:Expr> => l.and(r),
+    <l:Expr> "||" <r:Expr> => l.or(r),
+
+    #[precedence(level="6")] #[assoc(side="left")]
+    <l:Expr> "==" <r:Expr> => l.eq(r),
+    <l:Expr> "<" <r:Expr> => l.lt(r),
+    <l:Expr> ">" <r:Expr> => l.gt(r),
+    <l:Expr> "!=" <r:Expr> => l.neq(r),
+    <l:Expr> "<=" <r:Expr> => l.lteq(r),
+    <l:Expr> ">=" <r:Expr> => l.gteq(r),
 }
 
-pub Statement: Statement = {
-    <Expr> => Statement::expr(<>),
-    <l:Expr> "=" <r:Expr> => Statement::assign(l, r),
-    "if" <cond:Expr> ":" => Statement::_if(cond, Vec::new()),
-    "while" <cond:Expr> ":" => Statement::_while(cond, Vec::new()),
+Block: Vec<Statement> = {
+    <s:InlineStatement> => vec![s],
+    "\n" Indent <(<Statement>)*> Dedent,
 };
+
+pub Statement: Statement = {
+    <InlineStatement>,
+    "if" <cond:Expr> ":" <b:Block> => Statement::_if(cond, b),
+    "while" <cond:Expr> ":" <b:Block> => Statement::_while(cond, b),
+};
+
+InlineStatement: Statement = {
+    <Expr> "\n" => Statement::expr(<>),
+    <l:Expr> "=" <r:Expr> "\n" => Statement::assign(l, r),
+}
 
 extern {
     type Location = usize;
@@ -60,16 +85,16 @@ extern {
     enum Token<'input> {
         // WHITESPACE
         "\n" => Token::Newline,
-        indent => Token::Indent,
-        dedent => Token::Dedent,
+        Indent => Token::Indent,
+        Dedent => Token::Dedent,
 
         // VALUES
-        none => Token::None,
-        bool => Token::Bool(<bool>),
-        int => Token::Int(<IntBuilder<'input>>),
-        float => Token::Float(<FloatBuilder<'input>>),
-        str => Token::Str(<StrFormat<'input>>),
-        ident => Token::Ident(<&'input str>),
+        None => Token::None,
+        Bool => Token::Bool(<bool>),
+        Int => Token::Int(<IntBuilder<'input>>),
+        Float => Token::Float(<FloatBuilder<'input>>),
+        Str => Token::Str(<StrFormat<'input>>),
+        Ident => Token::Ident(<&'input str>),
 
         // KEYWORDS
         "if" => Token::If,
