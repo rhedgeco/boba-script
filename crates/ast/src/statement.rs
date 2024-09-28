@@ -1,5 +1,6 @@
 use super::{node::NodeId, Expr, Node};
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum StatementKind {
     Invalid,
     Expr(Expr),
@@ -8,6 +9,7 @@ pub enum StatementKind {
     While { cond: Expr, body: Vec<Statement> },
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Statement {
     pub id: NodeId,
     pub kind: StatementKind,

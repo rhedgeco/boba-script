@@ -1,6 +1,8 @@
 use boba_script_ast::{
     Expr,
     Statement,
+    Func,
+    int::IBig,
 };
 use boba_script_lexer::{
     Token,
@@ -14,13 +16,33 @@ use boba_script_lexer::{
 
 grammar<'input>(input: &'input str);
 
+Bool: bool = {
+    <bool>,
+};
+
+Int: IBig = {
+    <v:int> => v.build(),
+};
+
+Float: f64 = {
+    <v:float> => v.build(),
+};
+
+Str: String = {
+    <v:str> => v.format(),
+};
+
+Ident: String = {
+    <v:ident> => v.to_string(),
+}
+
 Atom: Expr = {
-    None => Expr::none(),
-    <v:Bool> => Expr::bool(v),
-    <v:Int> => Expr::int(v.build()),
-    <v:Float> => Expr::float(v.build()),
-    <v:Str> => Expr::str(v.format()),
-    <v:Ident> => Expr::var(v.to_string()),
+    none => Expr::none(),
+    <Bool> => Expr::bool(<>),
+    <Int> => Expr::int(<>),
+    <Float> => Expr::float(<>),
+    <Str> => Expr::str(<>),
+    <Ident> => Expr::var(<>),
     "(" <Expr> ")",
 };
 
@@ -62,6 +84,7 @@ pub Statement: Statement = {
     <InlineStatement>,
     <IfStatement>,
     <WhileStatement>,
+    <FunctionDef>,
 };
 
 InlineStatement: Statement = {
@@ -81,12 +104,31 @@ WhileStatement: Statement = {
     "while" <cond:Expr> ":" "\n" <block:StatementBlock> => Statement::_while(cond, block),
 };
 
+FunctionDef: Statement = {
+    "fn" <name:Ident> "(" <params:IdentList> ")" ":" "\n" => 
+        Statement::assign(Expr::var(name), Expr::_fn(Func::new(params, vec![]))),
+    "fn" <name:Ident> "(" <params:IdentList> ")" ":" <s:InlineStatement> => 
+        Statement::assign(Expr::var(name), Expr::_fn(Func::new(params, vec![s]))),
+    "fn" <name:Ident> "(" <params:IdentList> ")" ":" "\n" <block:StatementBlock> => 
+        Statement::assign(Expr::var(name), Expr::_fn(Func::new(params, block))),
+};
+
 pub StatementList: Vec<Statement> = {
     <Statement*>,
 };
 
 StatementBlock: Vec<Statement> = {
     "indent" <StatementList> "dedent",
+};
+
+IdentList: Vec<String> = {
+    <mut idents:(<Ident> ",")*> <last:Ident?> => match last {
+        None => idents,
+        Some(last) => {
+            idents.push(last);
+            idents
+        }
+    }
 };
 
 extern {
@@ -100,16 +142,17 @@ extern {
         "dedent" => Token::Dedent,
 
         // VALUES
-        None => Token::None,
-        Bool => Token::Bool(<bool>),
-        Int => Token::Int(<IntBuilder<'input>>),
-        Float => Token::Float(<FloatBuilder<'input>>),
-        Str => Token::Str(<StrFormat<'input>>),
-        Ident => Token::Ident(<&'input str>),
+        none => Token::None,
+        bool => Token::Bool(<bool>),
+        int => Token::Int(<IntBuilder<'input>>),
+        float => Token::Float(<FloatBuilder<'input>>),
+        str => Token::Str(<StrFormat<'input>>),
+        ident => Token::Ident(<&'input str>),
 
         // KEYWORDS
         "if" => Token::If,
         "while" => Token::While,
+        "fn" => Token::Fn,
 
         // BRACES
         "(" => Token::OpenParen,
@@ -119,6 +162,7 @@ extern {
 
         // CONTROL
         "." => Token::Dot,
+        "," => Token::Comma,
         "=" => Token::Assign,
         "?" => Token::Question,
         ":" => Token::Colon,

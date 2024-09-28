@@ -33,6 +33,8 @@ pub enum Token<'a> {
     If,
     #[display("while")]
     While,
+    #[display("fn")]
+    Fn,
 
     // BRACES
     #[display("(")]
@@ -47,6 +49,8 @@ pub enum Token<'a> {
     // CONTROL
     #[display(".")]
     Dot,
+    #[display(",")]
+    Comma,
     #[display("=")]
     Assign,
     #[display("?")]

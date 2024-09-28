@@ -1,5 +1,6 @@
 use super::{node::NodeId, Node, Statement};
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Func {
     pub id: NodeId,
     pub params: Vec<String>,

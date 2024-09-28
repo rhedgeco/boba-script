@@ -1,4 +1,4 @@
-use boba_script_ast::int::IBig;
+use boba_script_ast::{int::IBig, Func};
 use derive_more::Display;
 
 #[derive(Debug, Display, Clone, PartialEq, PartialOrd)]
@@ -12,7 +12,9 @@ pub enum Value {
     #[display("{_0}")]
     Float(f64),
     #[display("{_0}")]
-    String(String),
+    Str(String),
+    #[display("fn({})", _0.params.len())]
+    Fn(Func),
 }
 
 impl Value {
@@ -22,7 +24,8 @@ impl Value {
             Value::Bool(_) => ValueKind::Bool,
             Value::Int(_) => ValueKind::Int,
             Value::Float(_) => ValueKind::Float,
-            Value::String(_) => ValueKind::String,
+            Value::Str(_) => ValueKind::Str,
+            Value::Fn(_) => ValueKind::Fn,
         }
     }
 }
@@ -37,6 +40,8 @@ pub enum ValueKind {
     Int,
     #[display("float")]
     Float,
-    #[display("string")]
-    String,
+    #[display("str")]
+    Str,
+    #[display("fn")]
+    Fn,
 }

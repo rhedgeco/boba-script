@@ -238,16 +238,17 @@ impl<'source> Iterator for Lexer<'source> {
                 }
 
                 // SINGLE SYMBOL TOKENS
-                "." => Some(Ok(Token::Dot)),
                 "+" => Some(Ok(Token::Add)),
                 "-" => Some(Ok(Token::Sub)),
                 "/" => Some(Ok(Token::Div)),
                 "%" => Some(Ok(Token::Mod)),
+                "." => Some(Ok(Token::Dot)),
+                "," => Some(Ok(Token::Comma)),
+                "?" => Some(Ok(Token::Question)),
                 "(" => Some(Ok(Token::OpenParen)),
                 ")" => Some(Ok(Token::CloseParen)),
                 "[" => Some(Ok(Token::OpenSquare)),
                 "]" => Some(Ok(Token::CloseSquare)),
-                "?" => Some(Ok(Token::Question)),
 
                 // MULTI SYMBOL TOKENS
                 "*" => match self.peek_symbol() {
@@ -355,6 +356,7 @@ impl<'source> Iterator for Lexer<'source> {
                                 "false" => Token::Bool(false),
                                 "if" => Token::If,
                                 "while" => Token::While,
+                                "fn" => Token::Fn,
                                 _ => Token::Ident(content),
                             }));
                         }

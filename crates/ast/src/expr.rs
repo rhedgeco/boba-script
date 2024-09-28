@@ -1,7 +1,10 @@
 use dashu_int::IBig;
 
+use crate::Func;
+
 use super::{node::NodeId, Node};
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ExprKind {
     // INVALID
     Invalid,
@@ -12,6 +15,7 @@ pub enum ExprKind {
     Int(IBig),
     Float(f64),
     String(String),
+    Fn(Func),
     Var(String),
 
     // UNARY OPS
@@ -44,6 +48,7 @@ pub enum ExprKind {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Expr {
     pub id: NodeId,
     pub kind: ExprKind,
@@ -97,6 +102,13 @@ impl Expr {
         Self {
             id: NodeId::new(),
             kind: ExprKind::String(string),
+        }
+    }
+
+    pub fn _fn(func: Func) -> Self {
+        Self {
+            id: NodeId::new(),
+            kind: ExprKind::Fn(func),
         }
     }
 

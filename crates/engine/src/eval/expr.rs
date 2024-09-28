@@ -16,7 +16,8 @@ impl Eval for Expr {
             ExprKind::Bool(v) => Ok(Value::Bool(*v)),
             ExprKind::Int(v) => Ok(Value::Int(v.clone())),
             ExprKind::Float(v) => Ok(Value::Float(*v)),
-            ExprKind::String(v) => Ok(Value::String(v.clone())),
+            ExprKind::String(v) => Ok(Value::Str(v.clone())),
+            ExprKind::Fn(v) => Ok(Value::Fn(v.clone())),
             ExprKind::Var(id) => match scope.get(id) {
                 Some(value) => Ok(value.clone()),
                 None => Err(EvalError::UnknownVariable {
@@ -68,13 +69,11 @@ impl Eval for Expr {
                 }
 
                 // strings
-                (Value::String(lhs), Value::None) => Ok(Value::String(lhs)),
-                (Value::String(lhs), Value::Int(rhs)) => Ok(Value::String(format!("{lhs}{rhs}"))),
-                (Value::String(lhs), Value::Float(rhs)) => Ok(Value::String(format!("{lhs}{rhs}"))),
-                (Value::String(lhs), Value::Bool(rhs)) => Ok(Value::String(format!("{lhs}{rhs}"))),
-                (Value::String(lhs), Value::String(rhs)) => {
-                    Ok(Value::String(format!("{lhs}{rhs}")))
-                }
+                (Value::Str(lhs), Value::None) => Ok(Value::Str(lhs)),
+                (Value::Str(lhs), Value::Int(rhs)) => Ok(Value::Str(format!("{lhs}{rhs}"))),
+                (Value::Str(lhs), Value::Float(rhs)) => Ok(Value::Str(format!("{lhs}{rhs}"))),
+                (Value::Str(lhs), Value::Bool(rhs)) => Ok(Value::Str(format!("{lhs}{rhs}"))),
+                (Value::Str(lhs), Value::Str(rhs)) => Ok(Value::Str(format!("{lhs}{rhs}"))),
 
                 // invalid
                 (lhs, rhs) => Err(EvalError::InvalidBinaryOp {
@@ -125,17 +124,17 @@ impl Eval for Expr {
                 }
 
                 // strings
-                (Value::String(lhs), Value::Bool(rhs)) => match rhs {
-                    false => Ok(Value::String(format!(""))),
-                    true => Ok(Value::String(lhs)),
+                (Value::Str(lhs), Value::Bool(rhs)) => match rhs {
+                    false => Ok(Value::Str(format!(""))),
+                    true => Ok(Value::Str(lhs)),
                 },
-                (Value::String(lhs), Value::Int(rhs)) => {
+                (Value::Str(lhs), Value::Int(rhs)) => {
                     let (sign, int) = rhs.into_parts();
                     match sign {
-                        Sign::Negative => Ok(Value::String(format!(""))),
+                        Sign::Negative => Ok(Value::Str(format!(""))),
                         Sign::Positive => match int.to_usize() {
-                            Some(count) => Ok(Value::String(lhs.repeat(count))),
-                            None => Ok(Value::String(lhs.repeat(usize::MAX))),
+                            Some(count) => Ok(Value::Str(lhs.repeat(count))),
+                            None => Ok(Value::Str(lhs.repeat(usize::MAX))),
                         },
                     }
                 }
@@ -238,7 +237,7 @@ impl Eval for Expr {
                 (Value::Bool(lhs), Value::Bool(rhs)) => Ok(Value::Bool(lhs == rhs)),
 
                 // strings
-                (Value::String(lhs), Value::String(rhs)) => Ok(Value::Bool(lhs == rhs)),
+                (Value::Str(lhs), Value::Str(rhs)) => Ok(Value::Bool(lhs == rhs)),
 
                 // invalid
                 (lhs, rhs) => Err(EvalError::InvalidBinaryOp {
@@ -263,7 +262,7 @@ impl Eval for Expr {
                 (Value::Bool(lhs), Value::Bool(rhs)) => Ok(Value::Bool(lhs < rhs)),
 
                 // strings
-                (Value::String(lhs), Value::String(rhs)) => Ok(Value::Bool(lhs < rhs)),
+                (Value::Str(lhs), Value::Str(rhs)) => Ok(Value::Bool(lhs < rhs)),
 
                 // invalid
                 (lhs, rhs) => Err(EvalError::InvalidBinaryOp {
@@ -288,7 +287,7 @@ impl Eval for Expr {
                 (Value::Bool(lhs), Value::Bool(rhs)) => Ok(Value::Bool(lhs > rhs)),
 
                 // strings
-                (Value::String(lhs), Value::String(rhs)) => Ok(Value::Bool(lhs > rhs)),
+                (Value::Str(lhs), Value::Str(rhs)) => Ok(Value::Bool(lhs > rhs)),
 
                 // invalid
                 (lhs, rhs) => Err(EvalError::InvalidBinaryOp {
@@ -317,7 +316,7 @@ impl Eval for Expr {
                 (Value::Bool(lhs), Value::Bool(rhs)) => Ok(Value::Bool(lhs != rhs)),
 
                 // strings
-                (Value::String(lhs), Value::String(rhs)) => Ok(Value::Bool(lhs != rhs)),
+                (Value::Str(lhs), Value::Str(rhs)) => Ok(Value::Bool(lhs != rhs)),
 
                 // invalid
                 (lhs, rhs) => Err(EvalError::InvalidBinaryOp {
@@ -346,7 +345,7 @@ impl Eval for Expr {
                 (Value::Bool(lhs), Value::Bool(rhs)) => Ok(Value::Bool(lhs <= rhs)),
 
                 // strings
-                (Value::String(lhs), Value::String(rhs)) => Ok(Value::Bool(lhs <= rhs)),
+                (Value::Str(lhs), Value::Str(rhs)) => Ok(Value::Bool(lhs <= rhs)),
 
                 // invalid
                 (lhs, rhs) => Err(EvalError::InvalidBinaryOp {
@@ -375,7 +374,7 @@ impl Eval for Expr {
                 (Value::Bool(lhs), Value::Bool(rhs)) => Ok(Value::Bool(lhs >= rhs)),
 
                 // strings
-                (Value::String(lhs), Value::String(rhs)) => Ok(Value::Bool(lhs >= rhs)),
+                (Value::Str(lhs), Value::Str(rhs)) => Ok(Value::Bool(lhs >= rhs)),
 
                 // invalid
                 (lhs, rhs) => Err(EvalError::InvalidBinaryOp {
