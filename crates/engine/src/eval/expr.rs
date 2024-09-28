@@ -432,10 +432,16 @@ impl Eval for Expr {
             ExprKind::Walrus(lhs, rhs) => {
                 let value = rhs.eval(scope)?;
                 match &lhs.kind {
-                    ExprKind::Var(id) => {
-                        scope.init_local(id, value.clone());
-                        Ok(value)
-                    }
+                    ExprKind::Var(id) => match scope.get_local_mut(id) {
+                        None => {
+                            scope.init_local(id, value.clone());
+                            Ok(value)
+                        }
+                        Some(old_value) => {
+                            *old_value = value.clone();
+                            Ok(value)
+                        }
+                    },
                     _ => Err(EvalError::InvalidAssignment(lhs.id())),
                 }
             }

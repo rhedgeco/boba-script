@@ -88,7 +88,7 @@ impl LocalScope {
 impl Scope for LocalScope {
     fn get(&self, id: impl AsRef<str>) -> Option<&Value> {
         let id = id.as_ref();
-        for store in self.values.iter() {
+        for store in self.values.iter().rev() {
             if &store.name == id {
                 return Some(&store.value);
             }
@@ -98,7 +98,7 @@ impl Scope for LocalScope {
 
     fn get_mut(&mut self, id: impl AsRef<str>) -> Option<&mut Value> {
         let id = id.as_ref();
-        for store in self.values.iter_mut() {
+        for store in self.values.iter_mut().rev() {
             if &store.name == id {
                 return Some(&mut store.value);
             }
@@ -108,7 +108,7 @@ impl Scope for LocalScope {
 
     fn get_local(&self, id: impl AsRef<str>) -> Option<&Value> {
         let id = id.as_ref();
-        for store in self.values.iter() {
+        for store in self.values.iter().rev() {
             if !store.global && &store.name == id {
                 return Some(&store.value);
             }
@@ -118,7 +118,7 @@ impl Scope for LocalScope {
 
     fn get_local_mut(&mut self, id: impl AsRef<str>) -> Option<&mut Value> {
         let id = id.as_ref();
-        for store in self.values.iter_mut() {
+        for store in self.values.iter_mut().rev() {
             if !store.global && &store.name == id {
                 return Some(&mut store.value);
             }
@@ -128,7 +128,7 @@ impl Scope for LocalScope {
 
     fn get_global(&self, id: impl AsRef<str>) -> Option<&Value> {
         let id = id.as_ref();
-        for store in self.values.iter() {
+        for store in self.values.iter().rev() {
             if store.global && &store.name == id {
                 return Some(&store.value);
             }
@@ -138,7 +138,7 @@ impl Scope for LocalScope {
 
     fn get_global_mut(&mut self, id: impl AsRef<str>) -> Option<&mut Value> {
         let id = id.as_ref();
-        for store in self.values.iter_mut() {
+        for store in self.values.iter_mut().rev() {
             if store.global && &store.name == id {
                 return Some(&mut store.value);
             }

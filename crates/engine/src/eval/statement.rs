@@ -6,18 +6,20 @@ impl Eval for Statement {
     fn eval(&self, scope: &mut impl Scope) -> Result<Value, EvalError> {
         match &self.kind {
             StatementKind::Invalid => Err(EvalError::InvalidNode(self.id())),
-            StatementKind::Expr(expr) => {
-                let value = expr.eval(scope)?;
-                println!("{value}");
-                Ok(value)
-            }
+            StatementKind::Expr(expr) => expr.eval(scope),
             StatementKind::Assign(lhs, rhs) => {
                 let value = rhs.eval(scope)?;
                 match &lhs.kind {
-                    ExprKind::Var(id) => {
-                        scope.init_local(id, value);
-                        Ok(Value::None)
-                    }
+                    ExprKind::Var(id) => match scope.get_local_mut(id) {
+                        None => {
+                            scope.init_local(id, value);
+                            Ok(Value::None)
+                        }
+                        Some(old_value) => {
+                            *old_value = value;
+                            Ok(Value::None)
+                        }
+                    },
                     _ => Err(EvalError::InvalidAssignment(lhs.id())),
                 }
             }
