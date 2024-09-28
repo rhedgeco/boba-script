@@ -29,15 +29,19 @@
               rust-analyzer
 
               (vscode-with-extensions.override {
-                vscodeExtensions = with nix-vscode-extensions.extensions.${pkgs.system}.vscode-marketplace; [
-                  jnoortheen.nix-ide
-                  kamadorueda.alejandra
-                  kokakiwi.vscode-just
-                  rust-lang.rust-analyzer
-                  tamasfe.even-better-toml
-                  fill-labs.dependi
-                  guyutongxue.lalrpop-syntax-highlight
-                ];
+                vscodeExtensions = with pkgs.vscode-extensions;
+                  [
+                    jnoortheen.nix-ide
+                    kamadorueda.alejandra
+                    rust-lang.rust-analyzer
+                    tamasfe.even-better-toml
+                    fill-labs.dependi
+                    vadimcn.vscode-lldb
+                  ]
+                  ++ (with nix-vscode-extensions.extensions.${pkgs.system}.vscode-marketplace; [
+                    kokakiwi.vscode-just
+                    guyutongxue.lalrpop-syntax-highlight
+                  ]);
               })
             ];
             RUST_SRC_PATH = rustPlatform.rustLibSrc;
