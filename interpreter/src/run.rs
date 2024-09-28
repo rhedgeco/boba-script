@@ -26,7 +26,7 @@ pub fn file(path: PathBuf) {
     // parse the text
     let mut state = LexerState::new();
     let lexer = SpannedLexer::new(state.lex(&text));
-    let statements = match grammar::FileParser::new().parse(&text, lexer) {
+    let statements = match grammar::StatementListParser::new().parse(&text, lexer) {
         Ok(statements) => statements,
         Err(error) => {
             eprintln!("{error}");

@@ -14,10 +14,6 @@ use boba_script_lexer::{
 
 grammar<'input>(input: &'input str);
 
-pub File: Vec<Statement> = {
-    <(<Statement>)*>
-}
-
 Atom: Expr = {
     None => Expr::none(),
     <v:Bool> => Expr::bool(v),
@@ -60,23 +56,38 @@ pub Expr: Expr = {
     <l:Expr> "!=" <r:Expr> => l.neq(r),
     <l:Expr> "<=" <r:Expr> => l.lteq(r),
     <l:Expr> ">=" <r:Expr> => l.gteq(r),
-}
-
-Block: Vec<Statement> = {
-    <s:InlineStatement> => vec![s],
-    "\n" Indent <(<Statement>)*> Dedent,
 };
 
 pub Statement: Statement = {
     <InlineStatement>,
-    "if" <cond:Expr> ":" <b:Block> => Statement::_if(cond, b),
-    "while" <cond:Expr> ":" <b:Block> => Statement::_while(cond, b),
+    <IfStatement>,
+    <WhileStatement>,
 };
 
 InlineStatement: Statement = {
     <Expr> "\n" => Statement::expr(<>),
     <l:Expr> "=" <r:Expr> "\n" => Statement::assign(l, r),
-}
+};
+
+IfStatement: Statement = {
+    "if" <cond:Expr> ":" "\n" => Statement::_if(cond, vec![]),
+    "if" <cond:Expr> ":" <s:InlineStatement> => Statement::_if(cond, vec![s]),
+    "if" <cond:Expr> ":" "\n" <block:StatementBlock> => Statement::_if(cond, block),
+};
+
+WhileStatement: Statement = {
+    "while" <cond:Expr> ":" "\n" => Statement::_while(cond, vec![]),
+    "while" <cond:Expr> ":" <s:InlineStatement> => Statement::_while(cond, vec![s]),
+    "while" <cond:Expr> ":" "\n" <block:StatementBlock> => Statement::_while(cond, block),
+};
+
+pub StatementList: Vec<Statement> = {
+    <Statement*>,
+};
+
+StatementBlock: Vec<Statement> = {
+    "indent" <StatementList> "dedent",
+};
 
 extern {
     type Location = usize;
@@ -85,8 +96,8 @@ extern {
     enum Token<'input> {
         // WHITESPACE
         "\n" => Token::Newline,
-        Indent => Token::Indent,
-        Dedent => Token::Dedent,
+        "indent" => Token::Indent,
+        "dedent" => Token::Dedent,
 
         // VALUES
         None => Token::None,
