@@ -1,3 +1,6 @@
 [submodule "crates/offer-cell"]
 	path = crates/offer-cell
 	url = git@github.com:rhedgeco/offer-cell.git
+[submodule "crates/handlemap"]
+	path = crates/handlemap
+	url = git@github.com:rhedgeco/handlemap.git
