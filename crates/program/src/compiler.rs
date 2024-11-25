@@ -34,74 +34,29 @@ struct FuncData {
 }
 
 #[derive(Debug, Default)]
-pub struct ProgramBuilder {
+pub struct Compiler {
     scopes: Vec<ScopeData>,
     classes: Vec<ClassData>,
     funcs: Vec<FuncData>,
 }
 
-impl ProgramBuilder {
-    pub fn new() -> Self {
+impl Compiler {
+    pub fn empty() -> Self {
         Self::default()
     }
 
-    pub fn with_root(module: &Node<Module>) -> Self {
-        // create builder and initial root scope
-        let mut builder = Self::default();
-        builder.scopes.push(ScopeData::default());
+    pub fn from_root(root: &Node<Module>) -> Self {
+        // create compiler and initial root scope
+        let mut compiler = Self::default();
+        compiler.scopes.push(ScopeData::default());
 
         // build all the defs in the module
-        for def in module.defs.iter() {
-            builder.insert_definition_into(0, def);
+        for def in root.defs.iter() {
+            compiler.insert_definition_into(0, def);
         }
 
-        // return the new builder
-        builder
-    }
-
-    pub fn insert_module(
-        &mut self,
-        vis: &Node<Visibility>,
-        name: &Node<String>,
-        module: &Node<Module>,
-    ) -> Option<usize> {
-        // ensure root scope is created
-        if self.scopes.is_empty() {
-            self.scopes.push(ScopeData::default());
-        }
-
-        // insert the module into the root scope
-        self.insert_module_into(0, vis, name, module)
-    }
-
-    pub fn insert_class(
-        &mut self,
-        vis: &Node<Visibility>,
-        name: &Node<String>,
-        class: &Node<Class>,
-    ) -> Option<usize> {
-        // ensure root scope is created
-        if self.scopes.is_empty() {
-            self.scopes.push(ScopeData::default());
-        }
-
-        // insert the class into the root scope
-        self.insert_class_into(0, vis, name, class)
-    }
-
-    pub fn insert_func(
-        &mut self,
-        vis: &Node<Visibility>,
-        name: &Node<String>,
-        func: &Node<Func>,
-    ) -> Option<usize> {
-        // ensure root scope is created
-        if self.scopes.is_empty() {
-            self.scopes.push(ScopeData::default());
-        }
-
-        // insert the class into the root scope
-        self.insert_func_into(0, vis, name, func)
+        // return the new compiler
+        compiler
     }
 
     fn insert_module_into(
@@ -173,7 +128,7 @@ impl ProgramBuilder {
         // build all the class fields
         let mut fields = IndexMap::new();
         for field in class.fields.iter() {
-            let ty = Self::build_ast_union(&field.ty);
+            let ty = Self::build_union(&field.ty);
             fields.insert(field.name.to_string(), ty);
         }
 
@@ -227,10 +182,10 @@ impl ProgramBuilder {
         };
 
         // build the func output and inputs
-        let output = Self::build_ast_union(&func.output);
+        let output = Self::build_union(&func.output);
         let mut inputs = IndexMap::new();
         for field in func.inputs.iter() {
-            let ty = Self::build_ast_union(&field.ty);
+            let ty = Self::build_union(&field.ty);
             inputs.insert(field.name.to_string(), ty);
         }
 
@@ -257,13 +212,13 @@ impl ProgramBuilder {
             match statement.deref() {
                 S::Def(def) => self.insert_definition_into(inner_scope, def),
                 S::Let { pattern, expr } => {
-                    // TODO: implement statement
+                    // TODO: implement let statement
                 }
                 S::Set { pattern, expr } => {
-                    // TODO: implement statement
+                    // TODO: implement set statement
                 }
                 S::Expr(expr) => {
-                    // TODO: implement statement
+                    // TODO: implement expr statement
                 }
             }
         }
@@ -297,7 +252,7 @@ impl ProgramBuilder {
         }
     }
 
-    fn build_ast_union(union: &Node<Union>) -> Vec<Vec<String>> {
+    fn build_union(union: &Node<Union>) -> Vec<Vec<String>> {
         union
             .types
             .iter()
@@ -344,7 +299,7 @@ mod tests {
         });
 
         // use ast to build program
-        let builder = ProgramBuilder::with_root(&module);
+        let builder = Compiler::from_root(&module);
         assert_eq!(builder.scopes.len(), 5);
         assert_eq!(
             builder.scopes[0]

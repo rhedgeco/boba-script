@@ -1,6 +1,6 @@
-pub mod program;
+pub mod compiler;
 
-pub use program::ProgramBuilder;
+pub use compiler::Compiler;
 
 // re-export
 pub use boba_script_ast as ast;
