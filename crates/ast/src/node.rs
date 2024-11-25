@@ -1,18 +1,47 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
-use derive_more::Display;
+pub type BNode<T> = Box<Node<T>>;
 
-#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeId(u64);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeId(usize);
 
-impl NodeId {
-    pub fn new() -> Self {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        Self(COUNTER.fetch_add(1, Ordering::Relaxed))
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Node<T> {
+    id: NodeId,
+    item: T,
+}
+
+impl<T> Deref for Node<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.item
     }
 }
 
-pub trait Node {
-    const NAME: &'static str;
-    fn id(&self) -> NodeId;
+impl<T> DerefMut for Node<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.item
+    }
+}
+
+impl<T> Node<T> {
+    pub fn build(item: T) -> Node<T> {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        Self {
+            id: NodeId(COUNTER.fetch_add(1, Ordering::Relaxed)),
+            item,
+        }
+    }
+
+    pub fn id(&self) -> NodeId {
+        self.id
+    }
+
+    pub fn into_inner(self) -> T {
+        self.item
+    }
 }
