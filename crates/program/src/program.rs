@@ -1,13 +1,43 @@
-use crate::{
-    module::ModuleData,
-    pearl::{Pearl, PearlData},
-    BuildError, ModuleBuilder,
-};
+use std::ops::Deref;
 
-#[derive(Default)]
+use boba_script_ast::{def::Visibility, Class, Definition, Func, Module, Node, Union};
+use indexmap::IndexMap;
+
+#[derive(Debug, Clone, Copy)]
+struct VisIndex {
+    vis: Node<Visibility>,
+    index: usize,
+}
+
+#[derive(Debug, Default)]
+struct ScopeData {
+    super_scope: Option<usize>,
+    parent_scope: Option<usize>,
+    modules: IndexMap<String, VisIndex>,
+    classes: IndexMap<String, VisIndex>,
+    funcs: IndexMap<String, VisIndex>,
+}
+
+#[derive(Debug, Default)]
+struct ClassData {
+    parent_scope: usize,
+    fields: IndexMap<String, Vec<Vec<String>>>,
+    inner_scope: usize,
+}
+
+#[derive(Debug, Default)]
+struct FuncData {
+    parent_scope: usize,
+    inputs: IndexMap<String, Vec<Vec<String>>>,
+    output: Vec<Vec<String>>,
+    inner_scope: usize,
+}
+
+#[derive(Debug, Default)]
 pub struct ProgramBuilder {
-    pub(crate) modules: Vec<ModuleData>,
-    pub(crate) pearls: Vec<PearlData>,
+    scopes: Vec<ScopeData>,
+    classes: Vec<ClassData>,
+    funcs: Vec<FuncData>,
 }
 
 impl ProgramBuilder {
@@ -15,144 +45,334 @@ impl ProgramBuilder {
         Self::default()
     }
 
-    pub fn root_module(&mut self) -> ModuleBuilder {
-        if self.modules.is_empty() {
-            self.modules.push(ModuleData {
-                children: Default::default(),
-                pearls: Default::default(),
-                parent: None,
-            })
+    pub fn with_root(module: &Node<Module>) -> Self {
+        // create builder and initial root scope
+        let mut builder = Self::default();
+        builder.scopes.push(ScopeData::default());
+
+        // build all the defs in the module
+        for def in module.defs.iter() {
+            builder.insert_definition_into(0, def);
         }
 
-        ModuleBuilder {
-            program: self,
-            index: 0,
-        }
+        // return the new builder
+        builder
     }
 
-    pub fn build(&self) -> Result<Program, Vec<BuildError>> {
-        let mut errors = Vec::new();
+    pub fn insert_module(
+        &mut self,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        module: &Node<Module>,
+    ) -> Option<usize> {
+        // ensure root scope is created
+        if self.scopes.is_empty() {
+            self.scopes.push(ScopeData::default());
+        }
 
-        // resolve all pearl fields
-        let mut pearls = Vec::new();
-        for pearl in self.pearls.iter() {
-            let mut fields = Vec::new();
-            for union in pearl.fields.values() {
-                for path in union.iter() {
-                    // get the pearl name at the end of the path
-                    let mut parts = path.iter().map(|s| s.as_str()).peekable();
-                    let pearl_name = match parts.next_back() {
-                        Some(last) => last,
-                        None => {
-                            errors.push(BuildError::EmptyPath);
-                            continue;
-                        }
-                    };
+        // insert the module into the root scope
+        self.insert_module_into(0, vis, name, module)
+    }
 
-                    // check the first segment of the path for 'root' keyword
-                    let mut module = match parts.peek().map(|s| *s) {
-                        Some("root") => &self.modules[0],
-                        _ => &self.modules[pearl.module],
-                    };
+    pub fn insert_class(
+        &mut self,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        class: &Node<Class>,
+    ) -> Option<usize> {
+        // ensure root scope is created
+        if self.scopes.is_empty() {
+            self.scopes.push(ScopeData::default());
+        }
 
-                    // check all remaining path parts and update the search module
-                    for part in parts {
-                        module = match part {
-                            "root" => {
-                                errors.push(BuildError::InvalidRootKeyword);
-                                continue;
-                            }
-                            "super" => match module.parent {
-                                Some(parent) => &self.modules[parent],
-                                None => {
-                                    errors.push(BuildError::SuperFromRoot);
-                                    continue;
-                                }
-                            },
-                            part => match module.children.get(part) {
-                                Some(index) => &self.modules[*index],
-                                None => {
-                                    errors.push(BuildError::ModuleDoesNotExist(part.to_string()));
-                                    continue;
-                                }
-                            },
-                        };
-                    }
+        // insert the class into the root scope
+        self.insert_class_into(0, vis, name, class)
+    }
 
-                    // try to get the target pearl from the search module
-                    match module.pearls.get(pearl_name) {
-                        Some(index) => fields.push(*index),
-                        None => {
-                            errors.push(BuildError::PearlDoesNotExist(pearl_name.to_string()));
-                            continue;
-                        }
-                    };
+    pub fn insert_func(
+        &mut self,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        func: &Node<Func>,
+    ) -> Option<usize> {
+        // ensure root scope is created
+        if self.scopes.is_empty() {
+            self.scopes.push(ScopeData::default());
+        }
+
+        // insert the class into the root scope
+        self.insert_func_into(0, vis, name, func)
+    }
+
+    fn insert_module_into(
+        &mut self,
+        parent_scope: usize,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        module: &Node<Module>,
+    ) -> Option<usize> {
+        // ensure scope is in bounds
+        debug_assert!(
+            parent_scope < self.scopes.len(),
+            "parent scope is out of bounds"
+        );
+
+        // try to insert the next module index into the parent scope
+        use indexmap::map::Entry as E;
+        let new_scope = self.scopes.len();
+        match self.scopes[parent_scope].modules.entry(name.to_string()) {
+            E::Occupied(_) => return None,
+            E::Vacant(entry) => entry.insert(VisIndex {
+                vis: vis.clone(),
+                index: new_scope,
+            }),
+        };
+
+        // get the super scope of the parent
+        let super_scope = self.scopes[parent_scope].super_scope;
+
+        // build the scope data
+        self.scopes.push(ScopeData {
+            super_scope,
+            ..Default::default()
+        });
+
+        // insert all definitions into the new scope
+        for def in module.defs.iter() {
+            self.insert_definition_into(new_scope, def);
+        }
+
+        // return the index of the new scope
+        Some(new_scope)
+    }
+
+    fn insert_class_into(
+        &mut self,
+        parent_scope: usize,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        class: &Node<Class>,
+    ) -> Option<usize> {
+        // ensure scope is in bounds
+        debug_assert!(
+            parent_scope < self.scopes.len(),
+            "parent scope is out of bounds"
+        );
+
+        // try to insert the next class index into the parent scope
+        use indexmap::map::Entry as E;
+        let new_class = self.classes.len();
+        match self.scopes[parent_scope].classes.entry(name.to_string()) {
+            E::Occupied(_) => return None,
+            E::Vacant(entry) => entry.insert(VisIndex {
+                vis: vis.clone(),
+                index: new_class,
+            }),
+        };
+
+        // build all the class fields
+        let mut fields = IndexMap::new();
+        for field in class.fields.iter() {
+            let ty = Self::build_ast_union(&field.ty);
+            fields.insert(field.name.to_string(), ty);
+        }
+
+        // get the super scope of the parent
+        let super_scope = self.scopes[parent_scope].super_scope;
+
+        // build the inner scope and class data
+        let inner_scope = self.scopes.len();
+        self.scopes.push(ScopeData {
+            super_scope,
+            parent_scope: Some(parent_scope),
+            ..Default::default()
+        });
+        self.classes.push(ClassData {
+            parent_scope,
+            fields,
+            inner_scope,
+        });
+
+        // insert all definitions into the new scope
+        for def in class.defs.iter() {
+            self.insert_definition_into(inner_scope, def);
+        }
+
+        // return the index of the new class
+        Some(new_class)
+    }
+
+    fn insert_func_into(
+        &mut self,
+        parent_scope: usize,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        func: &Node<Func>,
+    ) -> Option<usize> {
+        // ensure scope is in bounds
+        debug_assert!(
+            parent_scope < self.scopes.len(),
+            "parent scope is out of bounds"
+        );
+
+        // try to insert the next func index into the parent scope
+        use indexmap::map::Entry as E;
+        let new_func = self.funcs.len();
+        match self.scopes[parent_scope].funcs.entry(name.to_string()) {
+            E::Occupied(_) => return None,
+            E::Vacant(entry) => entry.insert(VisIndex {
+                vis: vis.clone(),
+                index: new_func,
+            }),
+        };
+
+        // build the func output and inputs
+        let output = Self::build_ast_union(&func.output);
+        let mut inputs = IndexMap::new();
+        for field in func.inputs.iter() {
+            let ty = Self::build_ast_union(&field.ty);
+            inputs.insert(field.name.to_string(), ty);
+        }
+
+        // get the super scope of the parent
+        let super_scope = self.scopes[parent_scope].super_scope;
+
+        // build the inner scope and func data
+        let inner_scope = self.scopes.len();
+        self.scopes.push(ScopeData {
+            super_scope,
+            parent_scope: Some(parent_scope),
+            ..Default::default()
+        });
+        self.funcs.push(FuncData {
+            parent_scope,
+            inputs,
+            output,
+            inner_scope,
+        });
+
+        // insert all function statements
+        for statement in func.body.iter() {
+            use boba_script_ast::statement::Statement as S;
+            match statement.deref() {
+                S::Def(def) => self.insert_definition_into(inner_scope, def),
+                S::Let { pattern, expr } => {
+                    // TODO: implement statement
+                }
+                S::Set { pattern, expr } => {
+                    // TODO: implement statement
+                }
+                S::Expr(expr) => {
+                    // TODO: implement statement
                 }
             }
-
-            pearls.push(Pearl {
-                fields: fields.into_boxed_slice(),
-            })
         }
 
-        // only return built program if there was no errors
-        match errors.is_empty() {
-            true => Ok(Program { pearls }),
-            false => Err(errors),
+        // return the index of the new func
+        Some(new_func)
+    }
+
+    fn insert_definition_into(&mut self, parent_scope: usize, def: &Node<Definition>) {
+        // ensure scope is in bounds
+        debug_assert!(
+            parent_scope < self.scopes.len(),
+            "parent scope is out of bounds"
+        );
+
+        // match and insert definition
+        use boba_script_ast::Definition as D;
+        match def.deref() {
+            D::Static { vis, pattern, expr } => {
+                // TODO: implement static
+            }
+            D::Module { vis, name, module } => {
+                self.insert_module_into(parent_scope, vis, name, module);
+            }
+            D::Class { vis, name, class } => {
+                self.insert_class_into(parent_scope, vis, name, class);
+            }
+            D::Func { vis, name, func } => {
+                self.insert_func_into(parent_scope, vis, name, func);
+            }
         }
     }
-}
 
-pub struct Program {
-    pearls: Vec<Pearl>,
+    fn build_ast_union(union: &Node<Union>) -> Vec<Vec<String>> {
+        union
+            .types
+            .iter()
+            .map(|concrete| concrete.path.iter().map(|s| s.to_string()).collect())
+            .collect()
+    }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
+    use boba_script_ast::{Module, Node};
+
     use super::*;
 
     #[test]
-    pub fn type_resolution() {
-        let mut builder = ProgramBuilder::new();
+    pub fn ast_module_insert() {
+        // build ast
+        let module = Node::build(Module {
+            defs: vec![
+                Node::build(Definition::Module {
+                    vis: Node::build(Visibility::Public),
+                    name: Node::build("sub_module1".to_string()),
+                    module: Node::build(Module {
+                        defs: vec![
+                            Node::build(Definition::Module {
+                                vis: Node::build(Visibility::Public),
+                                name: Node::build("sub_module2".to_string()),
+                                module: Node::build(Module { defs: vec![] }),
+                            }),
+                            Node::build(Definition::Module {
+                                vis: Node::build(Visibility::Public),
+                                name: Node::build("sub_module3".to_string()),
+                                module: Node::build(Module { defs: vec![] }),
+                            }),
+                        ],
+                    }),
+                }),
+                Node::build(Definition::Module {
+                    vis: Node::build(Visibility::Public),
+                    name: Node::build("sub_module4".to_string()),
+                    module: Node::build(Module { defs: vec![] }),
+                }),
+            ],
+        });
 
-        // build root module and pearl
-        let mut root_module = builder.root_module();
-        let mut root_pearl = root_module.create_pearl("RootPearl").unwrap();
-        let root_pearl_id = root_pearl.id();
-        let field1 = root_pearl.create_field("field1").unwrap();
-        field1.push(vec!["sub_module".to_string(), "NestedPearl".to_string()]);
-        let field2 = root_pearl.create_field("field2").unwrap();
-        field2.push(vec![
-            "sub_module".to_string(),
-            "sub_module2".to_string(),
-            "NestedPearl2".to_string(),
-        ]);
-
-        // build nested module and pearl
-        let mut sub_module = root_module.create_module("sub_module").unwrap();
-        let mut nested_pearl = sub_module.create_pearl("NestedPearl").unwrap();
-        let nested_pearl_id = nested_pearl.id();
-        let field = nested_pearl.create_field("field1").unwrap();
-        field.push(vec!["super".to_string(), "RootPearl".to_string()]);
-
-        // build double nested module and pearl
-        let mut sub_module2 = sub_module.create_module("sub_module2").unwrap();
-        let mut nested_pearl2 = sub_module2.create_pearl("NestedPearl2").unwrap();
-        let nested_pearl2_id = nested_pearl2.id();
-        let field1 = nested_pearl2.create_field("field1").unwrap();
-        field1.push(vec![
-            "super".to_string(),
-            "super".to_string(),
-            "RootPearl".to_string(),
-        ]);
-        let field2 = nested_pearl2.create_field("field2").unwrap();
-        field2.push(vec!["root".to_string(), "RootPearl".to_string()]);
-
-        let program = builder.build().unwrap();
-        assert_eq!(program.pearls[0].fields[0], nested_pearl_id);
-        assert_eq!(program.pearls[0].fields[1], nested_pearl2_id);
-        assert_eq!(program.pearls[1].fields[0], root_pearl_id);
-        assert_eq!(program.pearls[2].fields[0], root_pearl_id);
-        assert_eq!(program.pearls[2].fields[1], root_pearl_id);
+        // use ast to build program
+        let builder = ProgramBuilder::with_root(&module);
+        assert_eq!(builder.scopes.len(), 5);
+        assert_eq!(
+            builder.scopes[0]
+                .modules
+                .get_index(0)
+                .map(|(k, v)| (k.as_str(), v.index)),
+            Some(("sub_module1", 1))
+        );
+        assert_eq!(
+            builder.scopes[1]
+                .modules
+                .get_index(0)
+                .map(|(k, v)| (k.as_str(), v.index)),
+            Some(("sub_module2", 2))
+        );
+        assert_eq!(
+            builder.scopes[1]
+                .modules
+                .get_index(1)
+                .map(|(k, v)| (k.as_str(), v.index)),
+            Some(("sub_module3", 3))
+        );
+        assert_eq!(
+            builder.scopes[0]
+                .modules
+                .get_index(1)
+                .map(|(k, v)| (k.as_str(), v.index)),
+            Some(("sub_module4", 4))
+        );
     }
 }

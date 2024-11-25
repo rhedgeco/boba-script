@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bon = "3.0"
 fxhash = "0.2"
 indexmap = "2.6"
+boba-script-ast = { path = "../ast" }
