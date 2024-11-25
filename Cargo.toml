@@ -8,6 +8,5 @@ members = ["crates/*", "interpreter"]
 
 [dependencies]
 boba-script-ast = { path = "crates/ast" }
-boba-script-engine = { path = "crates/engine" }
 boba-script-parser = { path = "crates/parser" }
 boba-script-lexer = { path = "crates/lexer" }
