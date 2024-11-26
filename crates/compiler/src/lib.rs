@@ -1,16 +1,9 @@
-mod program;
-#[cfg(test)]
-mod tests;
-
-pub mod error;
 pub mod indexers;
 pub mod layout;
-pub mod utils;
+pub mod program;
 
-pub use program::*;
-
-pub use error::CompileError;
 pub use layout::ProgramLayout;
+pub use program::Program;
 
 // re-export
 pub use boba_script_ast as ast;

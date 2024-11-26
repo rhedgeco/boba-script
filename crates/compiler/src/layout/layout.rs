@@ -3,14 +3,20 @@ use std::{
     slice::Iter,
 };
 
-use boba_script_ast::{def::Visibility, Class, Definition, Func, Module, Node, Union};
+use boba_script_ast::{
+    def::Visibility, node::NodeId, Class, Definition, Func, Module, Node, Union,
+};
 use indexmap::IndexMap;
 
 use crate::indexers::{ClassIndex, FuncIndex, ScopeIndex};
 
+use super::LayoutError;
+
 #[derive(Debug)]
-pub struct VisData<T> {
+pub struct DefData<T> {
     pub vis: Node<Visibility>,
+    pub name: Node<String>,
+    pub data_id: NodeId,
     pub data: T,
     _private: (),
 }
@@ -19,9 +25,9 @@ pub struct VisData<T> {
 pub struct ScopeData {
     pub super_scope: Option<ScopeIndex>,
     pub parent_scope: Option<ScopeIndex>,
-    pub modules: IndexMap<String, VisData<ScopeIndex>>,
-    pub classes: IndexMap<String, VisData<ClassIndex>>,
-    pub funcs: IndexMap<String, VisData<FuncIndex>>,
+    pub modules: IndexMap<String, DefData<ScopeIndex>>,
+    pub classes: IndexMap<String, DefData<ClassIndex>>,
+    pub funcs: IndexMap<String, DefData<FuncIndex>>,
     _private: (),
 }
 
@@ -29,7 +35,7 @@ pub struct ScopeData {
 pub struct ClassData {
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
-    pub fields: IndexMap<String, VisData<TypeUnion>>,
+    pub fields: IndexMap<String, DefData<TypeUnion>>,
     _private: (),
 }
 
@@ -150,6 +156,36 @@ impl ProgramLayout {
         ScopeIndex::from_raw(0)
     }
 
+    pub fn insert_root_module(
+        &mut self,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        module: &Node<Module>,
+    ) -> Result<ScopeIndex, Vec<LayoutError>> {
+        let root_scope = self.get_or_create_root();
+        self.insert_module_into(root_scope, vis, name, module)
+    }
+
+    pub fn insert_root_class(
+        &mut self,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        class: &Node<Class>,
+    ) -> Result<ClassIndex, Vec<LayoutError>> {
+        let root_scope = self.get_or_create_root();
+        self.insert_class_into(root_scope, vis, name, class)
+    }
+
+    pub fn insert_root_func(
+        &mut self,
+        vis: &Node<Visibility>,
+        name: &Node<String>,
+        func: &Node<Func>,
+    ) -> Result<FuncIndex, Vec<LayoutError>> {
+        let root_scope = self.get_or_create_root();
+        self.insert_func_into(root_scope, vis, name, func)
+    }
+
     #[must_use]
     pub fn insert_module_into(
         &mut self,
@@ -157,7 +193,7 @@ impl ProgramLayout {
         vis: &Node<Visibility>,
         name: &Node<String>,
         module: &Node<Module>,
-    ) -> Option<ScopeIndex> {
+    ) -> Result<ScopeIndex, Vec<LayoutError>> {
         // assert that parent scope is valid
         assert!(
             parent_scope.raw() < self.scopes.len(),
@@ -166,14 +202,21 @@ impl ProgramLayout {
 
         // try to insert the next module index into the parent scope
         use indexmap::map::Entry as E;
-        let new_scope = ScopeIndex::from_raw(self.scopes.len());
+        let inner_scope = ScopeIndex::from_raw(self.scopes.len());
         match self[parent_scope].modules.entry(name.to_string()) {
-            E::Vacant(entry) => entry.insert(VisData {
+            E::Vacant(entry) => entry.insert(DefData {
+                name: name.clone(),
                 vis: vis.clone(),
-                data: new_scope,
+                data_id: module.id(),
+                data: inner_scope,
                 _private: (),
             }),
-            E::Occupied(_) => return None,
+            E::Occupied(entry) => {
+                return Err(vec![LayoutError::ModuleAlreadyExists {
+                    insert: name.id(),
+                    found: entry.get().name.id(),
+                }])
+            }
         };
 
         // build the scope data
@@ -187,12 +230,20 @@ impl ProgramLayout {
         });
 
         // insert all definitions into the new scope
+        let mut errors = Vec::new();
         for def in module.defs.iter() {
-            self.insert_definition_into(new_scope, def);
+            if let Err(new_errors) = self.insert_definition_into(inner_scope, def) {
+                errors.extend(new_errors)
+            }
+        }
+
+        // return errors if there is any
+        if !errors.is_empty() {
+            return Err(errors);
         }
 
         // return the index of the new scope
-        Some(new_scope)
+        Ok(inner_scope)
     }
 
     #[must_use]
@@ -202,7 +253,7 @@ impl ProgramLayout {
         vis: &Node<Visibility>,
         name: &Node<String>,
         class: &Node<Class>,
-    ) -> Option<ClassIndex> {
+    ) -> Result<ClassIndex, Vec<LayoutError>> {
         // assert that parent scope is valid
         assert!(
             parent_scope.raw() < self.scopes.len(),
@@ -213,12 +264,19 @@ impl ProgramLayout {
         use indexmap::map::Entry as E;
         let new_class = ClassIndex::from_raw(self.classes.len());
         match self[parent_scope].classes.entry(name.to_string()) {
-            E::Vacant(entry) => entry.insert(VisData {
+            E::Vacant(entry) => entry.insert(DefData {
                 vis: vis.clone(),
+                name: name.clone(),
+                data_id: class.id(),
                 data: new_class,
                 _private: (),
             }),
-            E::Occupied(_) => return None,
+            E::Occupied(entry) => {
+                return Err(vec![LayoutError::ClassAlreadyExists {
+                    insert: name.id(),
+                    found: entry.get().name.id(),
+                }])
+            }
         };
 
         // build all the class fields
@@ -227,8 +285,10 @@ impl ProgramLayout {
             let union = Self::build_union(&field.ty);
             fields.insert(
                 field.name.to_string(),
-                VisData {
+                DefData {
                     vis: field.vis.clone(),
+                    name: field.name.clone(),
+                    data_id: field.ty.id(),
                     data: union,
                     _private: (),
                 },
@@ -256,12 +316,20 @@ impl ProgramLayout {
         });
 
         // insert all definitions into the new scope
+        let mut errors = Vec::new();
         for def in class.defs.iter() {
-            self.insert_definition_into(inner_scope, def);
+            if let Err(new_errors) = self.insert_definition_into(inner_scope, def) {
+                errors.extend(new_errors)
+            }
+        }
+
+        // return errors if there are any
+        if !errors.is_empty() {
+            return Err(errors);
         }
 
         // return the index of the new class
-        Some(new_class)
+        Ok(new_class)
     }
 
     #[must_use]
@@ -271,7 +339,7 @@ impl ProgramLayout {
         vis: &Node<Visibility>,
         name: &Node<String>,
         func: &Node<Func>,
-    ) -> Option<FuncIndex> {
+    ) -> Result<FuncIndex, Vec<LayoutError>> {
         // assert that parent scope is valid
         assert!(
             parent_scope.raw() < self.scopes.len(),
@@ -282,12 +350,19 @@ impl ProgramLayout {
         use indexmap::map::Entry as E;
         let new_func = FuncIndex::from_raw(self.funcs.len());
         match self[parent_scope].funcs.entry(name.to_string()) {
-            E::Vacant(entry) => entry.insert(VisData {
+            E::Vacant(entry) => entry.insert(DefData {
                 vis: vis.clone(),
+                name: name.clone(),
+                data_id: func.id(),
                 data: new_func,
                 _private: (),
             }),
-            E::Occupied(_) => return None,
+            E::Occupied(entry) => {
+                return Err(vec![LayoutError::FuncAlreadyExists {
+                    insert: name.id(),
+                    found: entry.get().name.id(),
+                }])
+            }
         };
 
         // build the func output and inputs
@@ -320,30 +395,44 @@ impl ProgramLayout {
         });
 
         // insert all function statements
+        let mut errors = Vec::new();
         for statement in func.body.iter() {
             use boba_script_ast::statement::Statement as S;
             match statement.deref() {
-                S::Def(def) => self.insert_definition_into(inner_scope, def),
+                S::Def(def) => {
+                    if let Err(new_errors) = self.insert_definition_into(inner_scope, def) {
+                        errors.extend(new_errors)
+                    }
+                }
                 S::Let { pattern, expr } => {
-                    // TODO: implement let statement
                     let _ = (pattern, expr);
+                    todo!("let statements are unimplemented")
                 }
                 S::Set { pattern, expr } => {
-                    // TODO: implement set statement
                     let _ = (pattern, expr);
+                    todo!("set statements are unimplemented")
                 }
                 S::Expr(expr) => {
-                    // TODO: implement expr statement
                     let _ = expr;
+                    todo!("expr statements are unimplemented")
                 }
             }
         }
 
+        // return errors if there are any
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+
         // return the index of the new func
-        Some(new_func)
+        Ok(new_func)
     }
 
-    pub fn insert_definition_into(&mut self, parent_scope: ScopeIndex, def: &Node<Definition>) {
+    pub fn insert_definition_into(
+        &mut self,
+        parent_scope: ScopeIndex,
+        def: &Node<Definition>,
+    ) -> Result<(), Vec<LayoutError>> {
         // assert that parent scope is valid
         assert!(
             parent_scope.raw() < self.scopes.len(),
@@ -354,18 +443,18 @@ impl ProgramLayout {
         use boba_script_ast::Definition as D;
         match def.deref() {
             D::Static { vis, pattern, expr } => {
-                // TODO
                 let _ = (vis, pattern, expr);
+                todo!("statics are not implemented")
             }
-            D::Module { vis, name, module } => {
-                self.insert_module_into(parent_scope, vis, name, module);
-            }
-            D::Class { vis, name, class } => {
-                self.insert_class_into(parent_scope, vis, name, class);
-            }
-            D::Func { vis, name, func } => {
-                self.insert_func_into(parent_scope, vis, name, func);
-            }
+            D::Module { vis, name, module } => self
+                .insert_module_into(parent_scope, vis, name, module)
+                .map(|_| ()),
+            D::Class { vis, name, class } => self
+                .insert_class_into(parent_scope, vis, name, class)
+                .map(|_| ()),
+            D::Func { vis, name, func } => self
+                .insert_func_into(parent_scope, vis, name, func)
+                .map(|_| ()),
         }
     }
 

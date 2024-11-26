@@ -4,7 +4,8 @@ use boba_script_ast::def::Visibility;
 
 use crate::{
     indexers::{ClassIndex, FuncIndex, ScopeIndex},
-    CompileError, ProgramLayout,
+    program::CompileError,
+    ProgramLayout,
 };
 
 pub fn is_child(layout: &ProgramLayout, parent: ScopeIndex, mut child: ScopeIndex) -> bool {

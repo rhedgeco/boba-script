@@ -4,9 +4,11 @@ use indexmap::IndexMap;
 
 use crate::{
     indexers::{ClassIndex, FieldIndex, FuncIndex, InputIndex},
-    utils::resolve_class,
-    CompileError, ProgramLayout,
+    program::utils::resolve_class,
+    ProgramLayout,
 };
+
+use super::CompileError;
 
 pub struct Class {
     fields: IndexMap<String, Vec<ClassIndex>>,

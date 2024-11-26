@@ -2,7 +2,9 @@ use boba_script_ast::{
     class::ClassField, def::Visibility, union::ConcreteType, Class, Definition, Module, Node, Union,
 };
 
-use crate::{indexers::ClassIndex, Program, ProgramLayout};
+use crate::{indexers::ClassIndex, ProgramLayout};
+
+use super::Program;
 
 #[test]
 fn super_mod_private_class() {
@@ -47,14 +49,13 @@ fn super_mod_private_class() {
     });
 
     let mut layout = ProgramLayout::new();
-    let root_module = layout.get_or_create_root();
-    let module0 = layout.insert_module_into(
-        root_module,
-        &Node::build(Visibility::Private),
-        &Node::build("module0".to_string()),
-        &ast,
-    );
-    assert!(module0.is_some());
+    layout
+        .insert_root_module(
+            &Node::build(Visibility::Private),
+            &Node::build("module0".to_string()),
+            &ast,
+        )
+        .expect("valid module");
 
     match Program::compile(&layout) {
         Err(errors) => panic!("failed to compile program: {errors:?}"),

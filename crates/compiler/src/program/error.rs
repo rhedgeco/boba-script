@@ -1,8 +1,5 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CompileError {
-    ModuleAlreadyExists,
-    ClassAlreadyExists,
-    FuncAlreadyExists,
     SuperFromRootScope,
     SuperInPath,
     ModuleDoesNotExist,
