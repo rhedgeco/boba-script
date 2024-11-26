@@ -129,6 +129,18 @@ impl ProgramLayout {
         self.funcs.iter()
     }
 
+    pub fn scope_count(&self) -> usize {
+        self.scopes.len()
+    }
+
+    pub fn class_count(&self) -> usize {
+        self.classes.len()
+    }
+
+    pub fn func_count(&self) -> usize {
+        self.funcs.len()
+    }
+
     pub fn get_scope(&self, index: ScopeIndex) -> Option<&ScopeData> {
         self.scopes.get(index.raw())
     }
@@ -139,6 +151,14 @@ impl ProgramLayout {
 
     pub fn get_func(&self, index: FuncIndex) -> Option<&FuncData> {
         self.funcs.get(index.raw())
+    }
+
+    pub fn get_root_scope(&self) -> Option<ScopeIndex> {
+        if self.scopes.is_empty() {
+            return None;
+        }
+
+        Some(ScopeIndex::from_raw(0))
     }
 
     pub fn get_or_create_root(&mut self) -> ScopeIndex {

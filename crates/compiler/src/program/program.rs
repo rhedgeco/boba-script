@@ -8,10 +8,11 @@ use crate::{
     ProgramLayout,
 };
 
-use super::CompileError;
+use super::{CompileError, Scope};
 
 pub struct Class {
     fields: IndexMap<String, Vec<ClassIndex>>,
+    scope: Scope,
 }
 
 impl Index<FieldIndex> for Class {
@@ -23,6 +24,10 @@ impl Index<FieldIndex> for Class {
 }
 
 impl Class {
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
+
     pub fn get_field(&self, name: impl AsRef<str>) -> Option<&[ClassIndex]> {
         self.fields.get(name.as_ref()).map(|v| v.as_slice())
     }
@@ -43,6 +48,7 @@ impl Class {
 pub struct Func {
     inputs: IndexMap<String, Vec<ClassIndex>>,
     output: Vec<ClassIndex>,
+    scope: Scope,
 }
 
 impl Index<InputIndex> for Func {
@@ -54,6 +60,10 @@ impl Index<InputIndex> for Func {
 }
 
 impl Func {
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
+
     pub fn output(&self) -> &[ClassIndex] {
         &self.output
     }
@@ -78,6 +88,7 @@ impl Func {
 pub struct Program {
     classes: Vec<Class>,
     funcs: Vec<Func>,
+    scope: Scope,
 }
 
 impl Index<ClassIndex> for Program {
@@ -97,6 +108,10 @@ impl Index<FuncIndex> for Program {
 }
 
 impl Program {
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
+
     pub fn get_class(&self, index: ClassIndex) -> Option<&Class> {
         self.classes.get(index.raw())
     }
@@ -111,10 +126,17 @@ impl Program {
         let mut classes = Vec::new();
         let mut funcs = Vec::new();
 
-        // return errors if there are any
-        if !errors.is_empty() {
-            return Err(errors);
-        }
+        // if the layout is empty, return an empty program
+        let Some(root_scope) = layout.get_root_scope() else {
+            return Ok(Self {
+                classes,
+                funcs,
+                scope: Scope::empty(),
+            });
+        };
+
+        // compile the root scope
+        let scope = Scope::compile(layout, root_scope);
 
         // resolve all program class data
         for class_data in layout.classes() {
@@ -131,8 +153,11 @@ impl Program {
                 fields.insert(name.to_string(), types);
             }
 
+            // compile the class scope
+            let scope = Scope::compile(layout, class_data.inner_scope);
+
             // build the class and append it
-            classes.push(Class { fields })
+            classes.push(Class { fields, scope })
         }
 
         // resolve all program func data
@@ -159,16 +184,27 @@ impl Program {
                 inputs.insert(name.to_string(), types);
             }
 
+            // compile the function scope
+            let scope = Scope::compile(layout, func_data.inner_scope);
+
             // build the function and append it
-            funcs.push(Func { inputs, output })
+            funcs.push(Func {
+                inputs,
+                output,
+                scope,
+            })
         }
 
-        // if there are errors, return those
+        // return errors is there are any
         if !errors.is_empty() {
             return Err(errors);
         }
 
         // otherwise, return the compiled program
-        Ok(Program { classes, funcs })
+        Ok(Program {
+            classes,
+            funcs,
+            scope,
+        })
     }
 }
