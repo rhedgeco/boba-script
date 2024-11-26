@@ -8,22 +8,32 @@ use indexmap::IndexMap;
 
 use crate::indexers::{ClassIndex, FuncIndex, ScopeIndex};
 
+#[derive(Debug)]
+pub struct VisData<T> {
+    pub vis: Node<Visibility>,
+    pub data: T,
+    _private: (),
+}
+
+#[derive(Debug)]
 pub struct ScopeData {
     pub super_scope: Option<ScopeIndex>,
     pub parent_scope: Option<ScopeIndex>,
-    pub modules: IndexMap<String, ScopeIndex>,
-    pub classes: IndexMap<String, ClassIndex>,
-    pub funcs: IndexMap<String, FuncIndex>,
+    pub modules: IndexMap<String, VisData<ScopeIndex>>,
+    pub classes: IndexMap<String, VisData<ClassIndex>>,
+    pub funcs: IndexMap<String, VisData<FuncIndex>>,
     _private: (),
 }
 
+#[derive(Debug)]
 pub struct ClassData {
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
-    pub fields: IndexMap<String, TypeUnion>,
+    pub fields: IndexMap<String, VisData<TypeUnion>>,
     _private: (),
 }
 
+#[derive(Debug)]
 pub struct FuncData {
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
@@ -32,11 +42,13 @@ pub struct FuncData {
     _private: (),
 }
 
+#[derive(Debug)]
 pub struct TypeUnion {
     pub paths: Vec<Vec<String>>,
     _private: (),
 }
 
+#[derive(Debug, Default)]
 pub struct ProgramLayout {
     scopes: Vec<ScopeData>,
     classes: Vec<ClassData>,
@@ -91,6 +103,14 @@ mod private {
 }
 
 impl ProgramLayout {
+    pub const fn new() -> Self {
+        Self {
+            scopes: Vec::new(),
+            classes: Vec::new(),
+            funcs: Vec::new(),
+        }
+    }
+
     pub fn scopes(&self) -> Iter<ScopeData> {
         self.scopes.iter()
     }
@@ -115,6 +135,22 @@ impl ProgramLayout {
         self.funcs.get(index.raw())
     }
 
+    pub fn get_or_create_root(&mut self) -> ScopeIndex {
+        if self.scopes.is_empty() {
+            self.scopes.push(ScopeData {
+                super_scope: None,
+                parent_scope: None,
+                modules: Default::default(),
+                classes: Default::default(),
+                funcs: Default::default(),
+                _private: (),
+            });
+        }
+
+        ScopeIndex::from_raw(0)
+    }
+
+    #[must_use]
     pub fn insert_module_into(
         &mut self,
         parent_scope: ScopeIndex,
@@ -132,16 +168,17 @@ impl ProgramLayout {
         use indexmap::map::Entry as E;
         let new_scope = ScopeIndex::from_raw(self.scopes.len());
         match self[parent_scope].modules.entry(name.to_string()) {
-            E::Vacant(entry) => entry.insert(new_scope),
+            E::Vacant(entry) => entry.insert(VisData {
+                vis: vis.clone(),
+                data: new_scope,
+                _private: (),
+            }),
             E::Occupied(_) => return None,
         };
 
-        // get the super scope of the parent
-        let super_scope = self[parent_scope].super_scope;
-
         // build the scope data
         self.scopes.push(ScopeData {
-            super_scope,
+            super_scope: Some(parent_scope),
             parent_scope: None, // module scopes have no parent
             modules: Default::default(),
             classes: Default::default(),
@@ -158,6 +195,7 @@ impl ProgramLayout {
         Some(new_scope)
     }
 
+    #[must_use]
     pub fn insert_class_into(
         &mut self,
         parent_scope: ScopeIndex,
@@ -175,7 +213,11 @@ impl ProgramLayout {
         use indexmap::map::Entry as E;
         let new_class = ClassIndex::from_raw(self.classes.len());
         match self[parent_scope].classes.entry(name.to_string()) {
-            E::Vacant(entry) => entry.insert(new_class),
+            E::Vacant(entry) => entry.insert(VisData {
+                vis: vis.clone(),
+                data: new_class,
+                _private: (),
+            }),
             E::Occupied(_) => return None,
         };
 
@@ -183,7 +225,14 @@ impl ProgramLayout {
         let mut fields = IndexMap::new();
         for field in class.fields.iter() {
             let union = Self::build_union(&field.ty);
-            fields.insert(field.name.to_string(), union);
+            fields.insert(
+                field.name.to_string(),
+                VisData {
+                    vis: field.vis.clone(),
+                    data: union,
+                    _private: (),
+                },
+            );
         }
 
         // get the super scope of the parent
@@ -215,6 +264,7 @@ impl ProgramLayout {
         Some(new_class)
     }
 
+    #[must_use]
     pub fn insert_func_into(
         &mut self,
         parent_scope: ScopeIndex,
@@ -232,7 +282,11 @@ impl ProgramLayout {
         use indexmap::map::Entry as E;
         let new_func = FuncIndex::from_raw(self.funcs.len());
         match self[parent_scope].funcs.entry(name.to_string()) {
-            E::Vacant(entry) => entry.insert(new_func),
+            E::Vacant(entry) => entry.insert(VisData {
+                vis: vis.clone(),
+                data: new_func,
+                _private: (),
+            }),
             E::Occupied(_) => return None,
         };
 
@@ -272,12 +326,15 @@ impl ProgramLayout {
                 S::Def(def) => self.insert_definition_into(inner_scope, def),
                 S::Let { pattern, expr } => {
                     // TODO: implement let statement
+                    let _ = (pattern, expr);
                 }
                 S::Set { pattern, expr } => {
                     // TODO: implement set statement
+                    let _ = (pattern, expr);
                 }
                 S::Expr(expr) => {
                     // TODO: implement expr statement
+                    let _ = expr;
                 }
             }
         }
@@ -298,6 +355,7 @@ impl ProgramLayout {
         match def.deref() {
             D::Static { vis, pattern, expr } => {
                 // TODO
+                let _ = (vis, pattern, expr);
             }
             D::Module { vis, name, module } => {
                 self.insert_module_into(parent_scope, vis, name, module);

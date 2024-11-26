@@ -120,7 +120,7 @@ impl Program {
             let mut fields = IndexMap::new();
             for (name, union) in &class_data.fields {
                 let mut types = Vec::new();
-                for path in &union.paths {
+                for path in &union.data.paths {
                     match resolve_class(layout, class_data.parent_scope, path.iter()) {
                         Ok(class_index) => types.push(class_index),
                         Err(error) => errors.push(error),
@@ -161,7 +161,12 @@ impl Program {
             funcs.push(Func { inputs, output })
         }
 
+        // if there are errors, return those
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+
         // otherwise, return the compiled program
-        Ok(Self { classes, funcs })
+        Ok(Program { classes, funcs })
     }
 }
