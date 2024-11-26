@@ -15,7 +15,7 @@ use super::LayoutError;
 #[derive(Debug)]
 pub struct DefData<T> {
     pub vis: Node<Visibility>,
-    pub name: Node<String>,
+    pub name_id: NodeId,
     pub data_id: NodeId,
     pub data: T,
     _private: (),
@@ -205,7 +205,7 @@ impl ProgramLayout {
         let inner_scope = ScopeIndex::from_raw(self.scopes.len());
         match self[parent_scope].modules.entry(name.to_string()) {
             E::Vacant(entry) => entry.insert(DefData {
-                name: name.clone(),
+                name_id: name.id(),
                 vis: vis.clone(),
                 data_id: module.id(),
                 data: inner_scope,
@@ -214,7 +214,7 @@ impl ProgramLayout {
             E::Occupied(entry) => {
                 return Err(vec![LayoutError::ModuleAlreadyExists {
                     insert: name.id(),
-                    found: entry.get().name.id(),
+                    found: entry.get().name_id,
                 }])
             }
         };
@@ -266,7 +266,7 @@ impl ProgramLayout {
         match self[parent_scope].classes.entry(name.to_string()) {
             E::Vacant(entry) => entry.insert(DefData {
                 vis: vis.clone(),
-                name: name.clone(),
+                name_id: name.id(),
                 data_id: class.id(),
                 data: new_class,
                 _private: (),
@@ -274,7 +274,7 @@ impl ProgramLayout {
             E::Occupied(entry) => {
                 return Err(vec![LayoutError::ClassAlreadyExists {
                     insert: name.id(),
-                    found: entry.get().name.id(),
+                    found: entry.get().name_id,
                 }])
             }
         };
@@ -287,7 +287,7 @@ impl ProgramLayout {
                 field.name.to_string(),
                 DefData {
                     vis: field.vis.clone(),
-                    name: field.name.clone(),
+                    name_id: field.name.id(),
                     data_id: field.ty.id(),
                     data: union,
                     _private: (),
@@ -352,7 +352,7 @@ impl ProgramLayout {
         match self[parent_scope].funcs.entry(name.to_string()) {
             E::Vacant(entry) => entry.insert(DefData {
                 vis: vis.clone(),
-                name: name.clone(),
+                name_id: name.id(),
                 data_id: func.id(),
                 data: new_func,
                 _private: (),
@@ -360,7 +360,7 @@ impl ProgramLayout {
             E::Occupied(entry) => {
                 return Err(vec![LayoutError::FuncAlreadyExists {
                     insert: name.id(),
-                    found: entry.get().name.id(),
+                    found: entry.get().name_id,
                 }])
             }
         };
