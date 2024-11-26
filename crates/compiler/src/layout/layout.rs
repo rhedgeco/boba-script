@@ -406,15 +406,24 @@ impl ProgramLayout {
                 }
                 S::Let { pattern, expr } => {
                     let _ = (pattern, expr);
-                    todo!("let statements are unimplemented")
+                    errors.push(LayoutError::Unimplemented {
+                        id: statement.id(),
+                        message: "let statements are unimplemented",
+                    })
                 }
                 S::Set { pattern, expr } => {
                     let _ = (pattern, expr);
-                    todo!("set statements are unimplemented")
+                    errors.push(LayoutError::Unimplemented {
+                        id: statement.id(),
+                        message: "set statements are unimplemented",
+                    })
                 }
                 S::Expr(expr) => {
                     let _ = expr;
-                    todo!("expr statements are unimplemented")
+                    errors.push(LayoutError::Unimplemented {
+                        id: statement.id(),
+                        message: "expr statements are unimplemented",
+                    })
                 }
             }
         }
@@ -444,7 +453,10 @@ impl ProgramLayout {
         match def.deref() {
             D::Static { vis, pattern, expr } => {
                 let _ = (vis, pattern, expr);
-                todo!("statics are not implemented")
+                Err(vec![LayoutError::Unimplemented {
+                    id: def.id(),
+                    message: "statics are unimplemented",
+                }])
             }
             D::Module { vis, name, module } => self
                 .insert_module_into(parent_scope, vis, name, module)

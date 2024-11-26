@@ -5,4 +5,5 @@ pub enum LayoutError {
     ModuleAlreadyExists { insert: NodeId, found: NodeId },
     ClassAlreadyExists { insert: NodeId, found: NodeId },
     FuncAlreadyExists { insert: NodeId, found: NodeId },
+    Unimplemented { id: NodeId, message: &'static str },
 }
