@@ -21,4 +21,5 @@ build_indexers! {
     ClassIndex,
     FuncIndex,
     FieldIndex,
+    InputIndex
 }

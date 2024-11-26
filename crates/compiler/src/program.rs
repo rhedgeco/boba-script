@@ -3,7 +3,7 @@ use std::ops::Index;
 use indexmap::IndexMap;
 
 use crate::{
-    indexers::{ClassIndex, FieldIndex, FuncIndex},
+    indexers::{ClassIndex, FieldIndex, FuncIndex, InputIndex},
     utils::resolve_class,
     CompileError, ProgramLayout,
 };
@@ -41,6 +41,36 @@ impl Class {
 pub struct Func {
     inputs: IndexMap<String, Vec<ClassIndex>>,
     output: Vec<ClassIndex>,
+}
+
+impl Index<InputIndex> for Func {
+    type Output = [ClassIndex];
+
+    fn index(&self, index: InputIndex) -> &Self::Output {
+        &self.inputs[index.raw()]
+    }
+}
+
+impl Func {
+    pub fn output(&self) -> &[ClassIndex] {
+        &self.output
+    }
+
+    pub fn get_input(&self, name: impl AsRef<str>) -> Option<&[ClassIndex]> {
+        self.inputs.get(name.as_ref()).map(|v| v.as_slice())
+    }
+
+    pub fn get_input_index(&self, index: FieldIndex) -> Option<&[ClassIndex]> {
+        self.inputs
+            .get_index(index.raw())
+            .map(|(_, v)| v.as_slice())
+    }
+
+    pub fn get_input_index_of(&self, name: impl AsRef<str>) -> Option<FieldIndex> {
+        Some(FieldIndex::from_raw(
+            self.inputs.get_index_of(name.as_ref())?,
+        ))
+    }
 }
 
 pub struct Program {
