@@ -4,7 +4,7 @@ use std::{
 };
 
 use boba_script_ast::{
-    def::Visibility, node::NodeId, Class, Definition, Func, Module, Node, Union,
+    def::Visibility, node::NodeId, path::Union, Class, Definition, Func, Module, Node,
 };
 use indexmap::IndexMap;
 
@@ -35,7 +35,7 @@ pub struct ScopeData {
 pub struct ClassData {
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
-    pub fields: IndexMap<String, DefData<TypeUnion>>,
+    pub fields: IndexMap<String, DefData<Union>>,
     _private: (),
 }
 
@@ -43,14 +43,8 @@ pub struct ClassData {
 pub struct FuncData {
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
-    pub inputs: IndexMap<String, TypeUnion>,
-    pub output: TypeUnion,
-    _private: (),
-}
-
-#[derive(Debug)]
-pub struct TypeUnion {
-    pub paths: Vec<Vec<String>>,
+    pub inputs: IndexMap<String, Node<Union>>,
+    pub output: Node<Union>,
     _private: (),
 }
 
@@ -302,14 +296,13 @@ impl ProgramLayout {
         // build all the class fields
         let mut fields = IndexMap::new();
         for field in class.fields.iter() {
-            let union = Self::build_union(&field.ty);
             fields.insert(
                 field.name.to_string(),
                 DefData {
                     vis: field.vis.clone(),
                     name_id: field.name.id(),
-                    data_id: field.ty.id(),
-                    data: union,
+                    data_id: field.union.id(),
+                    data: field.union.deref().clone(),
                     _private: (),
                 },
             );
@@ -386,11 +379,11 @@ impl ProgramLayout {
         };
 
         // build the func output and inputs
-        let output = Self::build_union(&func.output);
+        let output = func.output.clone();
         let mut inputs = IndexMap::new();
         for field in func.inputs.iter() {
-            let ty = Self::build_union(&field.ty);
-            inputs.insert(field.name.to_string(), ty);
+            let union = field.union.clone();
+            inputs.insert(field.name.to_string(), union);
         }
 
         // get the super scope of the parent
@@ -487,17 +480,6 @@ impl ProgramLayout {
             D::Func { vis, name, func } => self
                 .insert_func_into(parent_scope, vis, name, func)
                 .map(|_| ()),
-        }
-    }
-
-    fn build_union(union: &Node<Union>) -> TypeUnion {
-        TypeUnion {
-            paths: union
-                .types
-                .iter()
-                .map(|concrete| concrete.path.iter().map(|s| s.to_string()).collect())
-                .collect(),
-            _private: (),
         }
     }
 }

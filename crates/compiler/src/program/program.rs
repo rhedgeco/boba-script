@@ -4,19 +4,30 @@ use indexmap::IndexMap;
 
 use crate::{
     indexers::{ClassIndex, FieldIndex, FuncIndex, InputIndex},
-    program::utils::resolve_class,
+    program::utils::resolve_value,
     ProgramLayout,
 };
 
 use super::{CompileError, Scope};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ValueKind {
+    Any,
+    None,
+    Bool,
+    Int,
+    Float,
+    String,
+    Class(ClassIndex),
+}
+
 pub struct Class {
-    fields: IndexMap<String, Vec<ClassIndex>>,
+    fields: IndexMap<String, Vec<ValueKind>>,
     scope: Scope,
 }
 
 impl Index<FieldIndex> for Class {
-    type Output = [ClassIndex];
+    type Output = [ValueKind];
 
     fn index(&self, index: FieldIndex) -> &Self::Output {
         &self.fields[index.raw()]
@@ -28,11 +39,11 @@ impl Class {
         &self.scope
     }
 
-    pub fn get_field(&self, name: impl AsRef<str>) -> Option<&[ClassIndex]> {
+    pub fn get_field(&self, name: impl AsRef<str>) -> Option<&[ValueKind]> {
         self.fields.get(name.as_ref()).map(|v| v.as_slice())
     }
 
-    pub fn get_field_index(&self, index: FieldIndex) -> Option<&[ClassIndex]> {
+    pub fn get_field_index(&self, index: FieldIndex) -> Option<&[ValueKind]> {
         self.fields
             .get_index(index.raw())
             .map(|(_, v)| v.as_slice())
@@ -46,13 +57,13 @@ impl Class {
 }
 
 pub struct Func {
-    inputs: IndexMap<String, Vec<ClassIndex>>,
-    output: Vec<ClassIndex>,
+    inputs: IndexMap<String, Vec<ValueKind>>,
+    output: Vec<ValueKind>,
     scope: Scope,
 }
 
 impl Index<InputIndex> for Func {
-    type Output = [ClassIndex];
+    type Output = [ValueKind];
 
     fn index(&self, index: InputIndex) -> &Self::Output {
         &self.inputs[index.raw()]
@@ -64,15 +75,15 @@ impl Func {
         &self.scope
     }
 
-    pub fn output(&self) -> &[ClassIndex] {
+    pub fn output(&self) -> &[ValueKind] {
         &self.output
     }
 
-    pub fn get_input(&self, name: impl AsRef<str>) -> Option<&[ClassIndex]> {
+    pub fn get_input(&self, name: impl AsRef<str>) -> Option<&[ValueKind]> {
         self.inputs.get(name.as_ref()).map(|v| v.as_slice())
     }
 
-    pub fn get_input_index(&self, index: FieldIndex) -> Option<&[ClassIndex]> {
+    pub fn get_input_index(&self, index: FieldIndex) -> Option<&[ValueKind]> {
         self.inputs
             .get_index(index.raw())
             .map(|(_, v)| v.as_slice())
@@ -144,9 +155,9 @@ impl Program {
             let mut fields = IndexMap::new();
             for (name, union) in &class_data.fields {
                 let mut types = Vec::new();
-                for path in &union.data.paths {
-                    match resolve_class(layout, class_data.parent_scope, path.iter()) {
-                        Ok(class_index) => types.push(class_index),
+                for concrete in &union.data.types {
+                    match resolve_value(layout, class_data.parent_scope, concrete) {
+                        Ok(value_kind) => types.push(value_kind),
                         Err(error) => errors.push(error),
                     }
                 }
@@ -164,8 +175,8 @@ impl Program {
         for func_data in layout.funcs() {
             // resolve the output
             let mut output = Vec::new();
-            for path in &func_data.output.paths {
-                match resolve_class(layout, func_data.parent_scope, path.iter()) {
+            for concrete in &func_data.output.types {
+                match resolve_value(layout, func_data.parent_scope, concrete) {
                     Ok(class_index) => output.push(class_index),
                     Err(error) => errors.push(error),
                 }
@@ -175,8 +186,8 @@ impl Program {
             let mut inputs = IndexMap::new();
             for (name, union) in &func_data.inputs {
                 let mut types = Vec::new();
-                for path in &union.paths {
-                    match resolve_class(layout, func_data.parent_scope, path.iter()) {
+                for concrete in &union.types {
+                    match resolve_value(layout, func_data.parent_scope, concrete) {
                         Ok(class_index) => types.push(class_index),
                         Err(error) => errors.push(error),
                     }

@@ -1,4 +1,4 @@
-use crate::{statement::Statement, Field, Node, Union};
+use crate::{path::Union, statement::Statement, Field, Node};
 
 pub struct Func {
     pub inputs: Vec<Node<Field>>,

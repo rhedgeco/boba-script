@@ -1,12 +1,18 @@
 use std::ops::Deref;
 
-use boba_script_ast::def::Visibility;
+use boba_script_ast::{
+    def::Visibility,
+    path::{ConcreteType, PathPart},
+    Node,
+};
 
 use crate::{
     indexers::{ClassIndex, FuncIndex, ScopeIndex},
     program::CompileError,
     ProgramLayout,
 };
+
+use super::ValueKind;
 
 pub fn is_child(layout: &ProgramLayout, parent: ScopeIndex, mut child: ScopeIndex) -> bool {
     // ensure child scope is valid for layout
@@ -133,10 +139,10 @@ pub fn find_func(
     }
 }
 
-pub fn resolve_module<S: AsRef<str>>(
+pub fn resolve_module<'a>(
     layout: &ProgramLayout,
     source_scope: ScopeIndex,
-    module_path: impl Iterator<Item = S>,
+    module_path: impl Iterator<Item = &'a Node<PathPart>>,
 ) -> Result<ScopeIndex, CompileError> {
     // ensure source_scope is valid for layout
     assert!(
@@ -147,12 +153,14 @@ pub fn resolve_module<S: AsRef<str>>(
     // resolve the module path to a scope
     let mut module_scope = source_scope;
     for part in module_path {
-        match part.as_ref() {
-            "super" => match layout[module_scope].super_scope {
+        match part.deref() {
+            PathPart::Super => match layout[module_scope].super_scope {
                 None => return Err(CompileError::SuperFromRootScope),
                 Some(super_scope) => module_scope = super_scope,
             },
-            part => module_scope = find_module(layout, source_scope, module_scope, part)?,
+            PathPart::Ident(part) => {
+                module_scope = find_module(layout, source_scope, module_scope, part)?
+            }
         }
     }
 
@@ -160,32 +168,47 @@ pub fn resolve_module<S: AsRef<str>>(
     Ok(module_scope)
 }
 
-pub fn resolve_class<S: AsRef<str>>(
+pub fn resolve_value<'a>(
     layout: &ProgramLayout,
     source_scope: ScopeIndex,
-    mut class_path: impl DoubleEndedIterator<Item = S>,
-) -> Result<ClassIndex, CompileError> {
+    class: &Node<ConcreteType>,
+) -> Result<ValueKind, CompileError> {
     // ensure source_scope is valid for layout
     assert!(
         layout.get_scope(source_scope).is_some(),
         "source_scope is invalid for this layout"
     );
 
-    // get the class name from the iterator
-    let class_name = match class_path.next_back() {
-        None => return Err(CompileError::EmptyPath),
-        Some(name) => name,
-    };
+    match class.deref() {
+        ConcreteType::Any => Ok(ValueKind::Any),
+        ConcreteType::None => Ok(ValueKind::None),
+        ConcreteType::Bool => Ok(ValueKind::Bool),
+        ConcreteType::Int => Ok(ValueKind::Int),
+        ConcreteType::Float => Ok(ValueKind::Float),
+        ConcreteType::String => Ok(ValueKind::String),
+        ConcreteType::Class(path) => {
+            // get the class name from the end of the iterator
+            let mut path = path.iter();
+            let class_name = match path.next_back() {
+                None => return Err(CompileError::EmptyPath),
+                Some(part) => match part.deref() {
+                    PathPart::Ident(name) => name.as_str(),
+                    _ => return Err(CompileError::NotAClass(part.id())),
+                },
+            };
 
-    // resolve the module and class path
-    let module_scope = resolve_module(layout, source_scope, class_path)?;
-    find_class(layout, source_scope, module_scope, class_name)
+            // resolve the module and class path
+            let module_scope = resolve_module(layout, source_scope, path)?;
+            let class_index = find_class(layout, source_scope, module_scope, class_name)?;
+            Ok(ValueKind::Class(class_index))
+        }
+    }
 }
 
-pub fn resolve_func<S: AsRef<str>>(
+pub fn resolve_func<'a>(
     layout: &ProgramLayout,
     source_scope: ScopeIndex,
-    mut func_path: impl DoubleEndedIterator<Item = S>,
+    mut func_path: impl DoubleEndedIterator<Item = &'a Node<PathPart>>,
 ) -> Result<FuncIndex, CompileError> {
     // ensure source_scope is valid for layout
     assert!(
@@ -196,7 +219,10 @@ pub fn resolve_func<S: AsRef<str>>(
     // get the func name from the iterator
     let func_name = match func_path.next_back() {
         None => return Err(CompileError::EmptyPath),
-        Some(name) => name,
+        Some(part) => match part.deref() {
+            PathPart::Ident(name) => name.as_str(),
+            _ => return Err(CompileError::NotAFunc(part.id())),
+        },
     };
 
     // resolve the module and func path

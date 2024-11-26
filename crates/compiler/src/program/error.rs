@@ -1,3 +1,5 @@
+use boba_script_ast::node::NodeId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CompileError {
     SuperFromRootScope,
@@ -5,6 +7,8 @@ pub enum CompileError {
     ModuleDoesNotExist,
     ClassDoesNotExist,
     FuncDoesNotExist,
+    NotAClass(NodeId),
+    NotAFunc(NodeId),
     PrivateModule,
     PrivateClass,
     PrivateField,

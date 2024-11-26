@@ -1,8 +1,11 @@
 use boba_script_ast::{
-    class::ClassField, def::Visibility, union::ConcreteType, Class, Definition, Module, Node, Union,
+    class::ClassField,
+    def::Visibility,
+    path::{ConcreteType, PathPart, Union},
+    Class, Definition, Module, Node,
 };
 
-use crate::{indexers::ClassIndex, ProgramLayout};
+use crate::{indexers::ClassIndex, program::ValueKind, ProgramLayout};
 
 use super::Program;
 
@@ -29,15 +32,13 @@ fn super_mod_private_class() {
                             fields: vec![Node::build(ClassField {
                                 vis: Node::build(Visibility::Private),
                                 name: Node::build("class1field".to_string()),
-                                ty: Node::build(Union {
-                                    types: vec![Node::build(ConcreteType {
-                                        path: vec![
-                                            Node::build("super".to_string()),
-                                            Node::build("super".to_string()),
-                                            Node::build("module0".to_string()),
-                                            Node::build("class0".to_string()),
-                                        ],
-                                    })],
+                                union: Node::build(Union {
+                                    types: vec![Node::build(ConcreteType::Class(vec![
+                                        Node::build(PathPart::Super),
+                                        Node::build(PathPart::Super),
+                                        Node::build(PathPart::Ident("module0".to_string())),
+                                        Node::build(PathPart::Ident("class0".to_string())),
+                                    ]))],
                                 }),
                             })],
                             defs: vec![],
@@ -65,7 +66,7 @@ fn super_mod_private_class() {
                 .expect("valid class");
 
             let field = class2.get_field("class1field").expect("valid field");
-            assert_eq!(field, &[ClassIndex::from_raw(0)]);
+            assert_eq!(field, &[ValueKind::Class(ClassIndex::from_raw(0))]);
         }
     }
 }

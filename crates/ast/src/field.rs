@@ -1,8 +1,8 @@
-use crate::{Expr, Node, Union};
+use crate::{path::Union, Expr, Node};
 
 pub struct Field {
     pub name: Node<String>,
-    pub ty: Node<Union>,
+    pub union: Node<Union>,
 }
 
 pub struct InitField {

@@ -1,5 +1,8 @@
 use crate::{
-    def::Visibility, field::InitField, union::ConcreteType, Definition, Node, Pattern, Union,
+    def::Visibility,
+    field::InitField,
+    path::{ConcreteType, Union},
+    Definition, Node, Pattern,
 };
 
 pub struct Class {
@@ -20,5 +23,5 @@ pub struct ClassPattern {
 pub struct ClassField {
     pub vis: Node<Visibility>,
     pub name: Node<String>,
-    pub ty: Node<Union>,
+    pub union: Node<Union>,
 }
