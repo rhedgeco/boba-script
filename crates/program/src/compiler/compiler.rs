@@ -4,40 +4,40 @@ use boba_script_ast::{def::Visibility, Class, Definition, Func, Module, Node, Un
 use indexmap::IndexMap;
 
 #[derive(Debug, Clone, Copy)]
-struct VisIndex {
-    vis: Node<Visibility>,
-    index: usize,
+pub(super) struct VisIndex {
+    pub(super) vis: Node<Visibility>,
+    pub(super) index: usize,
 }
 
 #[derive(Debug, Default)]
-struct ScopeData {
-    super_scope: Option<usize>,
-    parent_scope: Option<usize>,
-    modules: IndexMap<String, VisIndex>,
-    classes: IndexMap<String, VisIndex>,
-    funcs: IndexMap<String, VisIndex>,
+pub(super) struct ScopeData {
+    pub(super) super_scope: Option<usize>,
+    pub(super) parent_scope: Option<usize>,
+    pub(super) modules: IndexMap<String, VisIndex>,
+    pub(super) classes: IndexMap<String, VisIndex>,
+    pub(super) funcs: IndexMap<String, VisIndex>,
 }
 
 #[derive(Debug, Default)]
-struct ClassData {
-    parent_scope: usize,
-    fields: IndexMap<String, Vec<Vec<String>>>,
-    inner_scope: usize,
+pub(super) struct ClassData {
+    pub(super) parent_scope: usize,
+    pub(super) fields: IndexMap<String, Vec<Vec<String>>>,
+    pub(super) inner_scope: usize,
 }
 
 #[derive(Debug, Default)]
-struct FuncData {
-    parent_scope: usize,
-    inputs: IndexMap<String, Vec<Vec<String>>>,
-    output: Vec<Vec<String>>,
-    inner_scope: usize,
+pub(super) struct FuncData {
+    pub(super) parent_scope: usize,
+    pub(super) inputs: IndexMap<String, Vec<Vec<String>>>,
+    pub(super) output: Vec<Vec<String>>,
+    pub(super) inner_scope: usize,
 }
 
 #[derive(Debug, Default)]
 pub struct Compiler {
-    scopes: Vec<ScopeData>,
-    classes: Vec<ClassData>,
-    funcs: Vec<FuncData>,
+    pub(super) scopes: Vec<ScopeData>,
+    pub(super) classes: Vec<ClassData>,
+    pub(super) funcs: Vec<FuncData>,
 }
 
 impl Compiler {
@@ -258,76 +258,5 @@ impl Compiler {
             .iter()
             .map(|concrete| concrete.path.iter().map(|s| s.to_string()).collect())
             .collect()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use boba_script_ast::{Module, Node};
-
-    use super::*;
-
-    #[test]
-    pub fn ast_module_insert() {
-        // build ast
-        let module = Node::build(Module {
-            defs: vec![
-                Node::build(Definition::Module {
-                    vis: Node::build(Visibility::Public),
-                    name: Node::build("sub_module1".to_string()),
-                    module: Node::build(Module {
-                        defs: vec![
-                            Node::build(Definition::Module {
-                                vis: Node::build(Visibility::Public),
-                                name: Node::build("sub_module2".to_string()),
-                                module: Node::build(Module { defs: vec![] }),
-                            }),
-                            Node::build(Definition::Module {
-                                vis: Node::build(Visibility::Public),
-                                name: Node::build("sub_module3".to_string()),
-                                module: Node::build(Module { defs: vec![] }),
-                            }),
-                        ],
-                    }),
-                }),
-                Node::build(Definition::Module {
-                    vis: Node::build(Visibility::Public),
-                    name: Node::build("sub_module4".to_string()),
-                    module: Node::build(Module { defs: vec![] }),
-                }),
-            ],
-        });
-
-        // use ast to build program
-        let builder = Compiler::from_ast(&module);
-        assert_eq!(builder.scopes.len(), 5);
-        assert_eq!(
-            builder.scopes[0]
-                .modules
-                .get_index(0)
-                .map(|(k, v)| (k.as_str(), v.index)),
-            Some(("sub_module1", 1))
-        );
-        assert_eq!(
-            builder.scopes[1]
-                .modules
-                .get_index(0)
-                .map(|(k, v)| (k.as_str(), v.index)),
-            Some(("sub_module2", 2))
-        );
-        assert_eq!(
-            builder.scopes[1]
-                .modules
-                .get_index(1)
-                .map(|(k, v)| (k.as_str(), v.index)),
-            Some(("sub_module3", 3))
-        );
-        assert_eq!(
-            builder.scopes[0]
-                .modules
-                .get_index(1)
-                .map(|(k, v)| (k.as_str(), v.index)),
-            Some(("sub_module4", 4))
-        );
     }
 }
