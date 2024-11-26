@@ -45,7 +45,7 @@ impl Compiler {
         Self::default()
     }
 
-    pub fn from_root(root: &Node<Module>) -> Self {
+    pub fn from_ast(root: &Node<Module>) -> Self {
         // create compiler and initial root scope
         let mut compiler = Self::default();
         compiler.scopes.push(ScopeData::default());
@@ -299,7 +299,7 @@ mod tests {
         });
 
         // use ast to build program
-        let builder = Compiler::from_root(&module);
+        let builder = Compiler::from_ast(&module);
         assert_eq!(builder.scopes.len(), 5);
         assert_eq!(
             builder.scopes[0]
