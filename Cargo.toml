@@ -10,3 +10,5 @@ members = ["crates/*"]
 boba-script-ast = { path = "crates/ast" }
 boba-script-parser = { path = "crates/parser" }
 boba-script-lexer = { path = "crates/lexer" }
+boba-script-engine = { path = "crates/engine" }
+boba-script-program = { path = "crates/program" }

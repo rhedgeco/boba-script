@@ -9,3 +9,11 @@ pub mod parser {
 pub mod lexer {
     pub use boba_script_lexer::*;
 }
+
+pub mod engine {
+    pub use boba_script_engine::*;
+}
+
+pub mod program {
+    pub use boba_script_program::*;
+}
