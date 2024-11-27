@@ -43,6 +43,7 @@ impl Engine {
     }
 }
 
+#[derive(Debug)]
 pub enum FuncError {
     InvalidIndex,
     InvalidParams,
@@ -64,7 +65,7 @@ pub struct FuncCallBuilder<'a> {
 }
 
 impl<'a> FuncCallBuilder<'a> {
-    pub fn push_param(mut self, param: CallValue) -> Self {
+    pub fn with_param(mut self, param: CallValue) -> Self {
         self.inputs.push(param);
         self
     }
