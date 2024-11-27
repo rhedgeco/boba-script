@@ -1,5 +1,5 @@
 [package]
-name = "boba-script-compiler"
+name = "boba-script-program"
 version = "0.1.0"
 edition = "2021"
 
