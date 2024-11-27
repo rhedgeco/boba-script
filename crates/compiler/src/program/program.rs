@@ -10,7 +10,7 @@ use crate::{
 
 use super::{CompileError, Scope};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueKind {
     Any,
     None,
@@ -37,6 +37,10 @@ impl Index<FieldIndex> for Class {
 impl Class {
     pub fn scope(&self) -> &Scope {
         &self.scope
+    }
+
+    pub fn fields(&self) -> impl Iterator<Item = &[ValueKind]> {
+        self.fields.values().map(|v| v.as_slice())
     }
 
     pub fn get_field(&self, name: impl AsRef<str>) -> Option<&[ValueKind]> {
@@ -77,6 +81,10 @@ impl Func {
 
     pub fn output(&self) -> &[ValueKind] {
         &self.output
+    }
+
+    pub fn inputs(&self) -> impl Iterator<Item = &[ValueKind]> {
+        self.inputs.values().map(|v| v.as_slice())
     }
 
     pub fn get_input(&self, name: impl AsRef<str>) -> Option<&[ValueKind]> {
