@@ -3,6 +3,7 @@ use std::ops::Index;
 use indexmap::IndexMap;
 
 use crate::{
+    func::FuncCaller,
     indexers::{ClassIndex, FieldIndex, FuncIndex, InputIndex},
     program::utils::resolve_value,
     ProgramLayout,
@@ -61,6 +62,7 @@ impl Class {
 }
 
 pub struct Func {
+    caller: FuncCaller,
     inputs: IndexMap<String, Vec<ValueKind>>,
     output: Vec<ValueKind>,
     scope: Scope,
@@ -75,6 +77,10 @@ impl Index<InputIndex> for Func {
 }
 
 impl Func {
+    pub fn caller(&self) -> FuncCaller {
+        self.caller
+    }
+
     pub fn scope(&self) -> &Scope {
         &self.scope
     }
@@ -208,6 +214,7 @@ impl Program {
 
             // build the function and append it
             funcs.push(Func {
+                caller: func_data.caller,
                 inputs,
                 output,
                 scope,

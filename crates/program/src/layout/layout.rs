@@ -8,7 +8,11 @@ use boba_script_ast::{
 };
 use indexmap::IndexMap;
 
-use crate::indexers::{ClassIndex, FuncIndex, ScopeIndex};
+use crate::{
+    func::FuncCaller,
+    indexers::{ClassIndex, FuncIndex, ScopeIndex},
+    value::StackValue,
+};
 
 use super::LayoutError;
 
@@ -41,6 +45,7 @@ pub struct ClassData {
 
 #[derive(Debug)]
 pub struct FuncData {
+    pub caller: FuncCaller,
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
     pub inputs: IndexMap<String, Node<Union>>,
@@ -404,6 +409,13 @@ impl ProgramLayout {
             inputs,
             output,
             inner_scope,
+            caller: FuncCaller::Native(|stack, _| {
+                match stack.get(0) {
+                    Some(StackValue::String(text)) => println!("message: {text}"),
+                    _ => println!("unknown func call"),
+                }
+                None
+            }),
             _private: (),
         });
 
