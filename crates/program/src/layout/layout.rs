@@ -157,7 +157,7 @@ impl ProgramLayout {
             return None;
         }
 
-        Some(ScopeIndex::from_raw(0))
+        Some(ScopeIndex::new(0))
     }
 
     pub fn get_or_create_root(&mut self) -> ScopeIndex {
@@ -172,7 +172,7 @@ impl ProgramLayout {
             });
         }
 
-        ScopeIndex::from_raw(0)
+        ScopeIndex::new(0)
     }
 
     pub fn insert_root_module(
@@ -221,7 +221,7 @@ impl ProgramLayout {
 
         // try to insert the next module index into the parent scope
         use indexmap::map::Entry as E;
-        let inner_scope = ScopeIndex::from_raw(self.scopes.len());
+        let inner_scope = ScopeIndex::new(self.scopes.len());
         match self[parent_scope].modules.entry(name.to_string()) {
             E::Vacant(entry) => entry.insert(DefData {
                 name_id: name.id(),
@@ -281,7 +281,7 @@ impl ProgramLayout {
 
         // try to insert the next class index into the parent scope
         use indexmap::map::Entry as E;
-        let new_class = ClassIndex::from_raw(self.classes.len());
+        let new_class = ClassIndex::new(self.classes.len());
         match self[parent_scope].classes.entry(name.to_string()) {
             E::Vacant(entry) => entry.insert(DefData {
                 vis: vis.clone(),
@@ -317,7 +317,7 @@ impl ProgramLayout {
         let super_scope = self[parent_scope].super_scope;
 
         // build the inner scope and class data
-        let inner_scope = ScopeIndex::from_raw(self.scopes.len());
+        let inner_scope = ScopeIndex::new(self.scopes.len());
         self.scopes.push(ScopeData {
             super_scope,
             parent_scope: Some(parent_scope),
@@ -366,7 +366,7 @@ impl ProgramLayout {
 
         // try to insert the next func index into the parent scope
         use indexmap::map::Entry as E;
-        let new_func = FuncIndex::from_raw(self.funcs.len());
+        let new_func = FuncIndex::new(self.funcs.len());
         match self[parent_scope].funcs.entry(name.to_string()) {
             E::Vacant(entry) => entry.insert(DefData {
                 vis: vis.clone(),
@@ -395,7 +395,7 @@ impl ProgramLayout {
         let super_scope = self[parent_scope].super_scope;
 
         // build the inner scope and func data
-        let inner_scope = ScopeIndex::from_raw(self.scopes.len());
+        let inner_scope = ScopeIndex::new(self.scopes.len());
         self.scopes.push(ScopeData {
             super_scope,
             parent_scope: Some(parent_scope),

@@ -55,9 +55,7 @@ impl Class {
     }
 
     pub fn get_field_index_of(&self, name: impl AsRef<str>) -> Option<FieldIndex> {
-        Some(FieldIndex::from_raw(
-            self.fields.get_index_of(name.as_ref())?,
-        ))
+        Some(FieldIndex::new(self.fields.get_index_of(name.as_ref())?))
     }
 }
 
@@ -104,9 +102,7 @@ impl Func {
     }
 
     pub fn get_input_index_of(&self, name: impl AsRef<str>) -> Option<FieldIndex> {
-        Some(FieldIndex::from_raw(
-            self.inputs.get_index_of(name.as_ref())?,
-        ))
+        Some(FieldIndex::new(self.inputs.get_index_of(name.as_ref())?))
     }
 }
 

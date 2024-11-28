@@ -61,12 +61,10 @@ fn super_mod_private_class() {
     match Program::compile(&layout) {
         Err(errors) => panic!("failed to compile program: {errors:?}"),
         Ok(program) => {
-            let class2 = program
-                .get_class(ClassIndex::from_raw(1))
-                .expect("valid class");
+            let class2 = program.get_class(ClassIndex::new(1)).expect("valid class");
 
             let field = class2.get_field("class1field").expect("valid field");
-            assert_eq!(field, &[ValueKind::Class(ClassIndex::from_raw(0))]);
+            assert_eq!(field, &[ValueKind::Class(ClassIndex::new(0))]);
         }
     }
 }

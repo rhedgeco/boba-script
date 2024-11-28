@@ -4,8 +4,8 @@ macro_rules! build_indexers {
             #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
             pub struct $Indexer(usize);
             impl $Indexer {
-                pub fn from_raw(index: usize) -> Self {
-                    Self(index)
+                pub fn new(raw: usize) -> Self {
+                    Self(raw)
                 }
 
                 pub fn raw(&self) -> usize {
