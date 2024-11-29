@@ -8,10 +8,17 @@ pub type BNode<T> = Box<Node<T>>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(usize);
 
+impl NodeId {
+    pub fn new() -> Self {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        Self(COUNTER.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Node<T> {
-    id: NodeId,
-    item: T,
+    pub id: NodeId,
+    pub item: T,
 }
 
 impl<T> Deref for Node<T> {
@@ -29,19 +36,10 @@ impl<T> DerefMut for Node<T> {
 }
 
 impl<T> Node<T> {
-    pub fn build(item: T) -> Node<T> {
-        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    pub fn build(item: T) -> Self {
         Self {
-            id: NodeId(COUNTER.fetch_add(1, Ordering::Relaxed)),
+            id: NodeId::new(),
             item,
         }
-    }
-
-    pub fn id(&self) -> NodeId {
-        self.id
-    }
-
-    pub fn into_inner(self) -> T {
-        self.item
     }
 }
