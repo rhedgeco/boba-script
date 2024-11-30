@@ -1,28 +1,46 @@
-use boba_script_ast::{def::Visibility, Class, Node};
+use boba_script_ast::{def::Visibility, node::NodeId, Class, Definition, Module, Node};
 
 use crate::{layout::LayoutError, ProgramLayout};
 
 #[test]
 fn insert_conflict() {
-    let vis = Node::build(Visibility::Private);
-    let name1 = Node::build("class0".to_string());
-    let name2 = Node::build("class0".to_string());
-    let ast = Node::build(Class {
-        fields: vec![],
-        defs: vec![],
+    const CLASS_NAME: &str = "TestClass";
+    let first_class_id = NodeId::new();
+    let second_class_id = NodeId::new();
+    let ast = Node::build(Module {
+        defs: vec![
+            Node::build(Definition::Class {
+                vis: Node::build(Visibility::Private),
+                name: Node {
+                    id: first_class_id,
+                    item: CLASS_NAME.to_string(),
+                },
+                class: Node::build(Class {
+                    fields: vec![],
+                    defs: vec![],
+                }),
+            }),
+            Node::build(Definition::Class {
+                vis: Node::build(Visibility::Private),
+                name: Node {
+                    id: second_class_id,
+                    item: CLASS_NAME.to_string(),
+                },
+                class: Node::build(Class {
+                    fields: vec![],
+                    defs: vec![],
+                }),
+            }),
+        ],
     });
 
-    let mut layout = ProgramLayout::new();
-    layout.insert_root_class(&vis, &name1, &ast).unwrap();
-    let Err(errors) = layout.insert_root_class(&vis, &name2, &ast) else {
-        panic!("duplicate class names should create a conflict");
-    };
-
+    let layout = ProgramLayout::build(&ast);
+    assert_eq!(layout.errors().len(), 1);
     assert_eq!(
-        errors[0],
-        LayoutError::ClassAlreadyExists {
-            insert: name2.id(),
-            found: name1.id()
+        layout.errors()[0],
+        LayoutError::DuplicateClass {
+            first: first_class_id,
+            second: second_class_id
         }
     )
 }

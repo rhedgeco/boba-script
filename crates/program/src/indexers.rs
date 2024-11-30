@@ -23,3 +23,9 @@ build_indexers! {
     FieldIndex,
     InputIndex
 }
+
+impl ScopeIndex {
+    pub fn root() -> Self {
+        ScopeIndex(0)
+    }
+}
