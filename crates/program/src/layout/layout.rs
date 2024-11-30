@@ -1,6 +1,8 @@
 use std::ops::{Deref, Index};
 
-use boba_script_ast::{def::Visibility, path::Union, Class, Definition, Func, Module, Node};
+use boba_script_ast::{
+    def::Visibility, func::BodyKind, path::Union, Class, Definition, Func, Module, Node,
+};
 use indexmap::IndexMap;
 
 use crate::indexers::{ClassIndex, FuncIndex, ScopeIndex};
@@ -33,7 +35,7 @@ pub struct ClassData {
 #[derive(Debug, Clone)]
 pub struct FuncData {
     pub parent_scope: ScopeIndex,
-    pub inner_scope: ScopeIndex,
+    pub inner_scope: Option<ScopeIndex>,
     pub inputs: IndexMap<String, Node<Union>>,
     pub output: Node<Union>,
 }
@@ -287,40 +289,46 @@ impl ProgramLayout {
             inputs.insert(field.name.to_string(), union);
         }
 
-        // build the inner scope and func data
-        let inner_scope = self.build_scope(Some(parent_scope));
+        // create the func data with no body
         self.funcs.push(FuncData {
             parent_scope,
             inputs,
             output,
-            inner_scope,
+            inner_scope: None,
         });
 
-        // insert all function statements
-        for statement in func.body.iter() {
-            use boba_script_ast::statement::Statement as S;
-            match statement.deref() {
-                S::Def(def) => self.insert_def_into(inner_scope, def),
-                S::Let { pattern, expr } => {
-                    let _ = (pattern, expr);
-                    self.errors.push(LayoutError::Unimplemented {
-                        id: statement.id,
-                        message: "let statements are currently unimplemented",
-                    })
-                }
-                S::Set { pattern, expr } => {
-                    let _ = (pattern, expr);
-                    self.errors.push(LayoutError::Unimplemented {
-                        id: statement.id,
-                        message: "set statements are currently unimplemented",
-                    })
-                }
-                S::Expr(expr) => {
-                    let _ = expr;
-                    self.errors.push(LayoutError::Unimplemented {
-                        id: statement.id,
-                        message: "expr statements are currently unimplemented",
-                    })
+        // populate the function body if necessary
+        if let BodyKind::Script(statements) = &func.body {
+            // create the functions inner scope
+            let inner_scope = self.build_scope(Some(parent_scope));
+            self[func_index].inner_scope = Some(inner_scope);
+
+            // insert all function statements
+            for statement in statements {
+                use boba_script_ast::statement::Statement as S;
+                match statement.deref() {
+                    S::Def(def) => self.insert_def_into(inner_scope, def),
+                    S::Let { pattern, expr } => {
+                        let _ = (pattern, expr);
+                        self.errors.push(LayoutError::Unimplemented {
+                            id: statement.id,
+                            message: "let statements are currently unimplemented",
+                        })
+                    }
+                    S::Set { pattern, expr } => {
+                        let _ = (pattern, expr);
+                        self.errors.push(LayoutError::Unimplemented {
+                            id: statement.id,
+                            message: "set statements are currently unimplemented",
+                        })
+                    }
+                    S::Expr(expr) => {
+                        let _ = expr;
+                        self.errors.push(LayoutError::Unimplemented {
+                            id: statement.id,
+                            message: "expr statements are currently unimplemented",
+                        })
+                    }
                 }
             }
         }
