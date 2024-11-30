@@ -13,7 +13,7 @@ pub enum ConcreteType {
     Int,
     Float,
     String,
-    Class(Vec<Node<PathPart>>),
+    Path(Vec<Node<PathPart>>),
 }
 
 #[derive(Debug, Clone)]
