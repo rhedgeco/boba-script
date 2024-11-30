@@ -1,8 +1,0 @@
-[package]
-name = "boba-script-engine"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-bon = "3.0"
-boba-script-program = { path = "../program" }
