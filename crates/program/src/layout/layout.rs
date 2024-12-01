@@ -133,6 +133,10 @@ impl ProgramLayout {
         &self.errors
     }
 
+    pub fn globals(&self) -> &[Node<Expr>] {
+        &self.globals
+    }
+
     pub fn scopes(&self) -> &[ScopeData] {
         &self.scopes
     }
@@ -143,6 +147,10 @@ impl ProgramLayout {
 
     pub fn funcs(&self) -> &[FuncData] {
         &self.funcs
+    }
+
+    pub fn get_global(&self, index: GlobalIndex) -> Option<&Node<Expr>> {
+        self.globals.get(index.raw())
     }
 
     pub fn get_scope(&self, index: ScopeIndex) -> Option<&ScopeData> {
