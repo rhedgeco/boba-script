@@ -306,29 +306,12 @@ impl ProgramLayout {
             // insert all function statements
             for statement in statements {
                 use boba_script_ast::statement::Statement as S;
-                match statement.deref() {
-                    S::Def(def) => self.insert_def_into(inner_scope, def),
-                    S::Let { pattern, expr } => {
-                        let _ = (pattern, expr);
-                        self.errors.push(LayoutError::Unimplemented {
-                            id: statement.id,
-                            message: "let statements are currently unimplemented",
-                        })
-                    }
-                    S::Set { pattern, expr } => {
-                        let _ = (pattern, expr);
-                        self.errors.push(LayoutError::Unimplemented {
-                            id: statement.id,
-                            message: "set statements are currently unimplemented",
-                        })
-                    }
-                    S::Expr(expr) => {
-                        let _ = expr;
-                        self.errors.push(LayoutError::Unimplemented {
-                            id: statement.id,
-                            message: "expr statements are currently unimplemented",
-                        })
-                    }
+                match statement {
+                    S::Global(def) => self.insert_def_into(inner_scope, def),
+                    S::Local(local) => self.errors.push(LayoutError::Unimplemented {
+                        id: local.id,
+                        message: "local statements are currently unimplemented",
+                    }),
                 }
             }
         }

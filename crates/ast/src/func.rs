@@ -7,6 +7,6 @@ pub struct Func {
 }
 
 pub enum BodyKind {
-    Script(Vec<Node<Statement>>),
-    Extern,
+    Script(Vec<Statement>),
+    Native,
 }
