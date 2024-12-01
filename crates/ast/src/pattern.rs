@@ -2,7 +2,7 @@ use dashu_int::IBig;
 
 use crate::class::ClassPattern;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Pattern {
     Var(String),
     Bool(bool),

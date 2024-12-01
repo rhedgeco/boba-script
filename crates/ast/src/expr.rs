@@ -1,8 +1,8 @@
 use dashu_int::IBig;
 
-use crate::{class::ClassInit, node::BNode};
+use crate::{class::ClassInit, node::BNode, Node};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     // values
     None,
@@ -10,8 +10,8 @@ pub enum Expr {
     Int(IBig),
     Float(f64),
     String(String),
-    Structure(ClassInit),
     Var(String),
+    Class(Node<ClassInit>),
 
     // unary ops
     Neg(BNode<Expr>),

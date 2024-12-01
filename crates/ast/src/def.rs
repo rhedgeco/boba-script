@@ -1,4 +1,4 @@
-use crate::{Class, Expr, Func, Module, Node, Pattern};
+use crate::{statement::Assignment, Class, Func, Module, Node};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Visibility {
@@ -6,12 +6,11 @@ pub enum Visibility {
     Private,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Definition {
     Static {
         vis: Node<Visibility>,
-        pattern: Node<Pattern>,
-        expr: Node<Expr>,
+        assign: Node<Assignment>,
     },
     Module {
         vis: Node<Visibility>,

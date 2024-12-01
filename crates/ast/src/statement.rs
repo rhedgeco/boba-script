@@ -1,20 +1,20 @@
 use crate::{Definition, Expr, Node, Pattern};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Global(Node<Definition>),
     Local(Node<LocalStatement>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LocalStatement {
-    Let {
-        pattern: Node<Pattern>,
-        expr: Node<Expr>,
-    },
-    Set {
-        pattern: Node<Pattern>,
-        expr: Node<Expr>,
-    },
+    Let(Node<Assignment>),
+    Set(Node<Assignment>),
     Expr(Node<Expr>),
+}
+
+#[derive(Debug, Clone)]
+pub struct Assignment {
+    pub pattern: Node<Pattern>,
+    pub expr: Node<Expr>,
 }
