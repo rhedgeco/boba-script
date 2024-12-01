@@ -20,8 +20,6 @@ build_indexers! {
     ScopeIndex,
     ClassIndex,
     FuncIndex,
-    FieldIndex,
-    InputIndex
 }
 
 impl ScopeIndex {
