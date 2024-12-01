@@ -66,6 +66,14 @@ pub struct ProgramLayout {
     funcs: Vec<FuncData>,
 }
 
+impl Index<GlobalIndex> for ProgramLayout {
+    type Output = Node<Expr>;
+
+    fn index(&self, index: GlobalIndex) -> &Self::Output {
+        &self.globals[index.raw()]
+    }
+}
+
 impl Index<ScopeIndex> for ProgramLayout {
     type Output = ScopeData;
 
@@ -94,6 +102,12 @@ impl Index<FuncIndex> for ProgramLayout {
 mod private {
     use super::*;
     use std::ops::IndexMut;
+
+    impl IndexMut<GlobalIndex> for ProgramLayout {
+        fn index_mut(&mut self, index: GlobalIndex) -> &mut Self::Output {
+            &mut self.globals[index.raw()]
+        }
+    }
 
     impl IndexMut<ScopeIndex> for ProgramLayout {
         fn index_mut(&mut self, index: ScopeIndex) -> &mut Self::Output {
