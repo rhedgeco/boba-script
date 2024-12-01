@@ -1,6 +1,6 @@
 use boba_script_ast::{
     class::ClassField,
-    def::Visibility,
+    def::{DefKind, Visibility},
     path::{ConcreteType, PathPart, Union},
     Class, Definition, Module, Node,
 };
@@ -12,27 +12,27 @@ use super::ResolvedProgram;
 #[test]
 fn super_mod_private_class() {
     let ast = Node::build(Module {
-        defs: vec![Node::build(Definition::Module {
+        defs: vec![Node::build(Definition {
             vis: Node::build(Visibility::Private),
             name: Node::build("module0".to_string()),
-            module: Node::build(Module {
+            kind: DefKind::Module(Node::build(Module {
                 defs: vec![
-                    Node::build(Definition::Class {
+                    Node::build(Definition {
                         vis: Node::build(Visibility::Private),
                         name: Node::build("class0".to_string()),
-                        class: Node::build(Class {
+                        kind: DefKind::Class(Node::build(Class {
                             fields: vec![],
                             defs: vec![],
-                        }),
+                        })),
                     }),
-                    Node::build(Definition::Module {
+                    Node::build(Definition {
                         vis: Node::build(Visibility::Private),
                         name: Node::build("module1".to_string()),
-                        module: Node::build(Module {
-                            defs: vec![Node::build(Definition::Class {
+                        kind: DefKind::Module(Node::build(Module {
+                            defs: vec![Node::build(Definition {
                                 vis: Node::build(Visibility::Private),
                                 name: Node::build("class1".to_string()),
-                                class: Node::build(Class {
+                                kind: DefKind::Class(Node::build(Class {
                                     fields: vec![Node::build(ClassField {
                                         vis: Node::build(Visibility::Private),
                                         name: Node::build("class1field".to_string()),
@@ -46,12 +46,12 @@ fn super_mod_private_class() {
                                         }),
                                     })],
                                     defs: vec![],
-                                }),
+                                })),
                             })],
-                        }),
+                        })),
                     }),
                 ],
-            }),
+            })),
         })],
     });
 

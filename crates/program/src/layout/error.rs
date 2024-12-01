@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Error)]
 pub enum LayoutError {
+    #[display("Duplicate Global: global names in the same scope level must be unique")]
+    DuplicateGlobal { first: NodeId, second: NodeId },
     #[display("Duplicate Module: module names in the same scope level must be unique")]
     DuplicateModule { first: NodeId, second: NodeId },
     #[display("Duplicate Class: class names in the same scope level must be unique")]

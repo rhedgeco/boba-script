@@ -1,4 +1,8 @@
-use boba_script_ast::{def::Visibility, node::NodeId, Class, Definition, Module, Node};
+use boba_script_ast::{
+    def::{DefKind, Visibility},
+    node::NodeId,
+    Class, Definition, Module, Node,
+};
 
 use crate::{layout::LayoutError, ProgramLayout};
 
@@ -9,27 +13,27 @@ fn insert_conflict() {
     let second_class_id = NodeId::new();
     let ast = Node::build(Module {
         defs: vec![
-            Node::build(Definition::Class {
+            Node::build(Definition {
                 vis: Node::build(Visibility::Private),
                 name: Node {
                     id: first_class_id,
                     item: CLASS_NAME.to_string(),
                 },
-                class: Node::build(Class {
+                kind: DefKind::Class(Node::build(Class {
                     fields: vec![],
                     defs: vec![],
-                }),
+                })),
             }),
-            Node::build(Definition::Class {
+            Node::build(Definition {
                 vis: Node::build(Visibility::Private),
                 name: Node {
                     id: second_class_id,
                     item: CLASS_NAME.to_string(),
                 },
-                class: Node::build(Class {
+                kind: DefKind::Class(Node::build(Class {
                     fields: vec![],
                     defs: vec![],
-                }),
+                })),
             }),
         ],
     });

@@ -17,6 +17,7 @@ macro_rules! build_indexers {
 }
 
 build_indexers! {
+    GlobalIndex,
     ScopeIndex,
     ClassIndex,
     FuncIndex,

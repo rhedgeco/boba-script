@@ -1,4 +1,4 @@
-use crate::{statement::Assignment, Class, Func, Module, Node};
+use crate::{Class, Expr, Func, Module, Node};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Visibility {
@@ -7,24 +7,16 @@ pub enum Visibility {
 }
 
 #[derive(Debug, Clone)]
-pub enum Definition {
-    Static {
-        vis: Node<Visibility>,
-        assign: Node<Assignment>,
-    },
-    Module {
-        vis: Node<Visibility>,
-        name: Node<String>,
-        module: Node<Module>,
-    },
-    Class {
-        vis: Node<Visibility>,
-        name: Node<String>,
-        class: Node<Class>,
-    },
-    Func {
-        vis: Node<Visibility>,
-        name: Node<String>,
-        func: Node<Func>,
-    },
+pub struct Definition {
+    pub vis: Node<Visibility>,
+    pub name: Node<String>,
+    pub kind: DefKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum DefKind {
+    Global(Node<Expr>),
+    Module(Node<Module>),
+    Class(Node<Class>),
+    Func(Node<Func>),
 }
