@@ -2,6 +2,7 @@ use dashu_int::IBig;
 
 use crate::{class::ClassInit, node::BNode};
 
+#[derive(Debug)]
 pub enum Expr {
     // values
     None,

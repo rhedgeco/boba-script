@@ -6,6 +6,7 @@ pub enum Visibility {
     Private,
 }
 
+#[derive(Debug)]
 pub enum Definition {
     Static {
         vis: Node<Visibility>,

@@ -2,6 +2,7 @@ use dashu_int::IBig;
 
 use crate::class::ClassPattern;
 
+#[derive(Debug)]
 pub enum Pattern {
     Var(String),
     Bool(bool),
