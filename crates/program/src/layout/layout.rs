@@ -1,7 +1,8 @@
 use std::ops::{Deref, Index};
 
 use boba_script_ast::{
-    def::Visibility, func::BodyKind, path::Union, Class, Definition, Func, Module, Node,
+    def::Visibility, func::BodyKind, node::NodeId, path::Union, statement::Assignment, Class,
+    Definition, Func, Module, Node,
 };
 use indexmap::IndexMap;
 
@@ -12,7 +13,6 @@ use super::LayoutError;
 #[derive(Debug, Clone)]
 pub struct VisData<T> {
     pub vis: Node<Visibility>,
-    pub name: Node<String>,
     pub data: Node<T>,
 }
 
@@ -20,6 +20,7 @@ pub struct VisData<T> {
 pub struct ScopeData {
     pub super_scope: Option<ScopeIndex>,
     pub parent_scope: Option<ScopeIndex>,
+    pub statics: Vec<VisData<Assignment>>,
     pub modules: IndexMap<String, VisData<ScopeIndex>>,
     pub classes: IndexMap<String, VisData<ClassIndex>>,
     pub funcs: IndexMap<String, VisData<FuncIndex>>,
@@ -27,6 +28,7 @@ pub struct ScopeData {
 
 #[derive(Debug, Clone)]
 pub struct ClassData {
+    pub node_id: NodeId,
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
     pub fields: IndexMap<String, VisData<Union>>,
@@ -34,6 +36,7 @@ pub struct ClassData {
 
 #[derive(Debug, Clone)]
 pub struct FuncData {
+    pub node_id: NodeId,
     pub parent_scope: ScopeIndex,
     pub inner_scope: Option<ScopeIndex>,
     pub inputs: IndexMap<String, Node<Union>>,
@@ -161,7 +164,6 @@ impl ProgramLayout {
             E::Vacant(entry) => {
                 entry.insert(VisData {
                     vis: vis.clone(),
-                    name: name.clone(),
                     data: Node {
                         id: module.id,
                         item: inner_scope,
@@ -169,7 +171,7 @@ impl ProgramLayout {
                 });
             }
             E::Occupied(entry) => {
-                let first = entry.get().name.id;
+                let first = entry.get().data.id;
                 self.errors.push(LayoutError::DuplicateModule {
                     first,
                     second: name.id,
@@ -181,6 +183,7 @@ impl ProgramLayout {
         self.scopes.push(ScopeData {
             super_scope: Some(parent_scope),
             parent_scope: None, // module scopes have no parent
+            statics: Default::default(),
             modules: Default::default(),
             classes: Default::default(),
             funcs: Default::default(),
@@ -207,7 +210,6 @@ impl ProgramLayout {
             E::Vacant(entry) => {
                 entry.insert(VisData {
                     vis: vis.clone(),
-                    name: name.clone(),
                     data: Node {
                         id: class.id,
                         item: class_index,
@@ -215,7 +217,7 @@ impl ProgramLayout {
                 });
             }
             E::Occupied(entry) => {
-                let first = entry.get().name.id;
+                let first = entry.get().data.id;
                 self.errors.push(LayoutError::DuplicateClass {
                     first,
                     second: name.id,
@@ -230,7 +232,6 @@ impl ProgramLayout {
                 field.name.to_string(),
                 VisData {
                     vis: field.vis.clone(),
-                    name: field.name.clone(),
                     data: field.union.clone(),
                 },
             );
@@ -239,6 +240,7 @@ impl ProgramLayout {
         // build the inner scope and class data
         let inner_scope = self.build_scope(Some(parent_scope));
         self.classes.push(ClassData {
+            node_id: class.id,
             parent_scope,
             inner_scope,
             fields,
@@ -265,7 +267,6 @@ impl ProgramLayout {
             E::Vacant(entry) => {
                 entry.insert(VisData {
                     vis: vis.clone(),
-                    name: name.clone(),
                     data: Node {
                         id: func.id,
                         item: func_index,
@@ -273,7 +274,7 @@ impl ProgramLayout {
                 });
             }
             E::Occupied(entry) => {
-                let first = entry.get().name.id;
+                let first = entry.get().data.id;
                 self.errors.push(LayoutError::DuplicateFunc {
                     first,
                     second: name.id,
@@ -291,6 +292,7 @@ impl ProgramLayout {
 
         // create the func data with no body
         self.funcs.push(FuncData {
+            node_id: func.id,
             parent_scope,
             inputs,
             output,
@@ -320,16 +322,16 @@ impl ProgramLayout {
     fn insert_def_into(&mut self, scope: ScopeIndex, def: &Node<Definition>) {
         use boba_script_ast::Definition as D;
         match def.deref() {
-            D::Static { vis, pattern, expr } => {
-                let _ = (vis, pattern, expr);
-                self.errors.push(LayoutError::Unimplemented {
-                    id: def.id,
-                    message: "static variables are not currently implemented",
-                });
-            }
             D::Module { vis, name, module } => self.insert_module_into(scope, vis, name, module),
             D::Class { vis, name, class } => self.insert_class_into(scope, vis, name, class),
             D::Func { vis, name, func } => self.insert_func_into(scope, vis, name, func),
+            D::Static { vis, assign } => {
+                let scope = &mut self[scope];
+                scope.statics.push(VisData {
+                    vis: vis.clone(),
+                    data: assign.clone(),
+                });
+            }
         }
     }
 
@@ -338,6 +340,7 @@ impl ProgramLayout {
         self.scopes.push(ScopeData {
             super_scope: parent_scope.and_then(|parent_scope| self[parent_scope].super_scope),
             parent_scope,
+            statics: Default::default(),
             modules: Default::default(),
             classes: Default::default(),
             funcs: Default::default(),
