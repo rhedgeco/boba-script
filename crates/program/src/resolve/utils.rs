@@ -8,7 +8,8 @@ use boba_script_ast::{
 };
 
 use crate::{
-    indexers::{ClassIndex, FuncIndex, ScopeIndex},
+    indexers::{FuncIndex, ScopeIndex},
+    layout::DefIndex,
     resolve::ResolveError,
     ProgramLayout,
 };
@@ -41,103 +42,35 @@ pub fn is_child(layout: &ProgramLayout, parent: ScopeIndex, mut child: ScopeInde
     true
 }
 
-pub fn find_module(
+pub fn find_ident(
     layout: &ProgramLayout,
     source_scope: ScopeIndex,
     mut module_scope: ScopeIndex,
     name: impl AsRef<str>,
     id: NodeId,
-) -> Result<ScopeIndex, ResolveError> {
+) -> Result<DefIndex, ResolveError> {
     // ensure module_scope is valid for layout
-    assert!(
+    debug_assert!(
         layout.get_scope(module_scope).is_some(),
         "module_scope is invalid for this layout"
     );
 
-    // search up the chain of parents to find the scope
+    // search up the chain of parents to find the ident
     let name = name.as_ref();
     loop {
         let scope = &layout[module_scope];
-        match scope.modules.get(name) {
-            Some(found_scope) => match found_scope.vis.deref() {
-                // if the module is private, ensure the resolved scope is the same as source
-                // private modules are only available to items within the same module
+        match scope.defs.get(name) {
+            Some(found_def) => match found_def.vis.deref() {
+                // if the definiton is private, ensure the resolved scope is the same as source
+                // private definitions are only available to items within the same module
                 Visibility::Private if !is_child(layout, module_scope, source_scope) => {
-                    return Err(ResolveError::PrivateClass(id));
+                    return Err(ResolveError::PrivateIdent(id));
                 }
-                _ => return Ok(*found_scope.data),
+                _ => return Ok(found_def.data.item),
             },
             None => match scope.parent_scope {
                 Some(parent) => module_scope = parent,
-                None => return Err(ResolveError::ModuleNotFound(id)),
-            },
-        }
-    }
-}
-
-pub fn find_class(
-    layout: &ProgramLayout,
-    source_scope: ScopeIndex,
-    mut module_scope: ScopeIndex,
-    name: impl AsRef<str>,
-    id: NodeId,
-) -> Result<ClassIndex, ResolveError> {
-    // ensure module_scope is valid for layout
-    assert!(
-        layout.get_scope(module_scope).is_some(),
-        "module_scope is invalid for this layout"
-    );
-
-    // search up the chain of parents to find the scope
-    let name = name.as_ref();
-    loop {
-        let scope = &layout[module_scope];
-        match scope.classes.get(name) {
-            Some(found_class) => match found_class.vis.deref() {
-                // if the class is private, ensure the resolved scope is the same as source
-                // private classes are only available to items within the same module
-                Visibility::Private if !is_child(layout, module_scope, source_scope) => {
-                    return Err(ResolveError::PrivateClass(id));
-                }
-                _ => return Ok(*found_class.data),
-            },
-            None => match scope.parent_scope {
-                Some(parent) => module_scope = parent,
-                None => return Err(ResolveError::ClassNotFound(id)),
-            },
-        }
-    }
-}
-
-pub fn find_func(
-    layout: &ProgramLayout,
-    source_scope: ScopeIndex,
-    mut module_scope: ScopeIndex,
-    name: impl AsRef<str>,
-    id: NodeId,
-) -> Result<FuncIndex, ResolveError> {
-    // ensure module_scope is valid for layout
-    assert!(
-        layout.get_scope(module_scope).is_some(),
-        "module_scope is invalid for this layout"
-    );
-
-    // search up the chain of parents to find the scope
-    let name = name.as_ref();
-    loop {
-        let scope = &layout[module_scope];
-        match scope.funcs.get(name) {
-            Some(found_func) => match found_func.vis.deref() {
-                // if the func is private, ensure the resolved scope is the same as source
-                // private funcs are only available to items within the same module
-                Visibility::Private if !is_child(layout, module_scope, source_scope) => {
-                    return Err(ResolveError::PrivateFunc(id));
-                }
-                _ => return Ok(*found_func.data),
-            },
-            None => match scope.parent_scope {
-                Some(parent) => module_scope = parent,
-                None => return Err(ResolveError::FuncNotFound(id)),
+                None => return Err(ResolveError::PrivateIdent(id)),
             },
         }
     }
@@ -163,7 +96,10 @@ pub fn resolve_module<'a>(
                 Some(super_scope) => module_scope = super_scope,
             },
             PathPart::Ident(name) => {
-                module_scope = find_module(layout, source_scope, module_scope, name, part.id)?
+                match find_ident(layout, source_scope, module_scope, name, part.id)? {
+                    DefIndex::Module(scope_index) => module_scope = scope_index,
+                    _ => return Err(ResolveError::NotAModule(part.id)),
+                }
             }
         }
     }
@@ -203,7 +139,12 @@ pub fn resolve_value<'a>(
 
             // resolve the module and class path
             let module_scope = resolve_module(layout, source_scope, path)?;
-            let class_index = find_class(layout, source_scope, module_scope, class_name, id)?;
+            let DefIndex::Class(class_index) =
+                find_ident(layout, source_scope, module_scope, class_name, id)?
+            else {
+                return Err(ResolveError::NotAClass(id));
+            };
+
             Ok(ResolvedValue::Class(class_index))
         }
     }
@@ -231,5 +172,8 @@ pub fn resolve_func<'a>(
 
     // resolve the module and func path
     let module_scope = resolve_module(layout, source_scope, func_path)?;
-    find_func(layout, source_scope, module_scope, func_name, id)
+    match find_ident(layout, source_scope, module_scope, func_name, id)? {
+        DefIndex::Func(func_index) => Ok(func_index),
+        _ => Err(ResolveError::NotAFunc(id)),
+    }
 }

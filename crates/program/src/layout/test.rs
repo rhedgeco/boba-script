@@ -1,14 +1,16 @@
 use boba_script_ast::{
     def::{DefKind, Visibility},
+    func::BodyKind,
     node::NodeId,
-    Class, Definition, Module, Node,
+    path::Union,
+    Class, Definition, Func, Module, Node,
 };
 
 use crate::{layout::LayoutError, ProgramLayout};
 
 #[test]
 fn insert_conflict() {
-    const CLASS_NAME: &str = "TestClass";
+    const IDENT: &str = "test_ident";
     let first_class_id = NodeId::new();
     let second_class_id = NodeId::new();
     let ast = Node::build(Module {
@@ -17,7 +19,7 @@ fn insert_conflict() {
                 vis: Node::build(Visibility::Private),
                 name: Node {
                     id: first_class_id,
-                    item: CLASS_NAME.to_string(),
+                    item: IDENT.to_string(),
                 },
                 kind: DefKind::Class(Node::build(Class {
                     fields: vec![],
@@ -28,11 +30,12 @@ fn insert_conflict() {
                 vis: Node::build(Visibility::Private),
                 name: Node {
                     id: second_class_id,
-                    item: CLASS_NAME.to_string(),
+                    item: IDENT.to_string(),
                 },
-                kind: DefKind::Class(Node::build(Class {
-                    fields: vec![],
-                    defs: vec![],
+                kind: DefKind::Func(Node::build(Func {
+                    inputs: vec![],
+                    output: Node::build(Union { types: vec![] }),
+                    body: BodyKind::Native,
                 })),
             }),
         ],
@@ -42,7 +45,7 @@ fn insert_conflict() {
     assert_eq!(layout.errors().len(), 1);
     assert_eq!(
         layout.errors()[0],
-        LayoutError::DuplicateClass {
+        LayoutError::DuplicateIdent {
             first: first_class_id,
             second: second_class_id
         }

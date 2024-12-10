@@ -1,11 +1,11 @@
-use std::ops::Index;
+use std::ops::{Deref, Index};
 
 use boba_script_ast::Node;
 use indexmap::IndexMap;
 
 use crate::{
     indexers::{ClassIndex, FuncIndex},
-    layout::VisData,
+    layout::Vis,
     ProgramLayout,
 };
 
@@ -25,7 +25,7 @@ pub enum ResolvedValue {
 #[derive(Debug, Clone)]
 pub struct ClassData {
     pub fields: IndexMap<String, Vec<ResolvedValue>>,
-    pub funcs: IndexMap<String, VisData<FuncIndex>>,
+    pub funcs: IndexMap<String, Vis<FuncIndex>>,
 }
 
 #[derive(Debug, Clone)]
@@ -100,8 +100,25 @@ impl ResolvedProgram {
             }
 
             // copy all internal function indices
+            use crate::layout::DefIndex as D;
             let inner_scope = &layout[class_data.inner_scope];
-            let funcs = inner_scope.funcs.clone();
+            let funcs = inner_scope
+                .defs
+                .iter()
+                .filter_map(|(name, vis)| match vis.data.deref() {
+                    D::Func(func_index) => Some((
+                        name.clone(),
+                        Vis {
+                            vis: vis.vis.clone(),
+                            data: Node {
+                                id: vis.data.id,
+                                item: func_index.clone(),
+                            },
+                        },
+                    )),
+                    _ => None,
+                })
+                .collect();
 
             // build the class and append it
             classes.push(ClassData { fields, funcs })

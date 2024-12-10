@@ -10,21 +10,15 @@ use crate::indexers::{ClassIndex, FuncIndex, GlobalIndex, ScopeIndex};
 
 use super::LayoutError;
 
-#[derive(Debug, Clone)]
-pub struct VisData<T> {
+#[derive(Debug, Clone, Copy)]
+pub struct Vis<T> {
     pub vis: Node<Visibility>,
     pub data: Node<T>,
 }
 
-#[derive(Debug, Clone)]
-pub struct DefEntry {
-    pub vis: Node<Visibility>,
-    pub data: Node<DefData>,
-}
-
-#[derive(Debug, Clone)]
-pub enum DefData {
-    Static(Node<Expr>),
+#[derive(Debug, Clone, Copy)]
+pub enum DefIndex {
+    Global(GlobalIndex),
     Module(ScopeIndex),
     Class(ClassIndex),
     Func(FuncIndex),
@@ -34,10 +28,7 @@ pub enum DefData {
 pub struct ScopeData {
     pub super_scope: Option<ScopeIndex>,
     pub parent_scope: Option<ScopeIndex>,
-    pub globals: IndexMap<String, VisData<GlobalIndex>>,
-    pub modules: IndexMap<String, VisData<ScopeIndex>>,
-    pub classes: IndexMap<String, VisData<ClassIndex>>,
-    pub funcs: IndexMap<String, VisData<FuncIndex>>,
+    pub defs: IndexMap<String, Vis<DefIndex>>,
 }
 
 #[derive(Debug, Clone)]
@@ -45,7 +36,7 @@ pub struct ClassData {
     pub node_id: NodeId,
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
-    pub fields: IndexMap<String, VisData<Union>>,
+    pub fields: IndexMap<String, Vis<Union>>,
 }
 
 #[derive(Debug, Clone)]
@@ -173,10 +164,7 @@ impl ProgramLayout {
             scopes: vec![ScopeData {
                 super_scope: None,
                 parent_scope: None,
-                globals: Default::default(),
-                modules: Default::default(),
-                classes: Default::default(),
-                funcs: Default::default(),
+                defs: Default::default(),
             }],
             classes: Default::default(),
             funcs: Default::default(),
@@ -203,10 +191,7 @@ impl ProgramLayout {
         self.scopes.push(ScopeData {
             super_scope: Some(super_scope),
             parent_scope: None,
-            globals: Default::default(),
-            modules: Default::default(),
-            classes: Default::default(),
-            funcs: Default::default(),
+            defs: Default::default(),
         });
 
         // insert all definitions into the module
@@ -224,10 +209,7 @@ impl ProgramLayout {
         self.scopes.push(ScopeData {
             super_scope: self[parent_scope].super_scope,
             parent_scope: Some(parent_scope),
-            globals: Default::default(),
-            modules: Default::default(),
-            classes: Default::default(),
-            funcs: Default::default(),
+            defs: Default::default(),
         });
 
         // build all the class fields
@@ -235,7 +217,7 @@ impl ProgramLayout {
         for field in class.fields.iter() {
             fields.insert(
                 field.name.to_string(),
-                VisData {
+                Vis {
                     vis: field.vis.clone(),
                     data: field.union.clone(),
                 },
@@ -287,10 +269,7 @@ impl ProgramLayout {
             self.scopes.push(ScopeData {
                 super_scope: self[parent_scope].super_scope,
                 parent_scope: Some(parent_scope),
-                globals: Default::default(),
-                modules: Default::default(),
-                classes: Default::default(),
-                funcs: Default::default(),
+                defs: Default::default(),
             });
 
             // insert all function statements
@@ -312,91 +291,30 @@ impl ProgramLayout {
 
     fn insert_def_into(&mut self, scope: ScopeIndex, def: &Node<Definition>) {
         use boba_script_ast::def::DefKind as D;
+        let def_index = match &def.kind {
+            D::Global(expr) => DefIndex::Global(self.insert_global(expr)),
+            D::Module(module) => DefIndex::Module(self.insert_module(scope, module)),
+            D::Class(class) => DefIndex::Class(self.insert_class(scope, class)),
+            D::Func(func) => DefIndex::Func(self.insert_func(scope, func)),
+        };
+
         use indexmap::map::Entry as E;
-        match &def.kind {
-            D::Global(expr) => {
-                let global_index = self.insert_global(expr);
-                match self[scope].globals.entry(def.name.to_string()) {
-                    E::Occupied(entry) => {
-                        let first = entry.get().data.id;
-                        self.errors.push(LayoutError::DuplicateGlobal {
-                            second: def.name.id,
-                            first,
-                        })
-                    }
-                    E::Vacant(entry) => {
-                        entry.insert(VisData {
-                            vis: def.vis.clone(),
-                            data: Node {
-                                id: def.name.id,
-                                item: global_index,
-                            },
-                        });
-                    }
-                }
+        match self[scope].defs.entry(def.name.to_string()) {
+            E::Occupied(entry) => {
+                let first = entry.into_mut().data.id;
+                self.errors.push(LayoutError::DuplicateIdent {
+                    second: def.name.id,
+                    first,
+                })
             }
-            D::Module(module) => {
-                let module_index = self.insert_module(scope, module);
-                match self[scope].modules.entry(def.name.to_string()) {
-                    E::Occupied(entry) => {
-                        let first = entry.get().data.id;
-                        self.errors.push(LayoutError::DuplicateModule {
-                            second: def.name.id,
-                            first,
-                        })
-                    }
-                    E::Vacant(entry) => {
-                        entry.insert(VisData {
-                            vis: def.vis.clone(),
-                            data: Node {
-                                id: def.name.id,
-                                item: module_index,
-                            },
-                        });
-                    }
-                }
-            }
-            D::Class(class) => {
-                let class_index = self.insert_class(scope, class);
-                match self[scope].classes.entry(def.name.to_string()) {
-                    E::Occupied(entry) => {
-                        let first = entry.get().data.id;
-                        self.errors.push(LayoutError::DuplicateClass {
-                            second: def.name.id,
-                            first,
-                        })
-                    }
-                    E::Vacant(entry) => {
-                        entry.insert(VisData {
-                            vis: def.vis.clone(),
-                            data: Node {
-                                id: def.name.id,
-                                item: class_index,
-                            },
-                        });
-                    }
-                }
-            }
-            D::Func(func) => {
-                let func_index = self.insert_func(scope, func);
-                match self[scope].funcs.entry(def.name.to_string()) {
-                    E::Occupied(entry) => {
-                        let first = entry.get().data.id;
-                        self.errors.push(LayoutError::DuplicateFunc {
-                            second: def.name.id,
-                            first,
-                        })
-                    }
-                    E::Vacant(entry) => {
-                        entry.insert(VisData {
-                            vis: def.vis.clone(),
-                            data: Node {
-                                id: def.name.id,
-                                item: func_index,
-                            },
-                        });
-                    }
-                }
+            E::Vacant(entry) => {
+                entry.insert(Vis {
+                    vis: def.vis.clone(),
+                    data: Node {
+                        id: def.name.id,
+                        item: def_index,
+                    },
+                });
             }
         }
     }
