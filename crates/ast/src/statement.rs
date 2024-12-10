@@ -3,7 +3,7 @@ use crate::{Definition, Expr, Node, Pattern};
 #[derive(Debug, Clone)]
 pub enum Statement {
     Global(Node<Definition>),
-    Local(Node<LocalStatement>),
+    Local(LocalStatement),
 }
 
 #[derive(Debug, Clone)]

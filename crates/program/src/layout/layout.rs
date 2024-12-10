@@ -1,8 +1,8 @@
 use std::ops::Index;
 
 use boba_script_ast::{
-    def::Visibility, func::BodyKind, node::NodeId, path::Union, Class, Definition, Expr, Func,
-    Module, Node,
+    def::Visibility, func::BodyKind, node::NodeId, path::Union, statement::LocalStatement, Class,
+    Definition, Expr, Func, Module, Node,
 };
 use indexmap::IndexMap;
 
@@ -41,13 +41,18 @@ pub struct ClassData {
 }
 
 #[derive(Debug, Clone)]
+pub struct FuncBody {
+    pub inner_scope: ScopeIndex,
+    pub statements: Vec<LocalStatement>,
+}
+
+#[derive(Debug, Clone)]
 pub struct FuncData {
     pub node_id: NodeId,
     pub parent_scope: ScopeIndex,
-    pub inner_scope: Option<ScopeIndex>,
     pub inputs: IndexMap<String, Node<Union>>,
     pub output: Node<Union>,
-    pub body: BodyKind,
+    pub body: Option<FuncBody>,
 }
 
 #[derive(Debug, Clone)]
@@ -254,40 +259,46 @@ impl ProgramLayout {
             inputs.insert(field.name.to_string(), union);
         }
 
-        // create the func data with no body
+        // build the function body
+        let body = match &func.body {
+            BodyKind::Native => None,
+            BodyKind::Script(statements) => {
+                // create the functions inner scope
+                let inner_scope = ScopeIndex::new(self.scopes.len());
+                self.scopes.push(ScopeData {
+                    super_scope: self[parent_scope].super_scope,
+                    parent_scope: Some(parent_scope),
+                    defs: Default::default(),
+                });
+
+                use boba_script_ast::statement::Statement as S;
+                let statements = statements
+                    .iter()
+                    .filter_map(|statement| match statement {
+                        S::Local(local) => Some(local.clone()),
+                        S::Global(def) => {
+                            self.insert_def_into(inner_scope, def);
+                            None
+                        }
+                    })
+                    .collect();
+
+                Some(FuncBody {
+                    inner_scope,
+                    statements,
+                })
+            }
+        };
+
+        // create the func data
         let func_index = FuncIndex::new(self.funcs.len());
         self.funcs.push(FuncData {
             node_id: func.id,
-            inner_scope: None,
             parent_scope,
             inputs,
             output,
-            body: func.body.clone(),
+            body,
         });
-
-        // populate the function body if necessary
-        if let BodyKind::Script(statements) = &func.body {
-            // create the functions inner scope
-            let inner_scope = ScopeIndex::new(self.scopes.len());
-            self[func_index].inner_scope = Some(inner_scope);
-            self.scopes.push(ScopeData {
-                super_scope: self[parent_scope].super_scope,
-                parent_scope: Some(parent_scope),
-                defs: Default::default(),
-            });
-
-            // insert all function statements
-            for statement in statements {
-                use boba_script_ast::statement::Statement as S;
-                match statement {
-                    S::Global(def) => self.insert_def_into(inner_scope, def),
-                    S::Local(local) => self.errors.push(LayoutError::Unimplemented {
-                        id: local.id,
-                        message: "local statements are currently unimplemented",
-                    }),
-                }
-            }
-        }
 
         // return the func index
         func_index
