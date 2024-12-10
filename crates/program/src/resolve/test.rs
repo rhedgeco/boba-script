@@ -21,6 +21,7 @@ fn super_mod_private_class() {
                         vis: Node::build(Visibility::Private),
                         name: Node::build("class0".to_string()),
                         kind: DefKind::Class(Node::build(Class {
+                            native: None,
                             fields: vec![],
                             defs: vec![],
                         })),
@@ -33,6 +34,7 @@ fn super_mod_private_class() {
                                 vis: Node::build(Visibility::Private),
                                 name: Node::build("class1".to_string()),
                                 kind: DefKind::Class(Node::build(Class {
+                                    native: None,
                                     fields: vec![Node::build(ClassField {
                                         vis: Node::build(Visibility::Private),
                                         name: Node::build("class1field".to_string()),

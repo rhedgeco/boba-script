@@ -22,6 +22,7 @@ fn insert_conflict() {
                     item: IDENT.to_string(),
                 },
                 kind: DefKind::Class(Node::build(Class {
+                    native: None,
                     fields: vec![],
                     defs: vec![],
                 })),
