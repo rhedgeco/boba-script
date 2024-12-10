@@ -34,6 +34,7 @@ pub struct ScopeData {
 #[derive(Debug, Clone)]
 pub struct ClassData {
     pub node_id: NodeId,
+    pub native: Option<NodeId>,
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
     pub fields: IndexMap<String, Vis<Union>>,
@@ -229,6 +230,7 @@ impl ProgramLayout {
         let class_index = ClassIndex::new(self.classes.len());
         self.classes.push(ClassData {
             node_id: class.id,
+            native: class.native.clone(),
             parent_scope,
             inner_scope,
             fields,

@@ -1,12 +1,14 @@
 use crate::{
     def::Visibility,
     field::InitField,
+    node::NodeId,
     path::{ConcreteType, Union},
     Definition, Node, Pattern,
 };
 
 #[derive(Debug, Clone)]
 pub struct Class {
+    pub native: Option<NodeId>,
     pub fields: Vec<Node<ClassField>>,
     pub defs: Vec<Node<Definition>>,
 }
