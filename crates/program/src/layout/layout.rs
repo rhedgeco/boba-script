@@ -46,6 +46,7 @@ pub struct FuncData {
     pub inner_scope: Option<ScopeIndex>,
     pub inputs: IndexMap<String, Node<Union>>,
     pub output: Node<Union>,
+    pub body: BodyKind,
 }
 
 #[derive(Debug, Clone)]
@@ -255,10 +256,11 @@ impl ProgramLayout {
         let func_index = FuncIndex::new(self.funcs.len());
         self.funcs.push(FuncData {
             node_id: func.id,
+            inner_scope: None,
             parent_scope,
             inputs,
             output,
-            inner_scope: None,
+            body: func.body.clone(),
         });
 
         // populate the function body if necessary
