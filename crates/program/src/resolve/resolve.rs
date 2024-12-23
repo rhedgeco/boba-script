@@ -5,34 +5,15 @@ use indexmap::IndexMap;
 
 use crate::{
     indexers::{ClassIndex, FuncIndex},
-    layout::Vis,
+    layout::data::VisData,
     ProgramLayout,
 };
 
-use super::{utils::resolve_value, ResolveError};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ResolvedValue {
-    Any,
-    None,
-    Bool,
-    Int,
-    Float,
-    String,
-    Class(ClassIndex),
-}
-
-#[derive(Debug, Clone)]
-pub struct ClassData {
-    pub fields: IndexMap<String, Vec<ResolvedValue>>,
-    pub funcs: IndexMap<String, Vis<FuncIndex>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FuncData {
-    pub inputs: IndexMap<String, Vec<ResolvedValue>>,
-    pub output: Vec<Node<ResolvedValue>>,
-}
+use super::{
+    data::{ClassData, FuncData},
+    utils::resolve_value,
+    ResolveError,
+};
 
 #[derive(Debug, Clone)]
 pub struct ResolvedProgram {
@@ -100,7 +81,7 @@ impl ResolvedProgram {
             }
 
             // copy all internal function indices
-            use crate::layout::DefIndex as D;
+            use crate::layout::data::DefIndex as D;
             let inner_scope = &layout[class_data.inner_scope];
             let funcs = inner_scope
                 .defs
@@ -108,7 +89,7 @@ impl ResolvedProgram {
                 .filter_map(|(name, vis)| match vis.data.deref() {
                     D::Func(func_index) => Some((
                         name.clone(),
-                        Vis {
+                        VisData {
                             vis: vis.vis.clone(),
                             data: Node {
                                 id: vis.data.id,
@@ -140,7 +121,7 @@ impl ResolvedProgram {
 
             // resolve all inputs
             let mut inputs = IndexMap::new();
-            for (name, union) in &func_data.inputs {
+            for (name, union) in &func_data.parameters {
                 let mut types = Vec::new();
                 for concrete in &union.types {
                     match resolve_value(layout, func_data.parent_scope, concrete) {

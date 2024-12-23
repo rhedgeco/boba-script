@@ -1,14 +1,20 @@
-use crate::{path::Union, statement::Statement, Field, Node};
+use crate::{path::PathUnion, statement::Statement, Node};
 
 #[derive(Debug, Clone)]
 pub struct Func {
-    pub inputs: Vec<Node<Field>>,
-    pub output: Node<Union>,
-    pub body: BodyKind,
+    pub parameters: Vec<Node<FuncParam>>,
+    pub output: Node<PathUnion>,
+    pub body: Node<FuncBody>,
 }
 
 #[derive(Debug, Clone)]
-pub enum BodyKind {
+pub struct FuncParam {
+    pub name: Node<String>,
+    pub union: Node<PathUnion>,
+}
+
+#[derive(Debug, Clone)]
+pub enum FuncBody {
     Script(Vec<Statement>),
     Native,
 }

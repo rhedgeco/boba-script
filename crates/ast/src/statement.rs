@@ -8,13 +8,13 @@ pub enum Statement {
 
 #[derive(Debug, Clone)]
 pub enum LocalStatement {
-    Let(Node<Assignment>),
-    Set(Node<Assignment>),
-    Expr(Node<Expr>),
+    DanglingExpr(Node<Expr>),
+    Assignment(Node<Assignment>),
 }
 
 #[derive(Debug, Clone)]
 pub struct Assignment {
+    pub init: Node<bool>,
     pub pattern: Node<Pattern>,
     pub expr: Node<Expr>,
 }

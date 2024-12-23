@@ -1,59 +1,17 @@
-use std::ops::Index;
+use std::ops::{Deref, Index};
 
-use boba_script_ast::{
-    def::Visibility, func::BodyKind, node::NodeId, path::Union, statement::LocalStatement, Class,
-    Definition, Expr, Func, Module, Node,
-};
+use boba_script_ast::{func::FuncBody, Class, Definition, Expr, Func, Module, Node};
 use indexmap::IndexMap;
 
-use crate::indexers::{ClassIndex, FuncIndex, GlobalIndex, ScopeIndex};
+use crate::{
+    indexers::{ClassIndex, FuncIndex, GlobalIndex, ScopeIndex},
+    layout::data::{DefIndex, FuncBodyData},
+};
 
-use super::LayoutError;
-
-#[derive(Debug, Clone, Copy)]
-pub struct Vis<T> {
-    pub vis: Node<Visibility>,
-    pub data: Node<T>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum DefIndex {
-    Global(GlobalIndex),
-    Module(ScopeIndex),
-    Class(ClassIndex),
-    Func(FuncIndex),
-}
-
-#[derive(Debug, Clone)]
-pub struct ScopeData {
-    pub super_scope: Option<ScopeIndex>,
-    pub parent_scope: Option<ScopeIndex>,
-    pub defs: IndexMap<String, Vis<DefIndex>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ClassData {
-    pub node_id: NodeId,
-    pub native: Option<NodeId>,
-    pub parent_scope: ScopeIndex,
-    pub inner_scope: ScopeIndex,
-    pub fields: IndexMap<String, Vis<Union>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FuncBody {
-    pub inner_scope: ScopeIndex,
-    pub statements: Vec<LocalStatement>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FuncData {
-    pub node_id: NodeId,
-    pub parent_scope: ScopeIndex,
-    pub inputs: IndexMap<String, Node<Union>>,
-    pub output: Node<Union>,
-    pub body: Option<FuncBody>,
-}
+use super::{
+    data::{ClassData, FuncData, ScopeData, VisData},
+    LayoutError,
+};
 
 #[derive(Debug, Clone)]
 pub struct ProgramLayout {
@@ -224,7 +182,7 @@ impl ProgramLayout {
         for field in class.fields.iter() {
             fields.insert(
                 field.name.to_string(),
-                Vis {
+                VisData {
                     vis: field.vis.clone(),
                     data: field.union.clone(),
                 },
@@ -234,8 +192,6 @@ impl ProgramLayout {
         // build the class data
         let class_index = ClassIndex::new(self.classes.len());
         self.classes.push(ClassData {
-            node_id: class.id,
-            native: class.native.clone(),
             parent_scope,
             inner_scope,
             fields,
@@ -251,18 +207,18 @@ impl ProgramLayout {
     }
 
     fn insert_func(&mut self, parent_scope: ScopeIndex, func: &Node<Func>) -> FuncIndex {
-        // build the func output and inputs
+        // build the func output and parameters
         let output = func.output.clone();
-        let mut inputs = IndexMap::new();
-        for field in func.inputs.iter() {
-            let union = field.union.clone();
-            inputs.insert(field.name.to_string(), union);
+        let mut parameters = IndexMap::new();
+        for param in func.parameters.iter() {
+            let union = param.union.clone();
+            parameters.insert(param.name.to_string(), union);
         }
 
         // build the function body
-        let body = match &func.body {
-            BodyKind::Native => None,
-            BodyKind::Script(statements) => {
+        let body = match func.body.deref() {
+            FuncBody::Native => None,
+            FuncBody::Script(statements) => {
                 // create the functions inner scope
                 let inner_scope = ScopeIndex::new(self.scopes.len());
                 self.scopes.push(ScopeData {
@@ -283,7 +239,7 @@ impl ProgramLayout {
                     })
                     .collect();
 
-                Some(FuncBody {
+                Some(FuncBodyData {
                     inner_scope,
                     statements,
                 })
@@ -293,9 +249,8 @@ impl ProgramLayout {
         // create the func data
         let func_index = FuncIndex::new(self.funcs.len());
         self.funcs.push(FuncData {
-            node_id: func.id,
             parent_scope,
-            inputs,
+            parameters,
             output,
             body,
         });
@@ -317,18 +272,14 @@ impl ProgramLayout {
         match self[scope].defs.entry(def.name.to_string()) {
             E::Occupied(entry) => {
                 let first = entry.into_mut().data.id;
-                self.errors.push(LayoutError::DuplicateIdent {
-                    second: def.name.id,
-                    first,
-                })
+                let second = def.id;
+                self.errors
+                    .push(LayoutError::DuplicateIdent { first, second });
             }
             E::Vacant(entry) => {
-                entry.insert(Vis {
+                entry.insert(VisData {
                     vis: def.vis.clone(),
-                    data: Node {
-                        id: def.name.id,
-                        item: def_index,
-                    },
+                    data: def.name.id.build(def_index),
                 });
             }
         }

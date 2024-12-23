@@ -3,18 +3,18 @@ use std::ops::Deref;
 use boba_script_ast::{
     def::Visibility,
     node::NodeId,
-    path::{ConcreteType, PathPart},
+    path::{PathPart, TypePath},
     Node,
 };
 
 use crate::{
     indexers::{FuncIndex, ScopeIndex},
-    layout::DefIndex,
+    layout::data::DefIndex,
     resolve::ResolveError,
     ProgramLayout,
 };
 
-use super::ResolvedValue;
+use super::data::ResolvedValue;
 
 pub fn is_child(layout: &ProgramLayout, parent: ScopeIndex, mut child: ScopeIndex) -> bool {
     // ensure child scope is valid for layout
@@ -108,10 +108,10 @@ pub fn resolve_module<'a>(
     Ok(module_scope)
 }
 
-pub fn resolve_value<'a>(
+pub fn resolve_value(
     layout: &ProgramLayout,
     source_scope: ScopeIndex,
-    class: &Node<ConcreteType>,
+    class: &Node<TypePath>,
 ) -> Result<ResolvedValue, ResolveError> {
     // ensure source_scope is valid for layout
     assert!(
@@ -120,13 +120,13 @@ pub fn resolve_value<'a>(
     );
 
     match class.deref() {
-        ConcreteType::Any => Ok(ResolvedValue::Any),
-        ConcreteType::None => Ok(ResolvedValue::None),
-        ConcreteType::Bool => Ok(ResolvedValue::Bool),
-        ConcreteType::Int => Ok(ResolvedValue::Int),
-        ConcreteType::Float => Ok(ResolvedValue::Float),
-        ConcreteType::String => Ok(ResolvedValue::String),
-        ConcreteType::Path(path) => {
+        TypePath::Any => Ok(ResolvedValue::Any),
+        TypePath::None => Ok(ResolvedValue::None),
+        TypePath::Bool => Ok(ResolvedValue::Bool),
+        TypePath::Int => Ok(ResolvedValue::Int),
+        TypePath::Float => Ok(ResolvedValue::Float),
+        TypePath::String => Ok(ResolvedValue::String),
+        TypePath::Path(path) => {
             // get the class name from the end of the iterator
             let mut path = path.iter();
             let (class_name, id) = match path.next_back() {

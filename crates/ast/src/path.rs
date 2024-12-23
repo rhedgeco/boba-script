@@ -1,12 +1,7 @@
 use crate::Node;
 
 #[derive(Debug, Clone)]
-pub struct Union {
-    pub types: Vec<Node<ConcreteType>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ConcreteType {
+pub enum TypePath {
     Any,
     None,
     Bool,
@@ -20,4 +15,9 @@ pub enum ConcreteType {
 pub enum PathPart {
     Ident(String),
     Super,
+}
+
+#[derive(Debug, Clone)]
+pub struct PathUnion {
+    pub types: Vec<Node<TypePath>>,
 }

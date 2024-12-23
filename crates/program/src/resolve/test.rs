@@ -1,49 +1,51 @@
 use boba_script_ast::{
-    class::ClassField,
+    class::Field,
     def::{DefKind, Visibility},
-    path::{ConcreteType, PathPart, Union},
+    path::{PathPart, PathUnion, TypePath},
     Class, Definition, Module, Node,
 };
 
-use crate::{indexers::ClassIndex, resolve::ResolvedValue, ProgramLayout};
+use crate::{indexers::ClassIndex, resolve::data::ResolvedValue, ProgramLayout};
 
 use super::ResolvedProgram;
 
 #[test]
 fn super_mod_private_class() {
-    let ast = Node::build(Module {
-        defs: vec![Node::build(Definition {
-            vis: Node::build(Visibility::Private),
-            name: Node::build("module0".to_string()),
-            kind: DefKind::Module(Node::build(Module {
+    let ast = Node::unique(Module {
+        defs: vec![Node::unique(Definition {
+            vis: Node::unique(Visibility::Private),
+            name: Node::unique("module0".to_string()),
+            kind: DefKind::Module(Node::unique(Module {
                 defs: vec![
-                    Node::build(Definition {
-                        vis: Node::build(Visibility::Private),
-                        name: Node::build("class0".to_string()),
-                        kind: DefKind::Class(Node::build(Class {
+                    Node::unique(Definition {
+                        vis: Node::unique(Visibility::Private),
+                        name: Node::unique("class0".to_string()),
+                        kind: DefKind::Class(Node::unique(Class {
                             native: None,
                             fields: vec![],
                             defs: vec![],
                         })),
                     }),
-                    Node::build(Definition {
-                        vis: Node::build(Visibility::Private),
-                        name: Node::build("module1".to_string()),
-                        kind: DefKind::Module(Node::build(Module {
-                            defs: vec![Node::build(Definition {
-                                vis: Node::build(Visibility::Private),
-                                name: Node::build("class1".to_string()),
-                                kind: DefKind::Class(Node::build(Class {
+                    Node::unique(Definition {
+                        vis: Node::unique(Visibility::Private),
+                        name: Node::unique("module1".to_string()),
+                        kind: DefKind::Module(Node::unique(Module {
+                            defs: vec![Node::unique(Definition {
+                                vis: Node::unique(Visibility::Private),
+                                name: Node::unique("class1".to_string()),
+                                kind: DefKind::Class(Node::unique(Class {
                                     native: None,
-                                    fields: vec![Node::build(ClassField {
-                                        vis: Node::build(Visibility::Private),
-                                        name: Node::build("class1field".to_string()),
-                                        union: Node::build(Union {
-                                            types: vec![Node::build(ConcreteType::Path(vec![
-                                                Node::build(PathPart::Super),
-                                                Node::build(PathPart::Super),
-                                                Node::build(PathPart::Ident("module0".to_string())),
-                                                Node::build(PathPart::Ident("class0".to_string())),
+                                    fields: vec![Node::unique(Field {
+                                        vis: Node::unique(Visibility::Private),
+                                        name: Node::unique("class1field".to_string()),
+                                        union: Node::unique(PathUnion {
+                                            types: vec![Node::unique(TypePath::Path(vec![
+                                                Node::unique(PathPart::Super),
+                                                Node::unique(PathPart::Super),
+                                                Node::unique(PathPart::Ident(
+                                                    "module0".to_string(),
+                                                )),
+                                                Node::unique(PathPart::Ident("class0".to_string())),
                                             ]))],
                                         }),
                                     })],
