@@ -1,11 +1,11 @@
-use std::ops::{Deref, Index};
+use std::ops::Index;
 
-use boba_script_ast::{func::FuncBody, Class, Definition, Expr, Func, Module, Node};
+use boba_script_ast::{Class, Definition, Expr, Func, Module, Node};
 use indexmap::IndexMap;
 
 use crate::{
     indexers::{ClassIndex, FuncIndex, GlobalIndex, ScopeIndex},
-    layout::data::{DefIndex, FuncBodyData},
+    layout::data::DefIndex,
 };
 
 use super::{
@@ -215,41 +215,33 @@ impl ProgramLayout {
             parameters.insert(param.name.to_string(), union);
         }
 
+        // create the functions inner scope
+        let inner_scope = ScopeIndex::new(self.scopes.len());
+        self.scopes.push(ScopeData {
+            super_scope: self[parent_scope].super_scope,
+            parent_scope: Some(parent_scope),
+            defs: Default::default(),
+        });
+
         // build the function body
-        let body = match func.body.deref() {
-            FuncBody::Native => None,
-            FuncBody::Script(statements) => {
-                // create the functions inner scope
-                let inner_scope = ScopeIndex::new(self.scopes.len());
-                self.scopes.push(ScopeData {
-                    super_scope: self[parent_scope].super_scope,
-                    parent_scope: Some(parent_scope),
-                    defs: Default::default(),
-                });
-
-                use boba_script_ast::statement::Statement as S;
-                let statements = statements
-                    .iter()
-                    .filter_map(|statement| match statement {
-                        S::Local(local) => Some(local.clone()),
-                        S::Global(def) => {
-                            self.insert_def_into(inner_scope, def);
-                            None
-                        }
-                    })
-                    .collect();
-
-                Some(FuncBodyData {
-                    inner_scope,
-                    statements,
-                })
-            }
-        };
+        use boba_script_ast::statement::Statement as S;
+        let body = func
+            .body
+            .iter()
+            .filter_map(|statement| match statement {
+                S::Local(local) => Some(local.clone()),
+                S::Global(def) => {
+                    self.insert_def_into(inner_scope, def);
+                    None
+                }
+            })
+            .collect();
 
         // create the func data
         let func_index = FuncIndex::new(self.funcs.len());
         self.funcs.push(FuncData {
             parent_scope,
+            inner_scope,
             parameters,
             output,
             body,

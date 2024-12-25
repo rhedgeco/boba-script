@@ -1,6 +1,5 @@
 use boba_script_ast::{
     def::{DefKind, Visibility},
-    func::FuncBody,
     node::NodeId,
     path::PathUnion,
     Class, Definition, Func, Module, Node,
@@ -36,7 +35,7 @@ fn insert_conflict() {
                 kind: DefKind::Func(Node::unique(Func {
                     parameters: vec![],
                     output: Node::unique(PathUnion { types: vec![] }),
-                    body: Node::unique(FuncBody::Native),
+                    body: Node::unique(vec![]),
                 })),
             }),
         ],

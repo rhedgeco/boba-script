@@ -32,15 +32,10 @@ pub struct ClassData {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncBodyData {
-    pub inner_scope: ScopeIndex,
-    pub statements: Vec<LocalStatement>,
-}
-
-#[derive(Debug, Clone)]
 pub struct FuncData {
     pub parent_scope: ScopeIndex,
+    pub inner_scope: ScopeIndex,
     pub parameters: IndexMap<String, Node<PathUnion>>,
     pub output: Node<PathUnion>,
-    pub body: Option<FuncBodyData>,
+    pub body: Vec<LocalStatement>,
 }
