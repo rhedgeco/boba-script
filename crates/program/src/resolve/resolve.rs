@@ -5,12 +5,12 @@ use indexmap::IndexMap;
 
 use crate::{
     indexers::{ClassIndex, FuncIndex},
-    layout::data::VisData,
+    layout::data::VisLayout,
     ProgramLayout,
 };
 
 use super::{
-    data::{ClassData, FuncData},
+    data::{ResolvedClass, ResolvedFunc},
     utils::resolve_value,
     ResolveError,
 };
@@ -18,12 +18,12 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct ResolvedProgram {
     errors: Vec<ResolveError>,
-    classes: Vec<ClassData>,
-    funcs: Vec<FuncData>,
+    classes: Vec<ResolvedClass>,
+    funcs: Vec<ResolvedFunc>,
 }
 
 impl Index<ClassIndex> for ResolvedProgram {
-    type Output = ClassData;
+    type Output = ResolvedClass;
 
     fn index(&self, index: ClassIndex) -> &Self::Output {
         &self.classes[index.raw()]
@@ -31,7 +31,7 @@ impl Index<ClassIndex> for ResolvedProgram {
 }
 
 impl Index<FuncIndex> for ResolvedProgram {
-    type Output = FuncData;
+    type Output = ResolvedFunc;
 
     fn index(&self, index: FuncIndex) -> &Self::Output {
         &self.funcs[index.raw()]
@@ -43,19 +43,19 @@ impl ResolvedProgram {
         &self.errors
     }
 
-    pub fn classes(&self) -> &[ClassData] {
+    pub fn classes(&self) -> &[ResolvedClass] {
         &self.classes
     }
 
-    pub fn funcs(&self) -> &[FuncData] {
+    pub fn funcs(&self) -> &[ResolvedFunc] {
         &self.funcs
     }
 
-    pub fn get_class(&self, index: ClassIndex) -> Option<&ClassData> {
+    pub fn get_class(&self, index: ClassIndex) -> Option<&ResolvedClass> {
         self.classes.get(index.raw())
     }
 
-    pub fn get_func(&self, index: FuncIndex) -> Option<&FuncData> {
+    pub fn get_func(&self, index: FuncIndex) -> Option<&ResolvedFunc> {
         self.funcs.get(index.raw())
     }
 
@@ -89,7 +89,7 @@ impl ResolvedProgram {
                 .filter_map(|(name, vis)| match vis.data.deref() {
                     D::Func(func_index) => Some((
                         name.clone(),
-                        VisData {
+                        VisLayout {
                             vis: vis.vis.clone(),
                             data: Node {
                                 id: vis.data.id,
@@ -102,7 +102,7 @@ impl ResolvedProgram {
                 .collect();
 
             // build the class and append it
-            classes.push(ClassData { fields, funcs })
+            classes.push(ResolvedClass { fields, funcs })
         }
 
         // resolve all program func data
@@ -111,11 +111,8 @@ impl ResolvedProgram {
             let mut output = Vec::new();
             for concrete in &func_data.output.types {
                 match resolve_value(layout, func_data.parent_scope, concrete) {
+                    Ok(class_index) => output.push(class_index),
                     Err(error) => errors.push(error),
-                    Ok(class_index) => output.push(Node {
-                        id: concrete.id,
-                        item: class_index,
-                    }),
                 }
             }
 
@@ -133,7 +130,11 @@ impl ResolvedProgram {
             }
 
             // build the function and append it
-            funcs.push(FuncData { inputs, output })
+            funcs.push(ResolvedFunc {
+                inputs,
+                output,
+                body: vec![],
+            })
         }
 
         Self {

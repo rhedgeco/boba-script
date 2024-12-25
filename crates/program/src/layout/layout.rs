@@ -9,17 +9,17 @@ use crate::{
 };
 
 use super::{
-    data::{ClassData, FuncData, ScopeData, VisData},
+    data::{ClassLayout, FuncLayout, ScopeLayout, VisLayout},
     LayoutError,
 };
 
 #[derive(Debug, Clone)]
 pub struct ProgramLayout {
     errors: Vec<LayoutError>,
-    scopes: Vec<ScopeData>,
+    scopes: Vec<ScopeLayout>,
     globals: Vec<Node<Expr>>,
-    classes: Vec<ClassData>,
-    funcs: Vec<FuncData>,
+    classes: Vec<ClassLayout>,
+    funcs: Vec<FuncLayout>,
 }
 
 impl Index<GlobalIndex> for ProgramLayout {
@@ -31,7 +31,7 @@ impl Index<GlobalIndex> for ProgramLayout {
 }
 
 impl Index<ScopeIndex> for ProgramLayout {
-    type Output = ScopeData;
+    type Output = ScopeLayout;
 
     fn index(&self, index: ScopeIndex) -> &Self::Output {
         &self.scopes[index.raw()]
@@ -39,7 +39,7 @@ impl Index<ScopeIndex> for ProgramLayout {
 }
 
 impl Index<ClassIndex> for ProgramLayout {
-    type Output = ClassData;
+    type Output = ClassLayout;
 
     fn index(&self, index: ClassIndex) -> &Self::Output {
         &self.classes[index.raw()]
@@ -47,7 +47,7 @@ impl Index<ClassIndex> for ProgramLayout {
 }
 
 impl Index<FuncIndex> for ProgramLayout {
-    type Output = FuncData;
+    type Output = FuncLayout;
 
     fn index(&self, index: FuncIndex) -> &Self::Output {
         &self.funcs[index.raw()]
@@ -93,15 +93,15 @@ impl ProgramLayout {
         &self.globals
     }
 
-    pub fn scopes(&self) -> &[ScopeData] {
+    pub fn scopes(&self) -> &[ScopeLayout] {
         &self.scopes
     }
 
-    pub fn classes(&self) -> &[ClassData] {
+    pub fn classes(&self) -> &[ClassLayout] {
         &self.classes
     }
 
-    pub fn funcs(&self) -> &[FuncData] {
+    pub fn funcs(&self) -> &[FuncLayout] {
         &self.funcs
     }
 
@@ -109,15 +109,15 @@ impl ProgramLayout {
         self.globals.get(index.raw())
     }
 
-    pub fn get_scope(&self, index: ScopeIndex) -> Option<&ScopeData> {
+    pub fn get_scope(&self, index: ScopeIndex) -> Option<&ScopeLayout> {
         self.scopes.get(index.raw())
     }
 
-    pub fn get_class(&self, index: ClassIndex) -> Option<&ClassData> {
+    pub fn get_class(&self, index: ClassIndex) -> Option<&ClassLayout> {
         self.classes.get(index.raw())
     }
 
-    pub fn get_func(&self, index: FuncIndex) -> Option<&FuncData> {
+    pub fn get_func(&self, index: FuncIndex) -> Option<&FuncLayout> {
         self.funcs.get(index.raw())
     }
 
@@ -126,7 +126,7 @@ impl ProgramLayout {
         let mut layout = Self {
             errors: Default::default(),
             globals: Default::default(),
-            scopes: vec![ScopeData {
+            scopes: vec![ScopeLayout {
                 super_scope: None,
                 parent_scope: None,
                 defs: Default::default(),
@@ -153,7 +153,7 @@ impl ProgramLayout {
     fn insert_module(&mut self, super_scope: ScopeIndex, module: &Node<Module>) -> ScopeIndex {
         // build the module scope
         let module_scope = ScopeIndex::new(self.scopes.len());
-        self.scopes.push(ScopeData {
+        self.scopes.push(ScopeLayout {
             super_scope: Some(super_scope),
             parent_scope: None,
             defs: Default::default(),
@@ -171,7 +171,7 @@ impl ProgramLayout {
     fn insert_class(&mut self, parent_scope: ScopeIndex, class: &Node<Class>) -> ClassIndex {
         // build the inner class scope
         let inner_scope = ScopeIndex::new(self.scopes.len());
-        self.scopes.push(ScopeData {
+        self.scopes.push(ScopeLayout {
             super_scope: self[parent_scope].super_scope,
             parent_scope: Some(parent_scope),
             defs: Default::default(),
@@ -182,7 +182,7 @@ impl ProgramLayout {
         for field in class.fields.iter() {
             fields.insert(
                 field.name.to_string(),
-                VisData {
+                VisLayout {
                     vis: field.vis.clone(),
                     data: field.union.clone(),
                 },
@@ -191,7 +191,7 @@ impl ProgramLayout {
 
         // build the class data
         let class_index = ClassIndex::new(self.classes.len());
-        self.classes.push(ClassData {
+        self.classes.push(ClassLayout {
             parent_scope,
             inner_scope,
             fields,
@@ -217,7 +217,7 @@ impl ProgramLayout {
 
         // create the functions inner scope
         let inner_scope = ScopeIndex::new(self.scopes.len());
-        self.scopes.push(ScopeData {
+        self.scopes.push(ScopeLayout {
             super_scope: self[parent_scope].super_scope,
             parent_scope: Some(parent_scope),
             defs: Default::default(),
@@ -239,7 +239,7 @@ impl ProgramLayout {
 
         // create the func data
         let func_index = FuncIndex::new(self.funcs.len());
-        self.funcs.push(FuncData {
+        self.funcs.push(FuncLayout {
             parent_scope,
             inner_scope,
             parameters,
@@ -269,7 +269,7 @@ impl ProgramLayout {
                     .push(LayoutError::DuplicateIdent { first, second });
             }
             E::Vacant(entry) => {
-                entry.insert(VisData {
+                entry.insert(VisLayout {
                     vis: def.vis.clone(),
                     data: def.name.id.build(def_index),
                 });
