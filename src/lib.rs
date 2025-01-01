@@ -10,6 +10,6 @@ pub mod lexer {
     pub use boba_script_lexer::*;
 }
 
-pub mod program {
-    pub use boba_script_program::*;
+pub mod compiler {
+    pub use boba_script_compiler::*;
 }
