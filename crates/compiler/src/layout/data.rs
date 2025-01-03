@@ -1,4 +1,4 @@
-use boba_script_ast::{def::Visibility, path::PathUnion, statement::LocalStatement, Node};
+use boba_script_ast::{path::PathUnion, statement::LocalStatement, Node, Visibility};
 use indexmap::IndexMap;
 
 use crate::indexers::{ClassIndex, FuncIndex, GlobalIndex, ScopeIndex};

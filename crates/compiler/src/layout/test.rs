@@ -1,8 +1,5 @@
 use boba_script_ast::{
-    def::{DefKind, Visibility},
-    node::NodeId,
-    path::PathUnion,
-    Class, Definition, Func, Module, Node,
+    def::DefKind, node::NodeId, path::PathUnion, Class, Definition, Func, Module, Node, Visibility,
 };
 
 use crate::{layout::LayoutError, ProgramLayout};

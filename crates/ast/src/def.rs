@@ -1,10 +1,4 @@
-use crate::{Class, Expr, Func, Module, Node};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Visibility {
-    Public,
-    Private,
-}
+use crate::{Class, Expr, Func, Module, Node, Visibility};
 
 #[derive(Debug, Clone)]
 pub struct Definition {

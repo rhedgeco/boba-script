@@ -1,8 +1,8 @@
 use boba_script_ast::{
     class::Field,
-    def::{DefKind, Visibility},
+    def::DefKind,
     path::{PathPart, PathUnion, TypePath},
-    Class, Definition, Module, Node,
+    Class, Definition, Module, Node, Visibility,
 };
 
 use crate::{indexers::ClassIndex, resolve::data::ResolvedValue, ProgramLayout};

@@ -1,10 +1,9 @@
 use std::ops::Deref;
 
 use boba_script_ast::{
-    def::Visibility,
     node::NodeId,
     path::{PathPart, TypePath},
-    Node,
+    Node, Visibility,
 };
 
 use crate::{

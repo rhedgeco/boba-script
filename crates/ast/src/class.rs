@@ -1,4 +1,4 @@
-use crate::{def::Visibility, node::NodeId, path::PathUnion, Definition, Expr, Node};
+use crate::{node::NodeId, path::PathUnion, Definition, Expr, Node, Visibility};
 
 #[derive(Debug, Clone)]
 pub struct Class {
