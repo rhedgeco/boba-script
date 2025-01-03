@@ -1,6 +1,6 @@
 use dashu_int::IBig;
 
-use crate::{class::ClassInit, node::BNode, Node};
+use crate::{class::ClassInit, Node};
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -14,15 +14,15 @@ pub enum Expr {
     Class(Node<ClassInit>),
 
     // unary ops
-    Neg(BNode<Expr>),
-    Pos(BNode<Expr>),
-    Not(BNode<Expr>),
+    Neg(Box<Node<Expr>>),
+    Pos(Box<Node<Expr>>),
+    Not(Box<Node<Expr>>),
 
     // binary ops
-    Add(BNode<Expr>, BNode<Expr>),
-    Sub(BNode<Expr>, BNode<Expr>),
-    Mul(BNode<Expr>, BNode<Expr>),
-    Div(BNode<Expr>, BNode<Expr>),
-    Mod(BNode<Expr>, BNode<Expr>),
-    Pow(BNode<Expr>, BNode<Expr>),
+    Add(Box<(Node<Expr>, Node<Expr>)>),
+    Sub(Box<(Node<Expr>, Node<Expr>)>),
+    Mul(Box<(Node<Expr>, Node<Expr>)>),
+    Div(Box<(Node<Expr>, Node<Expr>)>),
+    Mod(Box<(Node<Expr>, Node<Expr>)>),
+    Pow(Box<(Node<Expr>, Node<Expr>)>),
 }

@@ -3,8 +3,6 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-pub type BNode<T> = Box<Node<T>>;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(usize);
 
