@@ -4,9 +4,9 @@ pub mod expr;
 pub mod func;
 pub mod module;
 pub mod node;
-pub mod path;
 pub mod pattern;
 pub mod statement;
+pub mod typ;
 pub mod vis;
 
 pub use class::Class;

@@ -1,4 +1,8 @@
-use boba_script_ast::{path::PathUnion, statement::LocalStatement, Node, Visibility};
+use boba_script_ast::{
+    statement::LocalStatement,
+    typ::{TypePath, TypeUnion},
+    Node, Visibility,
+};
 use indexmap::IndexMap;
 
 use crate::indexers::{ClassIndex, FuncIndex, GlobalIndex, ScopeIndex};
@@ -28,14 +32,14 @@ pub struct ScopeLayout {
 pub struct ClassLayout {
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
-    pub fields: IndexMap<String, Vis<PathUnion>>,
+    pub fields: IndexMap<String, Vis<TypeUnion<TypePath>>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct FuncLayout {
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
-    pub parameters: IndexMap<String, Node<PathUnion>>,
-    pub output: Node<PathUnion>,
-    pub body: Vec<LocalStatement>,
+    pub parameters: IndexMap<String, Node<TypeUnion<TypePath>>>,
+    pub output: Node<TypeUnion<TypePath>>,
+    pub body: Vec<LocalStatement<TypePath>>,
 }

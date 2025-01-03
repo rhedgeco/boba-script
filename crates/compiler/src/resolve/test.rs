@@ -1,7 +1,7 @@
 use boba_script_ast::{
     class::Field,
     def::DefKind,
-    path::{PathPart, PathUnion, Type, TypePath},
+    typ::{PathPart, TypePath, TypeUnion},
     Class, Definition, Module, Node, Visibility,
 };
 
@@ -38,9 +38,9 @@ fn super_mod_private_class() {
                                     fields: vec![Node::unique(Field {
                                         vis: Node::unique(Visibility::Private),
                                         name: Node::unique("class1field".to_string()),
-                                        union: Node::unique(PathUnion {
-                                            types: vec![Node::unique(Type::Path(TypePath {
-                                                parts: vec![
+                                        union: Node::unique(TypeUnion {
+                                            types: vec![Node::unique(TypePath {
+                                                path: vec![
                                                     Node::unique(PathPart::Super),
                                                     Node::unique(PathPart::Super),
                                                     Node::unique(PathPart::Ident(
@@ -50,7 +50,7 @@ fn super_mod_private_class() {
                                                         "class0".to_string(),
                                                     )),
                                                 ],
-                                            }))],
+                                            })],
                                         }),
                                     })],
                                     defs: vec![],

@@ -1,5 +1,5 @@
 use boba_script_ast::{
-    def::DefKind, node::NodeId, path::PathUnion, Class, Definition, Func, Module, Node, Visibility,
+    def::DefKind, node::NodeId, typ::TypeUnion, Class, Definition, Func, Module, Node, Visibility,
 };
 
 use crate::{layout::LayoutError, ProgramLayout};
@@ -31,7 +31,7 @@ fn insert_conflict() {
                 },
                 kind: DefKind::Func(Node::unique(Func {
                     parameters: vec![],
-                    output: Node::unique(PathUnion { types: vec![] }),
+                    output: Node::unique(TypeUnion { types: vec![] }),
                     body: Node::unique(vec![]),
                 })),
             }),

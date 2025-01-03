@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use boba_script_ast::{
     node::NodeId,
-    path::{PathPart, Type},
+    typ::{PathPart, TypePath},
     Node, Visibility,
 };
 
@@ -90,6 +90,7 @@ pub fn resolve_module<'a>(
     let mut module_scope = source_scope;
     for part in module_path {
         match part.deref() {
+            PathPart::Pearl => module_scope = ScopeIndex::root(),
             PathPart::Super => match layout[module_scope].super_scope {
                 None => return Err(ResolveError::SuperFromRoot(part.id)),
                 Some(super_scope) => module_scope = super_scope,
@@ -110,7 +111,7 @@ pub fn resolve_module<'a>(
 pub fn resolve_value(
     layout: &ProgramLayout,
     source_scope: ScopeIndex,
-    class: &Node<Type>,
+    class: &Node<TypePath>,
 ) -> Result<ResolvedValue, ResolveError> {
     // ensure source_scope is valid for layout
     assert!(
@@ -118,35 +119,25 @@ pub fn resolve_value(
         "source_scope is invalid for this layout"
     );
 
-    match class.deref() {
-        Type::Any => Ok(ResolvedValue::Any),
-        Type::None => Ok(ResolvedValue::None),
-        Type::Bool => Ok(ResolvedValue::Bool),
-        Type::Int => Ok(ResolvedValue::Int),
-        Type::Float => Ok(ResolvedValue::Float),
-        Type::String => Ok(ResolvedValue::String),
-        Type::Path(path) => {
-            // get the class name from the end of the iterator
-            let mut parts = path.parts.iter();
-            let (class_name, id) = match parts.next_back() {
-                None => return Err(ResolveError::EmptyPath),
-                Some(part) => match part.deref() {
-                    PathPart::Ident(name) => (name.as_str(), part.id),
-                    _ => return Err(ResolveError::NotAClass(part.id)),
-                },
-            };
+    // get the class name from the end of the iterator
+    let mut parts = class.path.iter();
+    let (class_name, id) = match parts.next_back() {
+        None => return Err(ResolveError::EmptyPath),
+        Some(part) => match part.deref() {
+            PathPart::Ident(name) => (name.as_str(), part.id),
+            _ => return Err(ResolveError::NotAClass(part.id)),
+        },
+    };
 
-            // resolve the module and class path
-            let module_scope = resolve_module(layout, source_scope, parts)?;
-            let DefIndex::Class(class_index) =
-                find_ident(layout, source_scope, module_scope, class_name, id)?
-            else {
-                return Err(ResolveError::NotAClass(id));
-            };
+    // resolve the module and class path
+    let module_scope = resolve_module(layout, source_scope, parts)?;
+    let DefIndex::Class(class_index) =
+        find_ident(layout, source_scope, module_scope, class_name, id)?
+    else {
+        return Err(ResolveError::NotAClass(id));
+    };
 
-            Ok(ResolvedValue::Class(class_index))
-        }
-    }
+    Ok(ResolvedValue::Class(class_index))
 }
 
 pub fn resolve_func<'a>(

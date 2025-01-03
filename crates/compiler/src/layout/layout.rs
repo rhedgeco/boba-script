@@ -1,6 +1,6 @@
 use std::ops::Index;
 
-use boba_script_ast::{Class, Definition, Expr, Func, Module, Node};
+use boba_script_ast::{typ::TypePath, Class, Definition, Expr, Func, Module, Node};
 use indexmap::IndexMap;
 
 use crate::{
@@ -17,13 +17,13 @@ use super::{
 pub struct ProgramLayout {
     errors: Vec<LayoutError>,
     scopes: Vec<ScopeLayout>,
-    globals: Vec<Node<Expr>>,
+    globals: Vec<Node<Expr<TypePath>>>,
     classes: Vec<ClassLayout>,
     funcs: Vec<FuncLayout>,
 }
 
 impl Index<GlobalIndex> for ProgramLayout {
-    type Output = Node<Expr>;
+    type Output = Node<Expr<TypePath>>;
 
     fn index(&self, index: GlobalIndex) -> &Self::Output {
         &self.globals[index.raw()]
@@ -89,7 +89,7 @@ impl ProgramLayout {
         &self.errors
     }
 
-    pub fn globals(&self) -> &[Node<Expr>] {
+    pub fn globals(&self) -> &[Node<Expr<TypePath>>] {
         &self.globals
     }
 
@@ -105,7 +105,7 @@ impl ProgramLayout {
         &self.funcs
     }
 
-    pub fn get_global(&self, index: GlobalIndex) -> Option<&Node<Expr>> {
+    pub fn get_global(&self, index: GlobalIndex) -> Option<&Node<Expr<TypePath>>> {
         self.globals.get(index.raw())
     }
 
@@ -121,7 +121,7 @@ impl ProgramLayout {
         self.funcs.get(index.raw())
     }
 
-    pub fn build(ast: &Node<Module>) -> Self {
+    pub fn build(ast: &Node<Module<TypePath>>) -> Self {
         // build the initial layout with root scope
         let mut layout = Self {
             errors: Default::default(),
@@ -144,13 +144,17 @@ impl ProgramLayout {
         layout
     }
 
-    fn insert_global(&mut self, expr: &Node<Expr>) -> GlobalIndex {
+    fn insert_global(&mut self, expr: &Node<Expr<TypePath>>) -> GlobalIndex {
         let global_index = GlobalIndex::new(self.globals.len());
         self.globals.push(expr.clone());
         global_index
     }
 
-    fn insert_module(&mut self, super_scope: ScopeIndex, module: &Node<Module>) -> ScopeIndex {
+    fn insert_module(
+        &mut self,
+        super_scope: ScopeIndex,
+        module: &Node<Module<TypePath>>,
+    ) -> ScopeIndex {
         // build the module scope
         let module_scope = ScopeIndex::new(self.scopes.len());
         self.scopes.push(ScopeLayout {
@@ -168,7 +172,11 @@ impl ProgramLayout {
         module_scope
     }
 
-    fn insert_class(&mut self, parent_scope: ScopeIndex, class: &Node<Class>) -> ClassIndex {
+    fn insert_class(
+        &mut self,
+        parent_scope: ScopeIndex,
+        class: &Node<Class<TypePath>>,
+    ) -> ClassIndex {
         // build the inner class scope
         let inner_scope = ScopeIndex::new(self.scopes.len());
         self.scopes.push(ScopeLayout {
@@ -206,7 +214,7 @@ impl ProgramLayout {
         class_index
     }
 
-    fn insert_func(&mut self, parent_scope: ScopeIndex, func: &Node<Func>) -> FuncIndex {
+    fn insert_func(&mut self, parent_scope: ScopeIndex, func: &Node<Func<TypePath>>) -> FuncIndex {
         // build the func output and parameters
         let output = func.output.clone();
         let mut parameters = IndexMap::new();
@@ -251,7 +259,7 @@ impl ProgramLayout {
         func_index
     }
 
-    fn insert_def_into(&mut self, scope: ScopeIndex, def: &Node<Definition>) {
+    fn insert_def_into(&mut self, scope: ScopeIndex, def: &Node<Definition<TypePath>>) {
         use boba_script_ast::def::DefKind as D;
         let def_index = match &def.kind {
             D::Global(expr) => DefIndex::Global(self.insert_global(expr)),

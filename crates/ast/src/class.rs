@@ -1,31 +1,27 @@
-use crate::{
-    node::NodeId,
-    path::{PathUnion, TypePath},
-    Definition, Expr, Node, Visibility,
-};
+use crate::{node::NodeId, typ::TypeUnion, Definition, Expr, Node, Visibility};
 
 #[derive(Debug, Clone)]
-pub struct Class {
+pub struct Class<Type> {
     pub native: Option<NodeId>,
-    pub fields: Vec<Node<Field>>,
-    pub defs: Vec<Node<Definition>>,
+    pub fields: Vec<Node<Field<Type>>>,
+    pub defs: Vec<Node<Definition<Type>>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct ClassInit {
-    pub name: Node<TypePath>,
-    pub fields: Vec<Node<FieldInit>>,
+pub struct ClassInit<Type> {
+    pub name: Node<Type>,
+    pub fields: Vec<Node<FieldInit<Type>>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Field {
+pub struct Field<Type> {
     pub vis: Node<Visibility>,
     pub name: Node<String>,
-    pub union: Node<PathUnion>,
+    pub union: Node<TypeUnion<Type>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct FieldInit {
+pub struct FieldInit<Type> {
     pub name: Node<String>,
-    pub expr: Node<Expr>,
+    pub expr: Node<Expr<Type>>,
 }
