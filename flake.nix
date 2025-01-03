@@ -20,6 +20,7 @@
       in {
         devShell = with pkgs;
           mkShell {
+            name = "boba-script";
             buildInputs = [
               gcc
               cargo
