@@ -1,4 +1,8 @@
-use crate::{node::NodeId, path::PathUnion, Definition, Expr, Node, Visibility};
+use crate::{
+    node::NodeId,
+    path::{PathUnion, TypePath},
+    Definition, Expr, Node, Visibility,
+};
 
 #[derive(Debug, Clone)]
 pub struct Class {
@@ -9,7 +13,7 @@ pub struct Class {
 
 #[derive(Debug, Clone)]
 pub struct ClassInit {
-    pub name: Node<String>,
+    pub name: Node<TypePath>,
     pub fields: Vec<Node<FieldInit>>,
 }
 

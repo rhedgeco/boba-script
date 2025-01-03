@@ -1,7 +1,7 @@
 use boba_script_ast::{
     class::Field,
     def::DefKind,
-    path::{PathPart, PathUnion, TypePath},
+    path::{PathPart, PathUnion, Type, TypePath},
     Class, Definition, Module, Node, Visibility,
 };
 
@@ -39,14 +39,18 @@ fn super_mod_private_class() {
                                         vis: Node::unique(Visibility::Private),
                                         name: Node::unique("class1field".to_string()),
                                         union: Node::unique(PathUnion {
-                                            types: vec![Node::unique(TypePath::Path(vec![
-                                                Node::unique(PathPart::Super),
-                                                Node::unique(PathPart::Super),
-                                                Node::unique(PathPart::Ident(
-                                                    "module0".to_string(),
-                                                )),
-                                                Node::unique(PathPart::Ident("class0".to_string())),
-                                            ]))],
+                                            types: vec![Node::unique(Type::Path(TypePath {
+                                                parts: vec![
+                                                    Node::unique(PathPart::Super),
+                                                    Node::unique(PathPart::Super),
+                                                    Node::unique(PathPart::Ident(
+                                                        "module0".to_string(),
+                                                    )),
+                                                    Node::unique(PathPart::Ident(
+                                                        "class0".to_string(),
+                                                    )),
+                                                ],
+                                            }))],
                                         }),
                                     })],
                                     defs: vec![],

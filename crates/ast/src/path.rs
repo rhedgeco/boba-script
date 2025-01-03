@@ -1,14 +1,19 @@
 use crate::Node;
 
 #[derive(Debug, Clone)]
-pub enum TypePath {
+pub enum Type {
     Any,
     None,
     Bool,
     Int,
     Float,
     String,
-    Path(Vec<Node<PathPart>>),
+    Path(TypePath),
+}
+
+#[derive(Debug, Clone)]
+pub struct TypePath {
+    pub parts: Vec<Node<PathPart>>,
 }
 
 #[derive(Debug, Clone)]
@@ -19,5 +24,5 @@ pub enum PathPart {
 
 #[derive(Debug, Clone)]
 pub struct PathUnion {
-    pub types: Vec<Node<TypePath>>,
+    pub types: Vec<Node<Type>>,
 }

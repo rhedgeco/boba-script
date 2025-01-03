@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use boba_script_ast::{
     node::NodeId,
-    path::{PathPart, TypePath},
+    path::{PathPart, Type},
     Node, Visibility,
 };
 
@@ -110,7 +110,7 @@ pub fn resolve_module<'a>(
 pub fn resolve_value(
     layout: &ProgramLayout,
     source_scope: ScopeIndex,
-    class: &Node<TypePath>,
+    class: &Node<Type>,
 ) -> Result<ResolvedValue, ResolveError> {
     // ensure source_scope is valid for layout
     assert!(
@@ -119,16 +119,16 @@ pub fn resolve_value(
     );
 
     match class.deref() {
-        TypePath::Any => Ok(ResolvedValue::Any),
-        TypePath::None => Ok(ResolvedValue::None),
-        TypePath::Bool => Ok(ResolvedValue::Bool),
-        TypePath::Int => Ok(ResolvedValue::Int),
-        TypePath::Float => Ok(ResolvedValue::Float),
-        TypePath::String => Ok(ResolvedValue::String),
-        TypePath::Path(path) => {
+        Type::Any => Ok(ResolvedValue::Any),
+        Type::None => Ok(ResolvedValue::None),
+        Type::Bool => Ok(ResolvedValue::Bool),
+        Type::Int => Ok(ResolvedValue::Int),
+        Type::Float => Ok(ResolvedValue::Float),
+        Type::String => Ok(ResolvedValue::String),
+        Type::Path(path) => {
             // get the class name from the end of the iterator
-            let mut path = path.iter();
-            let (class_name, id) = match path.next_back() {
+            let mut parts = path.parts.iter();
+            let (class_name, id) = match parts.next_back() {
                 None => return Err(ResolveError::EmptyPath),
                 Some(part) => match part.deref() {
                     PathPart::Ident(name) => (name.as_str(), part.id),
@@ -137,7 +137,7 @@ pub fn resolve_value(
             };
 
             // resolve the module and class path
-            let module_scope = resolve_module(layout, source_scope, path)?;
+            let module_scope = resolve_module(layout, source_scope, parts)?;
             let DefIndex::Class(class_index) =
                 find_ident(layout, source_scope, module_scope, class_name, id)?
             else {
