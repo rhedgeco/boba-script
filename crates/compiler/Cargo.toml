@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-boba-script-ast = { path = "../ast" }
 bon = "3.0"
 derive_more = "1.0"
 fxhash = "0.2"
 indexmap = "2.6"
 thiserror = "2.0"
+boba-script-ast.workspace = true

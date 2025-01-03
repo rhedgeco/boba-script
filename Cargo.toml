@@ -7,6 +7,12 @@ edition = "2021"
 members = ["crates/*"]
 
 [dependencies]
+boba-script-ast.workspace = true
+boba-script-parser.workspace = true
+boba-script-lexer.workspace = true
+boba-script-compiler.workspace = true
+
+[workspace.dependencies]
 boba-script-ast = { path = "crates/ast" }
 boba-script-parser = { path = "crates/parser" }
 boba-script-lexer = { path = "crates/lexer" }

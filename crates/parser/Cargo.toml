@@ -9,5 +9,5 @@ lalrpop = "0.21.0"
 [dependencies]
 derive_more = { version = "1.0", features = ["display"] }
 lalrpop-util = { version = "0.21.0", default-features = false }
-boba-script-lexer = { path = "../lexer" }
-boba-script-ast = { path = "../ast" }
+boba-script-lexer.workspace = true
+boba-script-ast.workspace = true
