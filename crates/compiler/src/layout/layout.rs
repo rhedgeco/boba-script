@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    data::{ClassLayout, FuncLayout, ScopeLayout, VisLayout},
+    data::{ClassLayout, FuncLayout, ScopeLayout, Vis},
     LayoutError,
 };
 
@@ -182,7 +182,7 @@ impl ProgramLayout {
         for field in class.fields.iter() {
             fields.insert(
                 field.name.to_string(),
-                VisLayout {
+                Vis {
                     vis: field.vis.clone(),
                     data: field.union.clone(),
                 },
@@ -269,7 +269,7 @@ impl ProgramLayout {
                     .push(LayoutError::DuplicateIdent { first, second });
             }
             E::Vacant(entry) => {
-                entry.insert(VisLayout {
+                entry.insert(Vis {
                     vis: def.vis.clone(),
                     data: def.name.id.build(def_index),
                 });

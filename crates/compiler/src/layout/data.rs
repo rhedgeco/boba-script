@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use crate::indexers::{ClassIndex, FuncIndex, GlobalIndex, ScopeIndex};
 
 #[derive(Debug, Clone, Copy)]
-pub struct VisLayout<T> {
+pub struct Vis<T> {
     pub vis: Node<Visibility>,
     pub data: Node<T>,
 }
@@ -21,14 +21,14 @@ pub enum DefIndex {
 pub struct ScopeLayout {
     pub super_scope: Option<ScopeIndex>,
     pub parent_scope: Option<ScopeIndex>,
-    pub defs: IndexMap<String, VisLayout<DefIndex>>,
+    pub defs: IndexMap<String, Vis<DefIndex>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ClassLayout {
     pub parent_scope: ScopeIndex,
     pub inner_scope: ScopeIndex,
-    pub fields: IndexMap<String, VisLayout<PathUnion>>,
+    pub fields: IndexMap<String, Vis<PathUnion>>,
 }
 
 #[derive(Debug, Clone)]

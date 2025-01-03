@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 
 use crate::{
     indexers::{ClassIndex, FuncIndex},
-    layout::data::VisLayout,
+    layout::data::Vis,
     ProgramLayout,
 };
 
@@ -89,7 +89,7 @@ impl ResolvedProgram {
                 .filter_map(|(name, vis)| match vis.data.deref() {
                     D::Func(func_index) => Some((
                         name.clone(),
-                        VisLayout {
+                        Vis {
                             vis: vis.vis.clone(),
                             data: Node {
                                 id: vis.data.id,

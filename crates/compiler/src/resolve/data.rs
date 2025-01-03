@@ -3,7 +3,7 @@ use indexmap::IndexMap;
 
 use crate::{
     indexers::{ClassIndex, FuncIndex},
-    layout::data::VisLayout,
+    layout::data::Vis,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,7 +20,7 @@ pub enum ResolvedValue {
 #[derive(Debug, Clone)]
 pub struct ResolvedClass {
     pub fields: IndexMap<String, Vec<ResolvedValue>>,
-    pub funcs: IndexMap<String, VisLayout<FuncIndex>>,
+    pub funcs: IndexMap<String, Vis<FuncIndex>>,
 }
 
 #[derive(Debug, Clone)]
